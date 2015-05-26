@@ -2,8 +2,8 @@
 PROGRAM="pmOCR" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.02
-PROGRAM_BUILD=2105201501
+PROGRAM_VERSION=1.03
+PROGRAM_BUILD=2605201501
 
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
@@ -12,7 +12,7 @@ LOCAL_HOST=$(hostname)
 DESTINATION_MAILS="infrastructure@example.com"
 
 ## File extensions to process
-FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|pdf\|jpg\|jpeg\)"
+FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\)"
 
 ## Directories to monitor
 PDF_MONITOR_DIR="/storage/service_ocr/PDF"
@@ -180,6 +180,7 @@ function TrapQuit
 		fi
 	fi
 	Log "Service $PROGRAM instance $$ stopped."
+	exit
 }
 
 function WaitForCompletion

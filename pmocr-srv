@@ -6,8 +6,8 @@
 # description: monitors a local directory and ocrs any file and deletes the source file
 #              and only keep the ocred version
 
-prog=pmOCR
-progexec=pmOCR.sh
+prog=pmocr
+progexec=pmocr.sh
 progpath=/usr/local/bin
 pidfile=/var/run/$prog
 SCRIPT_BUILD=1304201501

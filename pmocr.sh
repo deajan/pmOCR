@@ -2,7 +2,11 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
+<<<<<<< HEAD:pmocr.sh
 PROGRAM_VERSION=1.04
+=======
+PROGRAM_VERSION=1.03
+>>>>>>> 91b5ec518fd94b2aa2003c72aa7e7808b4e20a78:pmOCR.sh
 PROGRAM_BUILD=2605201501
 
 LOCAL_USER=$(whoami)

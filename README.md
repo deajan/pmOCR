@@ -28,3 +28,4 @@ Has been tested so far with AbbyyOCR11 (www.ocr4linux.com) releases R2 (v 11.1.6
 ## Troubleshooting
 
 Please check pmocr.log file for errors
+Filenames containing special characters should work, nevertheless, if your file doesn't work, try to rename it and copy it again to the monitored directory.

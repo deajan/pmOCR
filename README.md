@@ -19,7 +19,7 @@ systemctl status pmocr-srv
 
 ## What does it do ?
 
-pmOCR monitors directories and launches an OCR tool to convert jpg, png, tiff, pdf files to PDF, WORD, EXCEL or CSV files.
+pmOCR monitors directories and thier subdirectories and launches an OCR tool to convert jpg, png, tiff, pdf files to PDF, WORD, EXCEL or CSV files.
 
 ## Support for Abbyy OCR Engine linux CLI
 

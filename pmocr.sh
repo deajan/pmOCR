@@ -2,12 +2,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-<<<<<<< HEAD:pmocr.sh
 PROGRAM_VERSION=1.04
-=======
-PROGRAM_VERSION=1.03
->>>>>>> 91b5ec518fd94b2aa2003c72aa7e7808b4e20a78:pmOCR.sh
-PROGRAM_BUILD=2605201501
+PROGRAM_BUILD=2605201502
 
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
@@ -205,14 +201,8 @@ function OCR {
 
 		sleep $WAIT_TIME
 
-#		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "*$2" -print0 | xargs -0 -I {} sh -c 'export file={}; eval '$OCR_ENGINE_EXEC' '$OCR_ENGINE_INPUT_ARG' "$file '"$3"' '$OCR_ENGINE_OUTPUT_ARG' ${file%.*}'$2'" &&  echo -e "$(date) - $1 Processed " $file >> '$LOG_FILE' && rm -f $file'
-#		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "*$2" -print0 | xargs -0 -I {} sh -c 'export file="{}"; eval '$OCR_ENGINE_EXEC' '$OCR_ENGINE_INPUT_ARG' "$file '"$3"' '$OCR_ENGINE_OUTPUT_ARG' \"${file%.*}'$2'\"" &&  echo -e "$(date) - $1 Processed " $file >> '$LOG_FILE' && rm -f $file'
+		# full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
 		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "*$2" -print0 | xargs -0 -I {} sh -c 'export file="{}"; eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$3"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$2"'\" && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && rm -f \"$file\""'
-		
-# full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
-
-#eval '$OCR_ENGINE_EXEC' '$OCR_ENGINE_INPUT_ARG' "$file '"$3"' '$OCR_ENGINE_OUTPUT_ARG' ${file%.*}'$2'" &&  echo -e "$(date) - $1 Processed " $file >> '$LOG_FILE' && rm -f $file'
-
 		if [ "$4" == "txt2csv" ]
 		then
 			## Replace all occurences of 3 spaces or more by a semicolor (ugly hack i know)

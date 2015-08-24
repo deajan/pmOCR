@@ -1,9 +1,11 @@
 # pmOCR (poor man's OCR service)
 
-A service wrapper for ABBYY OCR LINUX CLIENT (abbyyocr11 www.ocr4linux.com) or maybe other OCR tools that monitors some directories and launches a OCR conversion whenever a new file appears.
+A service wrapper for ABBYY OCR LINUX CLIENT (abbyyocr11 www.ocr4linux.com) or maybe other OCR tools that monitors directories and launches a OCR conversion whenever a new file enters.
+Basically it's written to monitor up to 4 directories, each producing a different output format (PDF, Word, Excel & CSV).
+There's also an option to avoid passing PDFs to the OCR engine that already contain text.
 
 Use install.sh script or copy pmocr.sh to /usr/local/bin and pmocr-srv to /etc/init.d
-Configure pmocr.sh variables to monitor the directories you want
+After installation, please configure /usr/local/bin/pmocr.sh script variables in order to monitor the directories you need.
 
 Launch service (initV style)
 service pmocr-srv start
@@ -16,10 +18,6 @@ service pmocr-srv status
 
 Check service state (systemd style)
 systemctl status pmocr-srv
-
-## What does it do ?
-
-pmOCR monitors directories and thier subdirectories and launches an OCR tool to convert jpg, png, tiff, pdf files to PDF, WORD, EXCEL or CSV files.
 
 ## Support for Abbyy OCR Engine linux CLI
 

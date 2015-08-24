@@ -2,8 +2,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.04
-PROGRAM_BUILD=2605201503
+PROGRAM_VERSION=1.1
+PROGRAM_BUILD=2015082401
 
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
@@ -14,17 +14,20 @@ DESTINATION_MAILS="infrastructure@example.com"
 ## File extensions to process
 FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\)"
 
-## Directories to monitor
+## Directories to monitor (Leave variables empty in order to disable specific monitoring).
 PDF_MONITOR_DIR="/storage/service_ocr/PDF"
 WORD_MONITOR_DIR="/storage/service_ocr/WORD"
 EXCEL_MONITOR_DIR="/storage/service_ocr/EXCEL"
 CSV_MONITOR_DIR="/storage/service_ocr/CSV"
 
-## Exlude already processed files
+## Exlude already processed files from monitoring. Any file ending with the following will not be OCRed. Additionnaly, any file that gets OCRed will be added this extension.
 PDF_FILES_TO_EXCLUDE="_ocr.pdf"
 WORD_FILES_TO_EXCLUDE="_ocr.docx"
 EXCEL_FILES_TO_EXCLUDE="_ocr.xlsx"
 CSV_FILES_TO_EXCLUDE="_ocr.csv"
+
+# Alternative check if PDFs are already OCRed (checks if a pdf contains a font). This will prevent images integrated in already indexed PDFs to get OCRed.
+CHECK_PDF=yes
 
 ## Add some extra info to the filename. Example here adds a pseudo ISO 8601 timestamp after a dot (pseudo because the colon sign would render the filename quite weird).
 ## Keep variables between singlequotes if you want them to expand at runtime. Leave this variable empty if you don't want to add anything.
@@ -124,6 +127,15 @@ function CheckEnvironment
 		LogError "pkill not present."
 		exit 1
 	fi
+
+	if [ "$CHECK_PDF" == "yes" ]
+	then
+		if ! type -p pdffonts > /dev/null 2>&1
+		then
+			LogError "pdffonts not present (see poppler-utils package ?)."
+		exit 1
+		fi
+	fi
 }
 
 # debug function to kill child processes
@@ -206,7 +218,7 @@ function OCR {
 		sleep $WAIT_TIME
 
 		# full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
-		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "*$2" -print0 | xargs -0 -I {} sh -c 'export file="{}"; eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$3"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$2"'\" && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && rm -f \"$file\""'
+		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "*$2" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$3"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$2"'\" && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && rm -f \"$file\""; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
 		if [ "$4" == "txt2csv" ]
 		then
 			## Replace all occurences of 3 spaces or more by a semicolor (ugly hack i know)

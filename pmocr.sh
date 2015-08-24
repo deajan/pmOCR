@@ -56,6 +56,8 @@ CSV_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,En
 OCR_ENGINE_INPUT_ARG='-if'
 OCR_ENGINE_OUTPUT_ARG='-of'
 
+#### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
+
 if [ -w /var/log ]
 then
 	LOG_FILE=/var/log/pmocr.log

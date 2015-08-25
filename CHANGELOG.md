@@ -14,3 +14,5 @@ NEXT CHANGES
 - Adding a command line batch mode
 - Splitting code between batch and service mode
 - Revisit the exclude code in the find statememnt to allow not renaming OCRed files
+- Allowing deletion of input file after processing
+

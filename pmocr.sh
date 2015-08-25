@@ -3,7 +3,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.2-dev
-PROGRAM_BUILD=2015082501
+PROGRAM_BUILD=2015082601
 
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
@@ -216,12 +216,20 @@ function OCR
 		inotifywait --exclude "(.*)$2" -qq -r -e create "$1" &
 		child_pid_inotify=$!
 		WaitForCompletion $child_pid_inotify
-		exc="$2"
+		if [ "$2" != "" ]
+		then
+			find_excludes="! -name \"*$2\""
+		else
+			find_excludes=""
+		fi
 
 		sleep $WAIT_TIME
 
+		## CHECK find excludes
+
 		# full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
-		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "*$2" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$3"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$2"'\" && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && rm -f \"$file\""; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
+#		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "*$2" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$3"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$2"'\" && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && rm -f \"$file\""; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
+		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" $find_excludes -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$3"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$2"'\" && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && rm -f \"$file\""; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
 		if [ "$4" == "txt2csv" ]
 		then
 			## Replace all occurences of 3 spaces or more by a semicolor (ugly hack i know)

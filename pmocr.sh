@@ -2,8 +2,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.1
-PROGRAM_BUILD=2015082401
+PROGRAM_VERSION=1.2-dev
+PROGRAM_BUILD=2015082501
 
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
@@ -67,7 +67,7 @@ fi
 
 function Log {
 	echo -e "$(date) - $1" >> "$LOG_FILE"
-	if [ $verbose -eq 1 ]
+	if [ $silent -ne 0 ]
 	then
 		echo -e "$(date) - $1"
 	fi
@@ -209,7 +209,8 @@ function WaitForCompletion
         done
 }
 
-function OCR {
+function OCR
+{
 	while true
 	do
 		inotifywait --exclude "(.*)$2" -qq -r -e create "$1" &
@@ -229,12 +230,96 @@ function OCR {
 	done
 }
 
-if [ "$1" == "--verbose" ]
+function Usage
+{
+	echo "$PROGRAM $PROGRAM_VERSION $PROGRAM_BUILD"
+	echo "$AUTHOR"
+	echo "$CONTACT"
+	echo ""
+	echo "Usage: pmocr can be launched as service using pmocr-srv or in batch mode"
+	echo "Batch mode usage:"
+	echo "pmocr.sh --batch [options] /path/to/folder"
+	echo ""
+	echo "[OPTIONS]"
+	echo "-p, --target=PDF		Creates a PDF document"
+	echo "-w, --target=DOCX		Creates a WORD document"
+	echo "-e, --target=XLSX		Creates an EXCEL document"
+	echo "-c, --target=CSV		Creates a CSV file"
+	echo ""
+	echo "-k, --skip-txt-pdf	Skips PDF files already containing indexable text"
+	echo "-d, --delete-input	Deletes input file after processing"
+	echo "--add-suffix=[...]	Adds a given suffix to the output files"
+	echo "				By default, the suffix is '_OCR'"
+	echo "-s, --silent		Will not output anything to stdout"
+	echo ""
+	exit 128
+}
+
+function CheckArguments
+{
+	if [ "$batch_run" == "1" ]
+	then
+		if [ "$pdf" != "1" ] && [ "$docx" != "1" ] && [ "$xlsx" != "1" ] && [ "$csv" != "1" ]
+		then
+			LogError "No output format chosen."
+			Usage
+		fi
+	else
+		echo "MONGI"
+	fi
+}
+		
+#### Procedural begin
+
+verbose=0
+silent=0
+skip_txt_pdf=0
+delete_input=0
+suffix="_OCR"
+batch_run=0
+
+if [ $# -eq 0 ]
 then
-        verbose=1
-else
-        verbose=0
+	Usage
 fi
+
+for i in "$@"
+do
+	case $i in
+		--batch)
+		batch_run=1
+		;;
+		--silent|-s)
+		silent=1
+		;;
+		-p|--target=pdf|--target=PDF)
+		pdf=1
+		;;
+		-w|--target=DOCX|--target=docx)
+		docx=1
+		;;
+		-e|--target=XLSX|--target=xlsx)
+		xlsx=1
+		;;
+		-c|--target=CSV|--target=csv)
+		csv=1
+		;;
+		-k|--skip-txt-pdf)
+		skip_txt_pdf=1
+		;;
+		-d|--delete-input)
+		delete_input=1
+		;;
+		--add-sufix=*)
+		suffix=${i##*=}
+		;;
+		--help|-h|--version|-v|-?)
+		Usage
+		;;
+	esac
+done
+
+CheckArguments
 CheckEnvironment
 trap TrapQuit SIGTERM EXIT SIGKILL SIGHUP SIGQUIT
 

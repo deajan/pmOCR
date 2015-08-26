@@ -8,11 +8,13 @@ PROGRAM_BUILD=2015082601
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
 
+## Input file extensions
+FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\)"
+
+##### THE FOLLOWING PARAMETERS ARE USED WHEN pmOCR IS RUN AS SERVICE
+
 ## List of alert mails separated by spaces Default log file until config file is loaded
 DESTINATION_MAILS="infrastructure@example.com"
-
-## File extensions to process
-FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\)"
 
 ## Directories to monitor (Leave variables empty in order to disable specific monitoring).
 PDF_MONITOR_DIR="/storage/service_ocr/PDF"
@@ -65,15 +67,18 @@ else
 	LOG_FILE=./pmocr.log
 fi
 
-function Log {
+function Log
+{
 	echo -e "$(date) - $1" >> "$LOG_FILE"
-	if [ $silent -ne 0 ]
+	if [ $silent -ne 1 ]
 	then
-		echo -e "$(date) - $1"
+		# \e[93m = light yellow, \e[0m = normal 
+		echo -e "\e[93m$1\e[0m"
 	fi
 }
 
-function LogError {
+function LogError
+{
 	Log "$1"
 	error_alert=1
 }
@@ -211,6 +216,14 @@ function WaitForCompletion
 
 function OCR
 {
+	## Function arguments
+
+	#MODE="$1" (service / batch)
+	DIRECTORY_TO_PROCESS="$1" 	#(contains some path)
+	EXCLUDE_PATTERN="$2" 		#(filename endings to exclude from processing)
+	OCR_ENGINE_ARGS="$3" 		#(transformation specific arguments)
+	CSV_HACK="$4" 			#(CSV transformation flag)
+			
 	while true
 	do
 		inotifywait --exclude "(.*)$2" -qq -r -e create "$1" &
@@ -240,11 +253,12 @@ function OCR
 
 function Usage
 {
+	echo ""
 	echo "$PROGRAM $PROGRAM_VERSION $PROGRAM_BUILD"
 	echo "$AUTHOR"
 	echo "$CONTACT"
 	echo ""
-	echo "Usage: pmocr can be launched as service using pmocr-srv or in batch mode"
+	echo "pmocr can be launched as a directory monitoring service using \"service pmocr start\" or in batch processing mode"
 	echo "Batch mode usage:"
 	echo "pmocr.sh --batch [options] /path/to/folder"
 	echo ""
@@ -256,28 +270,15 @@ function Usage
 	echo ""
 	echo "-k, --skip-txt-pdf	Skips PDF files already containing indexable text"
 	echo "-d, --delete-input	Deletes input file after processing"
-	echo "--add-suffix=[...]	Adds a given suffix to the output files"
+	echo "--add-suffix=...		Adds a given suffix to the output filename in order to differenciate them (ex: pdf to pdf)."
 	echo "				By default, the suffix is '_OCR'"
+	echo "--add-text=...		Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)')"
 	echo "-s, --silent		Will not output anything to stdout"
 	echo ""
 	exit 128
 }
 
-function CheckArguments
-{
-	if [ "$batch_run" == "1" ]
-	then
-		if [ "$pdf" != "1" ] && [ "$docx" != "1" ] && [ "$xlsx" != "1" ] && [ "$csv" != "1" ]
-		then
-			LogError "No output format chosen."
-			Usage
-		fi
-	else
-		echo "MONGI"
-	fi
-}
-		
-#### Procedural begin
+#### Program Begin
 
 verbose=0
 silent=0
@@ -285,17 +286,16 @@ skip_txt_pdf=0
 delete_input=0
 suffix="_OCR"
 batch_run=0
-
-if [ $# -eq 0 ]
-then
-	Usage
-fi
+service_run=0
 
 for i in "$@"
 do
 	case $i in
 		--batch)
 		batch_run=1
+		;;
+		--service)
+		service_run=1
 		;;
 		--silent|-s)
 		silent=1
@@ -321,43 +321,71 @@ do
 		--add-sufix=*)
 		suffix=${i##*=}
 		;;
+		--add-text=*)
+		text=${i##*=}
+		;;
 		--help|-h|--version|-v|-?)
 		Usage
 		;;
 	esac
 done
 
-CheckArguments
 CheckEnvironment
-trap TrapQuit SIGTERM EXIT SIGKILL SIGHUP SIGQUIT
 
-if [ "$PDF_MONITOR_DIR" != "" ]
+if [ $service_run -eq 1 ]
 then
-	OCR "$PDF_MONITOR_DIR" "$PDF_FILES_TO_EXCLUDE" "$PDF_OCR_ENGINE_ARGS" &
-	child_ocr_pid_pdf=$!
-fi
+	trap TrapQuit SIGTERM EXIT SIGKILL SIGHUP SIGQUIT
 
-if [ "$WORD_MONITOR_DIR" != "" ]
+	if [ "$PDF_MONITOR_DIR" != "" ]
+	then
+		OCR "$PDF_MONITOR_DIR" "$PDF_FILES_TO_EXCLUDE" "$PDF_OCR_ENGINE_ARGS" &
+		child_ocr_pid_pdf=$!
+	fi
+
+	if [ "$WORD_MONITOR_DIR" != "" ]
+	then
+        	OCR "$WORD_MONITOR_DIR" "$WORD_FILES_TO_EXCLUDE" "$WORD_OCR_ENGINE_ARGS" &
+		child_ocr_pid_word=$!
+	fi
+
+	if [ "$EXCEL_MONITOR_DIR" != "" ]
+	then
+        	OCR "$EXCEL_MONITOR_DIR" "$EXCEL_FILES_TO_EXCLUDE" "$EXCEL_OCR_ENGINE_ARGS" &
+		child_ocr_pid_excel=$!
+	fi
+
+	if [ "$CSV_MONITOR_DIR" != "" ]
+	then
+        	OCR "$CSV_MONITOR_DIR" "$CSV_FILES_TO_EXCLUDE" "$CSV_OCR_ENGINE_ARGS" "txt2csv" &
+		child_ocr_pid_csv=$!
+	fi
+
+	Log "Service $PROGRAM instance $$ started as $LOCAL_USER on $LOCAL_HOST."
+
+	while true
+	do
+		sleep $WAIT_TIME
+	done
+elif [ $batch_run -eq 1 ]
 then
-        OCR "$WORD_MONITOR_DIR" "$WORD_FILES_TO_EXCLUDE" "$WORD_OCR_ENGINE_ARGS" &
-	child_ocr_pid_word=$!
+	if [ "$pdf" != "1" ] && [ "$docx" != "1" ] && [ "$xlsx" != "1" ] && [ "$csv" != "1" ]
+	then
+		LogError "No output format chosen."
+		Usage
+	fi
+	CHECK_PDF=$skip_txt_pdf
+
+	# Get last argument that should be a path
+	eval path=\${$#}
+	if [ ! -d "$path" ]
+	then
+		LogError "Missing path."
+		Usage
+	fi
+
+	# OCR
+	echo "Doing OCR"
+else
+	LogError "pmOCR must be run as a system service or in batch mode."
+	Usage
 fi
-
-if [ "$EXCEL_MONITOR_DIR" != "" ]
-then
-        OCR "$EXCEL_MONITOR_DIR" "$EXCEL_FILES_TO_EXCLUDE" "$EXCEL_OCR_ENGINE_ARGS" &
-	child_ocr_pid_excel=$!
-fi
-
-if [ "$CSV_MONITOR_DIR" != "" ]
-then
-        OCR "$CSV_MONITOR_DIR" "$CSV_FILES_TO_EXCLUDE" "$CSV_OCR_ENGINE_ARGS" "txt2csv" &
-	child_ocr_pid_csv=$!
-fi
-
-Log "Service $PROGRAM instance $$ started as $LOCAL_USER on $LOCAL_HOST."
-
-while true
-do
-	sleep $WAIT_TIME
-done

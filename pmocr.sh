@@ -8,7 +8,7 @@ PROGRAM_BUILD=2015082601
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
 
-## Input file extensions
+## Allowed input file extensions
 FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\)"
 
 ##### THE FOLLOWING PARAMETERS ARE USED WHEN pmOCR IS RUN AS SERVICE
@@ -214,31 +214,42 @@ function WaitForCompletion
         done
 }
 
-function OCR
+function OCR_service
 {
 	## Function arguments
 
-	#MODE="$1" (service / batch)
 	DIRECTORY_TO_PROCESS="$1" 	#(contains some path)
 	EXCLUDE_PATTERN="$2" 		#(filename endings to exclude from processing)
 	OCR_ENGINE_ARGS="$3" 		#(transformation specific arguments)
 	CSV_HACK="$4" 			#(CSV transformation flag)
-			
+
 	while true
 	do
 		inotifywait --exclude "(.*)$2" -qq -r -e create "$1" &
 		child_pid_inotify=$!
 		WaitForCompletion $child_pid_inotify
+		sleep $WAIT_TIME
+		OCR "$DIRECTORY_TO_PROCESS" "$EXCLUDE_PATTERN" "$OCR_ENGINE_ARGS" "$CSV_HACK"
+	done
+}
+	
+
+function OCR
+{
+	## Function arguments
+
+	DIRECTORY_TO_PROCESS="$1" 	#(contains some path)
+	EXCLUDE_PATTERN="$2" 		#(filename endings to exclude from processing)
+	OCR_ENGINE_ARGS="$3" 		#(transformation specific arguments)
+	CSV_HACK="$4" 			#(CSV transformation flag)
+	
+		## CHECK find excludes
 		if [ "$2" != "" ]
 		then
 			find_excludes="! -name \"*$2\""
 		else
 			find_excludes=""
 		fi
-
-		sleep $WAIT_TIME
-
-		## CHECK find excludes
 
 		# full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
 #		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "*$2" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$3"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$2"'\" && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && rm -f \"$file\""; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
@@ -248,7 +259,6 @@ function OCR
 			## Replace all occurences of 3 spaces or more by a semicolor (ugly hack i know)
 			find "$1" -type f -name "*$2" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
 		fi
-	done
 }
 
 function Usage
@@ -338,25 +348,25 @@ then
 
 	if [ "$PDF_MONITOR_DIR" != "" ]
 	then
-		OCR "$PDF_MONITOR_DIR" "$PDF_FILES_TO_EXCLUDE" "$PDF_OCR_ENGINE_ARGS" &
+		OCR_service "$PDF_MONITOR_DIR" "$PDF_FILES_TO_EXCLUDE" "$PDF_OCR_ENGINE_ARGS" &
 		child_ocr_pid_pdf=$!
 	fi
 
 	if [ "$WORD_MONITOR_DIR" != "" ]
 	then
-        	OCR "$WORD_MONITOR_DIR" "$WORD_FILES_TO_EXCLUDE" "$WORD_OCR_ENGINE_ARGS" &
+        	OCR_service "$WORD_MONITOR_DIR" "$WORD_FILES_TO_EXCLUDE" "$WORD_OCR_ENGINE_ARGS" &
 		child_ocr_pid_word=$!
 	fi
 
 	if [ "$EXCEL_MONITOR_DIR" != "" ]
 	then
-        	OCR "$EXCEL_MONITOR_DIR" "$EXCEL_FILES_TO_EXCLUDE" "$EXCEL_OCR_ENGINE_ARGS" &
+        	OCR_service "$EXCEL_MONITOR_DIR" "$EXCEL_FILES_TO_EXCLUDE" "$EXCEL_OCR_ENGINE_ARGS" &
 		child_ocr_pid_excel=$!
 	fi
 
 	if [ "$CSV_MONITOR_DIR" != "" ]
 	then
-        	OCR "$CSV_MONITOR_DIR" "$CSV_FILES_TO_EXCLUDE" "$CSV_OCR_ENGINE_ARGS" "txt2csv" &
+        	OCR_serivce "$CSV_MONITOR_DIR" "$CSV_FILES_TO_EXCLUDE" "$CSV_OCR_ENGINE_ARGS" "txt2csv" &
 		child_ocr_pid_csv=$!
 	fi
 
@@ -383,8 +393,26 @@ then
 		Usage
 	fi
 
-	# OCR
-	echo "Doing OCR"
+	if [ "$pdf" == 1 ]
+	then
+		OCR "$path" "$PDF_FILES_TO_EXCLUDE" "$PDF_OCR_ENGINE_ARGS"
+	fi
+	
+	if [ "$docx" == 1 ]
+	then
+		OCR "$path" "$WORD_FILES_TO_EXCLUDE" "$WORD_OCR_ENGINE_ARGS"
+	fi
+	
+	if [ "$xlsx" == 1 ]
+	then
+		OCR "$path" "$EXCEL_FILES_TO_EXCLUDE" "$EXCEL_OCR_ENGINE_ARGS"
+	fi
+	
+	if [ "$csv" == 1 ]
+	then
+		OCR "$path" "$CSV_FILES_TO_EXCLUDE" "$CSV_OCR_ENGINE_ARGS" "txt2csv"
+	fi
+	
 else
 	LogError "pmOCR must be run as a system service or in batch mode."
 	Usage

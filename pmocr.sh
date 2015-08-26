@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
+
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.2-dev
-PROGRAM_BUILD=2015082601
+PROGRAM_BUILD=2015082604
 
-LOCAL_USER=$(whoami)
-LOCAL_HOST=$(hostname)
-
-## Allowed input file extensions
+## List of allowed extensions for input files
 FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\)"
 
 ##### THE FOLLOWING PARAMETERS ARE USED WHEN pmOCR IS RUN AS SERVICE
@@ -22,11 +20,11 @@ WORD_MONITOR_DIR="/storage/service_ocr/WORD"
 EXCEL_MONITOR_DIR="/storage/service_ocr/EXCEL"
 CSV_MONITOR_DIR="/storage/service_ocr/CSV"
 
-## Exlude already processed files from monitoring. Any file ending with the following will not be OCRed. Additionnaly, any file that gets OCRed will be added this extension.
-PDF_FILES_TO_EXCLUDE="_ocr.pdf"
-WORD_FILES_TO_EXCLUDE="_ocr.docx"
-EXCEL_FILES_TO_EXCLUDE="_ocr.xlsx"
-CSV_FILES_TO_EXCLUDE="_ocr.csv"
+## Adds the following suffix to OCRed files (ex: input.tiff becomes input_OCR.pdf). Any file containing this suffix will be ignored.
+FILENAME_SUFFIX="_OCR"
+
+## Delete original file upon successful OCR
+DELETE_ORIGINAL=yes
 
 # Alternative check if PDFs are already OCRed (checks if a pdf contains a font). This will prevent images integrated in already indexed PDFs to get OCRed.
 CHECK_PDF=yes
@@ -58,7 +56,15 @@ CSV_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,En
 OCR_ENGINE_INPUT_ARG='-if'
 OCR_ENGINE_OUTPUT_ARG='-of'
 
+PDF_EXTENSION=".pdf"
+WORD_EXTENSION=".docx"
+EXCEL_EXTENSION=".xlsx"
+CSV_EXTENSION=".csv"
+
 #### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
+
+LOCAL_USER=$(whoami)
+LOCAL_HOST=$(hostname)
 
 if [ -w /var/log ]
 then
@@ -122,20 +128,22 @@ function CheckEnvironment
                 exit 1
 	fi
 
-
-	if ! type -p inotifywait > /dev/null 2>&1
+	if [ $service_run -eq 1 ]
 	then
-		LogError "inotifywait not present (see inotify-tools package ?)."
-		exit 1
+		if ! type -p inotifywait > /dev/null 2>&1
+		then
+			LogError "inotifywait not present (see inotify-tools package ?)."
+			exit 1
+		fi
+
+		if ! type -p pkill > /dev/null 2>&1
+		then
+			LogError "pkill not present."
+			exit 1
+		fi
 	fi
 
-	if ! type -p pkill > /dev/null 2>&1
-	then
-		LogError "pkill not present."
-		exit 1
-	fi
-
-	if [ "$CHECK_PDF" == "yes" ]
+	if [ "$CHECK_PDF" == "yes" ] && ( [ $service_run -eq 1 ] || [ $batch_run -eq 1 ])
 	then
 		if ! type -p pdffonts > /dev/null 2>&1
 		then
@@ -219,45 +227,45 @@ function OCR_service
 	## Function arguments
 
 	DIRECTORY_TO_PROCESS="$1" 	#(contains some path)
-	EXCLUDE_PATTERN="$2" 		#(filename endings to exclude from processing)
+	FILE_EXTENSION="$2" 		#(filename endings to exclude from processing)
 	OCR_ENGINE_ARGS="$3" 		#(transformation specific arguments)
 	CSV_HACK="$4" 			#(CSV transformation flag)
 
 	while true
 	do
-		inotifywait --exclude "(.*)$2" -qq -r -e create "$1" &
+		inotifywait --exclude "(.*)$FILENAME_SUFFIX$2" -qq -r -e create "$1" &
 		child_pid_inotify=$!
 		WaitForCompletion $child_pid_inotify
 		sleep $WAIT_TIME
-		OCR "$DIRECTORY_TO_PROCESS" "$EXCLUDE_PATTERN" "$OCR_ENGINE_ARGS" "$CSV_HACK"
+		OCR "$DIRECTORY_TO_PROCESS" "$FILE_EXTENSION" "$OCR_ENGINE_ARGS" "$CSV_HACK"
 	done
 }
-	
+
 
 function OCR
 {
 	## Function arguments
 
 	DIRECTORY_TO_PROCESS="$1" 	#(contains some path)
-	EXCLUDE_PATTERN="$2" 		#(filename endings to exclude from processing)
+	FILE_EXTENSION="$2" 		#(filename extension for excludes and output)
 	OCR_ENGINE_ARGS="$3" 		#(transformation specific arguments)
 	CSV_HACK="$4" 			#(CSV transformation flag)
-	
+
 		## CHECK find excludes
-		if [ "$2" != "" ]
+		if [ "$FILENAME_SUFFIX" != "" ]
 		then
-			find_excludes="! -name \"*$2\""
+			find_excludes="*$FILENAME_SUFFIX$FILE_EXTENSION"
 		else
 			find_excludes=""
 		fi
 
 		# full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
-#		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "*$2" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$3"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$2"'\" && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && rm -f \"$file\""; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
-		find "$1" -type f -regex ".*\.$FILES_TO_PROCES" $find_excludes -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$3"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$2"'\" && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && rm -f \"$file\""; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
+		find "$DIRECTORY_TO_PROCESS" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_ARGS"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX$FILE_EXTENSION"'\" && if [ '"$batch_run"' -eq 1 ] && [ '"$silent"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
+
 		if [ "$4" == "txt2csv" ]
 		then
-			## Replace all occurences of 3 spaces or more by a semicolor (ugly hack i know)
-			find "$1" -type f -name "*$2" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
+			## Replace all occurences of 3 spaces or more by a semicolor (since Abbyy does a better doc to TXT than doc to CSV, ugly hack i know)
+			find "$DIRECTORY_TO_PROCESS" -type f -name "*$FILENAME_SUFFIX$FILE_EXTENSION" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
 		fi
 }
 
@@ -279,10 +287,10 @@ function Usage
 	echo "-c, --target=CSV		Creates a CSV file"
 	echo ""
 	echo "-k, --skip-txt-pdf	Skips PDF files already containing indexable text"
-	echo "-d, --delete-input	Deletes input file after processing"
-	echo "--add-suffix=...		Adds a given suffix to the output filename in order to differenciate them (ex: pdf to pdf)."
+	echo "-d, --delete-input	Deletes input file after processing ( preventing them to be processed again)"
+	echo "--add-suffix=...		Adds a given suffix to the output filename (in order to not process them again, ex: pdf to pdf conversion)."
 	echo "				By default, the suffix is '_OCR'"
-	echo "--add-text=...		Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)')"
+	echo "--add-text=...		Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)'). Defaults to conversion date."
 	echo "-s, --silent		Will not output anything to stdout"
 	echo ""
 	exit 128
@@ -328,7 +336,7 @@ do
 		-d|--delete-input)
 		delete_input=1
 		;;
-		--add-sufix=*)
+		--add-suffix=*)
 		suffix=${i##*=}
 		;;
 		--add-text=*)
@@ -340,6 +348,33 @@ do
 	esac
 done
 
+if [ $batch_run -eq 1 ]
+then
+	if [ $skip_txt_pdf -eq 1 ]
+	then
+		CHECK_PDF="yes"
+	else
+		CHECK_PDF="no"
+	fi
+
+	if [ "$suffix" != "" ]
+	then
+		FILENAME_SUFFIX="$suffix"
+	fi
+
+	if [ "$text" != "" ]
+	then
+		FILENAME_ADDITION="$text"
+	fi
+
+	if [ $delete_input -eq 1 ]
+	then
+		DELETE_ORIGINAL=yes
+	else
+		DELETE_ORIGINAL=no
+	fi
+fi
+
 CheckEnvironment
 
 if [ $service_run -eq 1 ]
@@ -348,25 +383,25 @@ then
 
 	if [ "$PDF_MONITOR_DIR" != "" ]
 	then
-		OCR_service "$PDF_MONITOR_DIR" "$PDF_FILES_TO_EXCLUDE" "$PDF_OCR_ENGINE_ARGS" &
+		OCR_service "$PDF_MONITOR_DIR" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" &
 		child_ocr_pid_pdf=$!
 	fi
 
 	if [ "$WORD_MONITOR_DIR" != "" ]
 	then
-        	OCR_service "$WORD_MONITOR_DIR" "$WORD_FILES_TO_EXCLUDE" "$WORD_OCR_ENGINE_ARGS" &
+        	OCR_service "$WORD_MONITOR_DIR" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" &
 		child_ocr_pid_word=$!
 	fi
 
 	if [ "$EXCEL_MONITOR_DIR" != "" ]
 	then
-        	OCR_service "$EXCEL_MONITOR_DIR" "$EXCEL_FILES_TO_EXCLUDE" "$EXCEL_OCR_ENGINE_ARGS" &
+        	OCR_service "$EXCEL_MONITOR_DIR" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" &
 		child_ocr_pid_excel=$!
 	fi
 
 	if [ "$CSV_MONITOR_DIR" != "" ]
 	then
-        	OCR_serivce "$CSV_MONITOR_DIR" "$CSV_FILES_TO_EXCLUDE" "$CSV_OCR_ENGINE_ARGS" "txt2csv" &
+        	OCR_service "$CSV_MONITOR_DIR" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" "txt2csv" &
 		child_ocr_pid_csv=$!
 	fi
 
@@ -383,7 +418,6 @@ then
 		LogError "No output format chosen."
 		Usage
 	fi
-	CHECK_PDF=$skip_txt_pdf
 
 	# Get last argument that should be a path
 	eval path=\${$#}
@@ -395,24 +429,24 @@ then
 
 	if [ "$pdf" == 1 ]
 	then
-		OCR "$path" "$PDF_FILES_TO_EXCLUDE" "$PDF_OCR_ENGINE_ARGS"
+		OCR "$path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS"
 	fi
-	
+
 	if [ "$docx" == 1 ]
 	then
-		OCR "$path" "$WORD_FILES_TO_EXCLUDE" "$WORD_OCR_ENGINE_ARGS"
+		OCR "$path" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS"
 	fi
-	
+
 	if [ "$xlsx" == 1 ]
 	then
-		OCR "$path" "$EXCEL_FILES_TO_EXCLUDE" "$EXCEL_OCR_ENGINE_ARGS"
+		OCR "$path" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS"
 	fi
-	
+
 	if [ "$csv" == 1 ]
 	then
-		OCR "$path" "$CSV_FILES_TO_EXCLUDE" "$CSV_OCR_ENGINE_ARGS" "txt2csv"
+		OCR "$path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" "txt2csv"
 	fi
-	
+
 else
 	LogError "pmOCR must be run as a system service or in batch mode."
 	Usage

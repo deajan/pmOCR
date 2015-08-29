@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.2-dev
-PROGRAM_BUILD=2015082604
+PROGRAM_BUILD=2015082901
 
 ## List of allowed extensions for input files
 FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\)"
@@ -78,14 +78,14 @@ function Log
 	echo -e "$(date) - $1" >> "$LOG_FILE"
 	if [ $silent -ne 1 ]
 	then
-		# \e[93m = light yellow, \e[0m = normal 
-		echo -e "\e[93m$1\e[0m"
+		echo -e "TIME: $SECONDS - $1"
 	fi
 }
 
 function LogError
 {
-	Log "$1"
+	# \e[93m = light yellow, \e[0m = normal 
+	Log "\e[93m$1\e[0m"
 	error_alert=1
 }
 
@@ -233,7 +233,7 @@ function OCR_service
 
 	while true
 	do
-		inotifywait --exclude "(.*)$FILENAME_SUFFIX$2" -qq -r -e create "$1" &
+		inotifywait --exclude "(.*)$FILENAME_SUFFIX$FILE_EXTENSION" -qq -r -e create "$DIRECTORY_TO_PROCESS" &
 		child_pid_inotify=$!
 		WaitForCompletion $child_pid_inotify
 		sleep $WAIT_TIME
@@ -262,7 +262,7 @@ function OCR
 		# full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
 		find "$DIRECTORY_TO_PROCESS" -type f -regex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_ARGS"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX$FILE_EXTENSION"'\" && if [ '"$batch_run"' -eq 1 ] && [ '"$silent"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
 
-		if [ "$4" == "txt2csv" ]
+		if [ "$CSV_HACK" == "txt2csv" ]
 		then
 			## Replace all occurences of 3 spaces or more by a semicolor (since Abbyy does a better doc to TXT than doc to CSV, ugly hack i know)
 			find "$DIRECTORY_TO_PROCESS" -type f -name "*$FILENAME_SUFFIX$FILE_EXTENSION" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
@@ -285,6 +285,7 @@ function Usage
 	echo "-w, --target=DOCX		Creates a WORD document"
 	echo "-e, --target=XLSX		Creates an EXCEL document"
 	echo "-c, --target=CSV		Creates a CSV file"
+	echo "(multiple targets can be set)"
 	echo ""
 	echo "-k, --skip-txt-pdf	Skips PDF files already containing indexable text"
 	echo "-d, --delete-input	Deletes input file after processing ( preventing them to be processed again)"
@@ -420,8 +421,8 @@ then
 	fi
 
 	# Get last argument that should be a path
-	eval path=\${$#}
-	if [ ! -d "$path" ]
+	eval batch_path=\${$#}
+	if [ ! -d "$batch_path" ]
 	then
 		LogError "Missing path."
 		Usage
@@ -429,22 +430,30 @@ then
 
 	if [ "$pdf" == 1 ]
 	then
-		OCR "$path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS"
+		Log "Beginning PDF OCR recognition of $batch_path"
+		OCR "$batch_path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS"
+		Log "Process ended."
 	fi
 
 	if [ "$docx" == 1 ]
 	then
-		OCR "$path" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS"
+		Log "Beginning DOCX OCR recognition of $batch_path"
+		OCR "$batch_path" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS"
+		Log "Batch ended."
 	fi
 
 	if [ "$xlsx" == 1 ]
 	then
-		OCR "$path" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS"
+		Log "Beginning XLSX OCR recognition of $batch_path"
+		OCR "$batch_path" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS"
+		Log "batch ended."
 	fi
 
 	if [ "$csv" == 1 ]
 	then
-		OCR "$path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" "txt2csv"
+		Log "Beginning CSV OCR recognition of $batch_path"
+		OCR "$batch_path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" "txt2csv"
+		Log "Batch ended."
 	fi
 
 else

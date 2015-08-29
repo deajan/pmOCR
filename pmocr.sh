@@ -4,10 +4,10 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.2-dev
-PROGRAM_BUILD=2015082901
+PROGRAM_BUILD=2015082902
 
 ## List of allowed extensions for input files
-FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\)"
+FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\|bmp\|pcx\|dcx\)"
 
 ##### THE FOLLOWING PARAMETERS ARE USED WHEN pmOCR IS RUN AS SERVICE
 

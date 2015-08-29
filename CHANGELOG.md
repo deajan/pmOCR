@@ -2,6 +2,7 @@ RECENT CHANGES
 --------------
 
 XX Aug 2015: v1.2
+- Added all input file formats that abbyyocr11 supports
 - Fixed find command to allow case insensitive input extensions
 - Minor improvements in logging, and code readability
 - Added full commandline batch mode

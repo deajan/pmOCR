@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.2-dev
-PROGRAM_BUILD=2015082902
+PROGRAM_VERSION=1.2
+PROGRAM_BUILD=2015083101
 
 ## List of allowed extensions for input files
 FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\|bmp\|pcx\|dcx\)"
@@ -24,7 +24,7 @@ CSV_MONITOR_DIR="/storage/service_ocr/CSV"
 FILENAME_SUFFIX="_OCR"
 
 ## Delete original file upon successful OCR
-DELETE_ORIGINAL=yes
+DELETE_ORIGINAL=no
 
 # Alternative check if PDFs are already OCRed (checks if a pdf contains a font). This will prevent images integrated in already indexed PDFs to get OCRed.
 CHECK_PDF=yes

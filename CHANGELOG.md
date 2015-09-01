@@ -1,6 +1,9 @@
 RECENT CHANGES
 --------------
 
+XX Sep 2015: v1.3
+!- Added support for tesseract 3.x
+
 31 Aug 2015: v1.2
 - Added all input file formats that abbyyocr11 supports
 - Fixed find command to allow case insensitive input extensions

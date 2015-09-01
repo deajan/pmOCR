@@ -3,8 +3,11 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.2
-PROGRAM_BUILD=2015083101
+PROGRAM_VERSION=1.3-dev
+PROGRAM_BUILD=20150901
+
+## OCR Engine (can be tesseract or abbyyocr11)
+OCR_ENGINE=tesseract
 
 ## List of allowed extensions for input files
 FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\|bmp\|pcx\|dcx\)"
@@ -36,6 +39,16 @@ FILENAME_ADDITION='.$(date --utc +"%Y-%m-%dT%H-%M-%SZ")'
 # Wait a trivial number of seconds before launching OCR
 WAIT_TIME=1
 
+if [ "$OCR_ENGINE" == "tesseract" ]
+then
+# tesseract 3.x Engine Arguments
+################################
+OCR_ENGINE_EXEC=/usr/bin/tesseract
+PDF_OCR_ENGINE_ARGS='pdf'
+OCR_ENGINE_INPUT_ARG=
+OCR_ENGINE_OUTPUT_ARG=
+elif [ "$OCR_ENGINE" == "abbyyocr11" ]
+then
 # OCR Engine Arguments
 ###############################
 ## ABBYYOCR arguments settings :
@@ -55,6 +68,7 @@ EXCEL_OCR_ENGINE_ARGS=' -lpp TextExtraction_Accuracy -adb -ido -adtop -rl French
 CSV_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -trl -f TextUnicodeDefaults'
 OCR_ENGINE_INPUT_ARG='-if'
 OCR_ENGINE_OUTPUT_ARG='-of'
+fi
 
 PDF_EXTENSION=".pdf"
 WORD_EXTENSION=".docx"
@@ -374,6 +388,12 @@ then
 	else
 		DELETE_ORIGINAL=no
 	fi
+fi
+
+if [ "$OCR_ENGINE" != "tesseract" ] && [ "$OCR_ENGINE" != "abbyyocr11" ]
+then
+	LogError "No valid OCR engine selected"
+	exit 1
 fi
 
 CheckEnvironment

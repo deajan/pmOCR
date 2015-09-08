@@ -4,10 +4,10 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.3-dev
-PROGRAM_BUILD=20150901
+PROGRAM_BUILD=2015090801
 
 ## OCR Engine (can be tesseract or abbyyocr11)
-OCR_ENGINE=tesseract
+OCR_ENGINE=abbyyocr11
 
 ## List of allowed extensions for input files
 FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\|bmp\|pcx\|dcx\)"
@@ -303,9 +303,12 @@ function Usage
 	echo ""
 	echo "-k, --skip-txt-pdf	Skips PDF files already containing indexable text"
 	echo "-d, --delete-input	Deletes input file after processing ( preventing them to be processed again)"
-	echo "--add-suffix=...		Adds a given suffix to the output filename (in order to not process them again, ex: pdf to pdf conversion)."
+	echo "--suffix=...		Adds a given suffix to the output filename (in order to not process them again, ex: pdf to pdf conversion)."
 	echo "				By default, the suffix is '_OCR'"
-	echo "--add-text=...		Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)'). Defaults to conversion date."
+	echo "--no-suffix		Won't add any suffix to the output filename"
+	echo "--text=...		Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)').
+					By default, the text is the conversion date in pseudo ISO format."
+	echo "--no-text			Won't add any text to the output filename"
 	echo "-s, --silent		Will not output anything to stdout"
 	echo ""
 	exit 128
@@ -318,6 +321,8 @@ silent=0
 skip_txt_pdf=0
 delete_input=0
 suffix="_OCR"
+no_suffix=0
+no_text=0
 batch_run=0
 service_run=0
 
@@ -351,11 +356,17 @@ do
 		-d|--delete-input)
 		delete_input=1
 		;;
-		--add-suffix=*)
+		--suffix=*)
 		suffix=${i##*=}
 		;;
-		--add-text=*)
+		--no-suffix)
+		no_suffix=1
+		;;
+		--text=*)
 		text=${i##*=}
+		;;
+		no_text)
+		no_text=1
 		;;
 		--help|-h|--version|-v|-?)
 		Usage
@@ -372,12 +383,18 @@ then
 		CHECK_PDF="no"
 	fi
 
-	if [ "$suffix" != "" ]
+	if [ $no_suffix -eq 1 ]
+	then
+		FILENAME_SUFFIX=""
+	elif [ "$suffix" != "" ]
 	then
 		FILENAME_SUFFIX="$suffix"
 	fi
 
-	if [ "$text" != "" ]
+	if [ $no_text -eq 1 ]
+	then
+		FILENAME_ADDITION=""
+	elif [ "$text" != "" ]
 	then
 		FILENAME_ADDITION="$text"
 	fi

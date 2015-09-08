@@ -3,6 +3,7 @@ RECENT CHANGES
 
 XX Sep 2015: v1.3
 !- Added support for tesseract 3.x
+- Added options to suppress suffix and text in batch process
 
 31 Aug 2015: v1.2
 - Added all input file formats that abbyyocr11 supports

@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.3-dev
-PROGRAM_BUILD=2015090801
+PROGRAM_BUILD=2015091601
 
 ## OCR Engine (can be tesseract or abbyyocr11)
 OCR_ENGINE=abbyyocr11
@@ -40,8 +40,7 @@ FILENAME_ADDITION='.$(date --utc +"%Y-%m-%dT%H-%M-%SZ")'
 # Wait a trivial number of seconds before launching OCR
 WAIT_TIME=1
 
-if [ "$OCR_ENGINE" == "tesseract" ]
-then
+if [ "$OCR_ENGINE" == "tesseract" ]; then
 # tesseract 3.x Engine Arguments
 ################################
 ## tesseract arguments settings :
@@ -50,8 +49,7 @@ OCR_ENGINE_EXEC=/usr/bin/tesseract
 PDF_OCR_ENGINE_ARGS='pdf'
 OCR_ENGINE_INPUT_ARG='-l fra'
 OCR_ENGINE_OUTPUT_ARG=
-elif [ "$OCR_ENGINE" == "abbyyocr11" ]
-then
+elif [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 # OCR Engine Arguments
 ###############################
 ## ABBYYOCR arguments settings :
@@ -83,164 +81,184 @@ CSV_EXTENSION=".csv"
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
 
-if [ -w /var/log ]
-then
+if [ -w /var/log ]; then
 	LOG_FILE=/var/log/pmocr.log
 else
 	LOG_FILE=./pmocr.log
 fi
 
-function Log
-{
-	echo -e "$(date) - $1" >> "$LOG_FILE"
-	if [ $silent -ne 1 ]
-	then
-		echo -e "TIME: $SECONDS - $1"
+function _Logger {
+	local value="${1}" # What to log
+	echo -e "$value" >> "$LOG_FILE"
+
+	if [ $_SILENT -eq 0 ]; then
+		echo -e "$value"
 	fi
 }
 
-function LogError
-{
-	# \e[93m = light yellow, \e[0m = normal 
-	Log "\e[93m$1\e[0m"
-	error_alert=1
+function Logger {
+	local value="${1}" # Sentence to log (in double quotes)
+	local level="${2}" # Log level: DEBUG, NOTICE, WARN, ERROR, CRITIAL
+
+	if [ "$level" == "CRITICAL" ]; then
+		_Logger "$prefix\e[41m$value\e[0m"
+		ERROR_ALERT=1
+		return
+	elif [ "$level" == "ERROR" ]; then
+		_Logger "$prefix\e[91m$value\e[0m"
+		ERROR_ALERT=1
+		return
+	elif [ "$level" == "WARN" ]; then
+		_Logger "$prefix\e[93m$value\e[0m"
+		return
+	elif [ "$level" == "NOTICE" ]; then
+		_Logger "$prefix$value"
+		return
+	elif [ "$level" == "DEBUG" ]; then
+		if [ "$_DEBUG" == "yes" ]; then
+			_Logger "$prefix$value"
+			return
+		fi
+	else
+		_Logger "\e[41mLogger function called without proper loglevel.\e[0m"
+		_Logger "$prefix$value"
+	fi
 }
 
-function SendAlert
-{
-        MAIL_ALERT_MSG=$MAIL_ALERT_MSG$'\n\n'$(tail -n 25 "$LOG_FILE")
-        if type -p mutt > /dev/null 2>&1
-        then
-                echo $MAIL_ALERT_MSG | $(type -p mutt) -x -s  "OCR_SERVICE Alerte on $LOCAL_HOST for $LOCAL_USER" $DESTINATION_MAILS -a "$LOG_FILE"
-                if [ $? != 0 ]
-                then
-                        Log "WARNING: Cannot send alert email via $(type -p mutt) !!!"
-                else
-                        Log "Sent alert mail using mutt."
-                fi
-        elif type -p mail > /dev/null 2>&1
-        then
-                echo $MAIL_ALERT_MSG | $(type -p mail) -a "$LOG_FILE" -s  "OCR_SERVICE Alerte on $LOCAL_HOST for $LOCAL_USER" $DESTINATION_MAILS
-                if [ $? != 0 ]
-                then
-                        Log "WARNING: Cannot send alert email via $(type -p mail) with attachments !!!"
-                        echo $MAIL_ALERT_MSG | $(type -p mail) -s  "OCR_SERVICE Alerte on $LOCAL_HOST for $LOCAL_USER" $DESTINATION_MAILS
-                        if [ $? != 0 ]
-                        then
-                                Log "WARNING: Cannot send alert email via $(type -p mail) without attachments !!!"
-                        else
-                                Log "Sent alert mail using mail command without attachment."
-                        fi
-                else
-                        Log "Sent alert mail using mail command."
-                fi
-        fi
+function SendAlert {
+	MAIL_ALERT_MSG=$MAIL_ALERT_MSG$'\n\n'$(tail -n 25 "$LOG_FILE")
+	if type -p mutt > /dev/null 2>&1
+	then
+		echo $MAIL_ALERT_MSG | $(type -p mutt) -x -s  "OCR_SERVICE Alerte on $LOCAL_HOST for $LOCAL_USER" $DESTINATION_MAILS -a "$LOG_FILE"
+		if [ $? != 0 ]; then
+			Logger "WARNING: Cannot send alert email via $(type -p mutt) !!!" "WARN"
+		else
+			Logger "Sent alert mail using mutt." "NOTICE"
+		fi
+	elif type -p mail > /dev/null 2>&1
+	then
+		echo $MAIL_ALERT_MSG | $(type -p mail) -a "$LOG_FILE" -s  "OCR_SERVICE Alerte on $LOCAL_HOST for $LOCAL_USER" $DESTINATION_MAILS
+		if [ $? != 0 ]; then
+			Logger "WARNING: Cannot send alert email via $(type -p mail) with attachments !!!" "WARN"
+			echo $MAIL_ALERT_MSG | $(type -p mail) -s  "OCR_SERVICE Alerte on $LOCAL_HOST for $LOCAL_USER" $DESTINATION_MAILS
+			if [ $? != 0 ]; then
+				Logger "WARNING: Cannot send alert email via $(type -p mail) without attachments !!!" "WARN"
+			else
+				Logger "Sent alert mail using mail command without attachment." "NOTICE"
+			fi
+		else
+			Logger "Sent alert mail using mail command." "NOTICE"
+		fi
+	fi
 }
 
-function CheckEnvironment
-{
-        if ! type -p $OCR_ENGINE_EXEC > /dev/null 2>&1
-        then
-                LogError "$OCR_ENGINE_EXEC not present."
-                exit 1
+function CheckEnvironment {
+	if ! type -p $OCR_ENGINE_EXEC > /dev/null 2>&1
+	then
+		Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"
+		exit 1
 	fi
 
-	if [ $service_run -eq 1 ]
-	then
+	if [ $_SERVICE_RUN -eq 1 ]; then
 		if ! type -p inotifywait > /dev/null 2>&1
 		then
-			LogError "inotifywait not present (see inotify-tools package ?)."
+			Logger "inotifywait not present (see inotify-tools package ?)." "CRITICAL"
 			exit 1
 		fi
 
-		if ! type -p pkill > /dev/null 2>&1
+		if ! type -p pgrep > /dev/null 2>&1
 		then
-			LogError "pkill not present."
+			Logger "pgrep not present." "CRITICAL"
 			exit 1
 		fi
 	fi
 
-	if [ "$CHECK_PDF" == "yes" ] && ( [ $service_run -eq 1 ] || [ $batch_run -eq 1 ])
+	if [ "$CHECK_PDF" == "yes" ] && ( [ $_SERVICE_RUN -eq 1 ] || [ $_BATCH_RUN -eq 1 ])
 	then
 		if ! type -p pdffonts > /dev/null 2>&1
 		then
-			LogError "pdffonts not present (see poppler-utils package ?)."
+			Logger "pdffonts not present (see poppler-utils package ?)." "CRITICAL"
 		exit 1
 		fi
 	fi
 }
 
-# debug function to kill child processes
-function ProcessChildKill
-{
-	for pid in $(ps -a --Group $1 | cut -f1 -d' ')
-	do
-		kill -9 $pid
-	done
+# Portable child (and grandchild) kill function tester under Linux, BSD and MacOS X
+function KillChilds {
+	local pid="${1}"
+	local self="${2:-false}"
+
+	if children="$(pgrep -P "$pid")"; then
+		for child in $children; do
+			KillChilds "$child" true
+		done
+	fi
+
+	if [ "$self" == true ]; then
+		kill -s SIGTERM "$pid" || (sleep 10 && kill -9 "$pid" &)
+	fi
 }
 
-function TrapQuit
-{
-	if ps -p $$ > /dev/null 2>&1
-	then
-		if ps -p $child_ocr_pid_pdf > /dev/null 2>&1
-		then
-			if type -p pkill > /dev/null 2>&1
-			then
-				pkill -TERM -P $child_ocr_pid_pdf
-			else
-				ProcessChildKill $child_ocr_pid_pdf
-			fi
-			kill -9 $child_ocr_pid_pdf
-		fi
-
-		if ps -p $child_ocr_pid_word > /dev/null 2>&1
-		then
-			if type -p pkill > /dev/null 2>&1
-			then
-				pkill -TERM -P $child_ocr_pid_word
-			else
-				ProcessChildKill $child_ocr_pid_word
-			fi
-			kill -9 $child_ocr_pid_word
-		fi
-
-		if ps -p $child_ocr_pid_excel > /dev/null 2>&1
-		then
-			if type -p pkill > /dev/null 2>&1
-			then
-				pkill -TERM -P $child_ocr_pid_excel
-			else
-				ProcessChildKill $child_ocr_pid_excel
-			fi
-			kill -9 $child_ocr_pid_excel
-		fi
-
-		if ps -p $child_ocr_pid_csv > /dev/null 2>&1
-		then
-			if type -p pkill > /dev/null 2>&1
-			then
-				pkill -TERM -P $child_ocr_pid_csv
-			else
-				ProcessChildKill $child_ocr_pid_csv
-			fi
-			kill -9 $child_ocr_pid_csv
-		fi
-	fi
-	Log "Service $PROGRAM instance $$ stopped."
+function TrapQuit {
+#	if ps -p $$ > /dev/null 2>&1
+#	then
+#		if ps -p $child_ocr_pid_pdf > /dev/null 2>&1
+#		then
+#			if type -p pkill > /dev/null 2>&1
+#			then
+#				pkill -TERM -P $child_ocr_pid_pdf
+#			else
+#				ProcessChildKill $child_ocr_pid_pdf
+#			fi
+#			kill -9 $child_ocr_pid_pdf
+#		fi
+#
+#		if ps -p $child_ocr_pid_word > /dev/null 2>&1
+#		then
+#			if type -p pkill > /dev/null 2>&1
+#			then
+#				pkill -TERM -P $child_ocr_pid_word
+#			else
+#				ProcessChildKill $child_ocr_pid_word
+#			fi
+#			kill -9 $child_ocr_pid_word
+#		fi
+#
+#		if ps -p $child_ocr_pid_excel > /dev/null 2>&1
+#		then
+#			if type -p pkill > /dev/null 2>&1
+#			then
+#				pkill -TERM -P $child_ocr_pid_excel
+#			else
+#				ProcessChildKill $child_ocr_pid_excel
+#			fi
+#			kill -9 $child_ocr_pid_excel
+#		fi
+#
+#		if ps -p $child_ocr_pid_csv > /dev/null 2>&1
+#		then
+#			if type -p pkill > /dev/null 2>&1
+#			then
+#				pkill -TERM -P $child_ocr_pid_csv
+#			else
+#				ProcessChildKill $child_ocr_pid_csv
+#			fi
+#			kill -9 $child_ocr_pid_csv
+#		fi
+#	fi
+	KillChilds $$ > /dev/null 2>&1
+	Logger "Service $PROGRAM stopped instance $$." "NOTICE"
 	exit
 }
 
-function WaitForCompletion
-{
-        while ps -p $1 > /dev/null 2>&1
-        do
-                sleep $WAIT_TIME
-        done
+function WaitForCompletion {
+	while ps -p $1 > /dev/null 2>&1
+	do
+		sleep $WAIT_TIME
+	done
 }
 
-function OCR_service
-{
+function OCR_service {
 	## Function arguments
 
 	DIRECTORY_TO_PROCESS="$1" 	#(contains some path)
@@ -259,8 +277,7 @@ function OCR_service
 }
 
 
-function OCR
-{
+function OCR {
 	## Function arguments
 
 	DIRECTORY_TO_PROCESS="$1" 	#(contains some path)
@@ -269,31 +286,26 @@ function OCR
 	CSV_HACK="$4" 			#(CSV transformation flag)
 
 		## CHECK find excludes
-		if [ "$FILENAME_SUFFIX" != "" ]
-		then
+		if [ "$FILENAME_SUFFIX" != "" ]; then
 			find_excludes="*$FILENAME_SUFFIX$FILE_EXTENSION"
 		else
 			find_excludes=""
 		fi
 
-		if [ "$OCR_ENGINE" == "abbyyocr11" ]
-		then
+		if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 			# full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
-			find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_ARGS"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX$FILE_EXTENSION"'\" && if [ '"$batch_run"' -eq 1 ] && [ '"$silent"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
+			find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_ARGS"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX$FILE_EXTENSION"'\" && if [ '"$_BATCH_RUN"' -eq 1 ] && [ '"$_SILENT"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
 
-			if [ "$CSV_HACK" == "txt2csv" ]
-			then
+			if [ "$CSV_HACK" == "txt2csv" ]; then
 				## Replace all occurences of 3 spaces or more by a semicolor (since Abbyy does a better doc to TXT than doc to CSV, ugly hack i know)
 				find "$DIRECTORY_TO_PROCESS" -type f -name "*$FILENAME_SUFFIX$FILE_EXTENSION" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
 			fi
-		elif [ "$OCR_ENGINE" == "tesseract" ]
-		then
-			find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX"'\" '"$OCR_ENGINE_ARGS"' && if [ '"$batch_run"' -eq 1 ] && [ '"$silent"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
+		elif [ "$OCR_ENGINE" == "tesseract" ]; then
+			find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} sh -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX"'\" '"$OCR_ENGINE_ARGS"' && if [ '"$_BATCH_RUN"' -eq 1 ] && [ '"$_SILENT"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
 		fi
 }
 
-function Usage
-{
+function Usage {
 	echo ""
 	echo "$PROGRAM $PROGRAM_VERSION $PROGRAM_BUILD"
 	echo "$AUTHOR"
@@ -325,27 +337,27 @@ function Usage
 
 #### Program Begin
 
-verbose=0
-silent=0
+_VERBOSE=0
+_SILENT=0
 skip_txt_pdf=0
 delete_input=0
 suffix="_OCR"
 no_suffix=0
 no_text=0
-batch_run=0
-service_run=0
+_BATCH_RUN=0
+_SERVICE_RUN=0
 
 for i in "$@"
 do
 	case $i in
 		--batch)
-		batch_run=1
+		_BATCH_RUN=1
 		;;
 		--service)
-		service_run=1
+		_SERVICE_RUN=1
 		;;
 		--silent|-s)
-		silent=1
+		_SILENT=1
 		;;
 		-p|--target=pdf|--target=PDF)
 		pdf=1
@@ -383,126 +395,106 @@ do
 	esac
 done
 
-if [ $batch_run -eq 1 ]
-then
-	if [ $skip_txt_pdf -eq 1 ]
-	then
+if [ $_BATCH_RUN -eq 1 ]; then
+	if [ $skip_txt_pdf -eq 1 ]; then
 		CHECK_PDF="yes"
 	else
 		CHECK_PDF="no"
 	fi
 
-	if [ $no_suffix -eq 1 ]
-	then
+	if [ $no_suffix -eq 1 ]; then
 		FILENAME_SUFFIX=""
-	elif [ "$suffix" != "" ]
-	then
+	elif [ "$suffix" != "" ]; then
 		FILENAME_SUFFIX="$suffix"
 	fi
 
-	if [ $no_text -eq 1 ]
-	then
+	if [ $no_text -eq 1 ]; then
 		FILENAME_ADDITION=""
-	elif [ "$text" != "" ]
-	then
+	elif [ "$text" != "" ]; then
 		FILENAME_ADDITION="$text"
 	fi
 
-	if [ $delete_input -eq 1 ]
-	then
+	if [ $delete_input -eq 1 ]; then
 		DELETE_ORIGINAL=yes
 	else
 		DELETE_ORIGINAL=no
 	fi
 fi
 
-if [ "$OCR_ENGINE" != "tesseract" ] && [ "$OCR_ENGINE" != "abbyyocr11" ]
-then
+if [ "$OCR_ENGINE" != "tesseract" ] && [ "$OCR_ENGINE" != "abbyyocr11" ]; then
 	LogError "No valid OCR engine selected"
 	exit 1
 fi
 
 CheckEnvironment
 
-if [ $service_run -eq 1 ]
-then
+if [ $_SERVICE_RUN -eq 1 ]; then
 	trap TrapQuit SIGTERM EXIT SIGKILL SIGHUP SIGQUIT
 
-	if [ "$PDF_MONITOR_DIR" != "" ]
-	then
+	if [ "$PDF_MONITOR_DIR" != "" ]; then
 		OCR_service "$PDF_MONITOR_DIR" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" &
 		child_ocr_pid_pdf=$!
 	fi
 
-	if [ "$WORD_MONITOR_DIR" != "" ]
-	then
-        	OCR_service "$WORD_MONITOR_DIR" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" &
+	if [ "$WORD_MONITOR_DIR" != "" ]; then
+		OCR_service "$WORD_MONITOR_DIR" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" &
 		child_ocr_pid_word=$!
 	fi
 
-	if [ "$EXCEL_MONITOR_DIR" != "" ]
-	then
-        	OCR_service "$EXCEL_MONITOR_DIR" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" &
+	if [ "$EXCEL_MONITOR_DIR" != "" ]; then
+		OCR_service "$EXCEL_MONITOR_DIR" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" &
 		child_ocr_pid_excel=$!
 	fi
 
-	if [ "$CSV_MONITOR_DIR" != "" ]
-	then
-        	OCR_service "$CSV_MONITOR_DIR" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" "txt2csv" &
+	if [ "$CSV_MONITOR_DIR" != "" ]; then
+		OCR_service "$CSV_MONITOR_DIR" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" "txt2csv" &
 		child_ocr_pid_csv=$!
 	fi
 
-	Log "Service $PROGRAM instance $$ started as $LOCAL_USER on $LOCAL_HOST."
+	Logger "Service $PROGRAM instance $$ started as $LOCAL_USER on $LOCAL_HOST." "NOTICE"
 
 	while true
 	do
 		sleep $WAIT_TIME
 	done
-elif [ $batch_run -eq 1 ]
-then
-	if [ "$pdf" != "1" ] && [ "$docx" != "1" ] && [ "$xlsx" != "1" ] && [ "$csv" != "1" ]
-	then
-		LogError "No output format chosen."
+elif [ $_BATCH_RUN -eq 1 ]; then
+	if [ "$pdf" != "1" ] && [ "$docx" != "1" ] && [ "$xlsx" != "1" ] && [ "$csv" != "1" ]; then
+		Logger "No output format chosen." "ERROR"
 		Usage
 	fi
 
 	# Get last argument that should be a path
 	eval batch_path=\${$#}
-	if [ ! -d "$batch_path" ]
-	then
-		LogError "Missing path."
+	if [ ! -d "$batch_path" ]; then
+		Logger "Missing path." "ERROR"
 		Usage
 	fi
 
-	if [ "$pdf" == 1 ]
-	then
-		Log "Beginning PDF OCR recognition of $batch_path"
+	if [ "$pdf" == 1 ]; then
+		Logger "Beginning PDF OCR recognition of $batch_path" "NOTICE"
 		OCR "$batch_path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS"
-		Log "Process ended."
+		Logger "Process ended." "NOTICE"
 	fi
 
-	if [ "$docx" == 1 ]
-	then
-		Log "Beginning DOCX OCR recognition of $batch_path"
+	if [ "$docx" == 1 ]; then
+		Logger "Beginning DOCX OCR recognition of $batch_path" "NOTICE"
 		OCR "$batch_path" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS"
-		Log "Batch ended."
+		Logger "Batch ended." "NOTICE"
 	fi
 
-	if [ "$xlsx" == 1 ]
-	then
-		Log "Beginning XLSX OCR recognition of $batch_path"
+	if [ "$xlsx" == 1 ]; then
+		Logger "Beginning XLSX OCR recognition of $batch_path" "NOTICE"
 		OCR "$batch_path" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS"
-		Log "batch ended."
+		Logger "batch ended." "NOTICE"
 	fi
 
-	if [ "$csv" == 1 ]
-	then
-		Log "Beginning CSV OCR recognition of $batch_path"
+	if [ "$csv" == 1 ]; then
+		Logger "Beginning CSV OCR recognition of $batch_path" "NOTICE"
 		OCR "$batch_path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" "txt2csv"
-		Log "Batch ended."
+		Logger "Batch ended." "NOTICE"
 	fi
 
 else
-	LogError "pmOCR must be run as a system service or in batch mode."
+	Logger "pmOCR must be run as a system service or in batch mode." "ERROR"
 	Usage
 fi

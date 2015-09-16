@@ -2,6 +2,9 @@ RECENT CHANGES
 --------------
 
 XX Sep 2015: v1.3
+! Check for service directories before launching service
+- Added better KillChilds function on exit in service mode
+- Changed code to be code style V2 compliant
 - Added support for tesseract 3.x
 - Added options to suppress suffix and text in batch process
 

@@ -2,6 +2,7 @@ RECENT CHANGES
 --------------
 
 XX Sep 2015: v1.3
+- Added LSB info to init script for Debian based distros
 ! Check for service directories before launching service
 - Added better KillChilds function on exit in service mode
 - Changed code to be code style V2 compliant

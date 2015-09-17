@@ -1,6 +1,6 @@
 # pmOCR (poor man's OCR service)
 
-A wrapper script for ABBYY CLI OCR 11 FOR LINUX based on Finereader Engine 11 optical character recognition (www.ocr4linux.com) or other OCR tools.
+A wrapper script for ABBYY CLI OCR 11 FOR LINUX based on Finereader Engine 11 optical character recognition (www.ocr4linux.com) or tesseract 3.
 Conversions support tiff/jpg/png/pdf/bmp to PDF, Word, Excel or CSV (actually any other format that your OCR engine can handle).
 This wrapper can work both in batch and service mode.
 In batch mode, it will be used as commandline tool for processing multiple files at once, being able to output one or more formats.
@@ -37,13 +37,14 @@ service pmocr-srv status
 Check service state (systemd style)
 systemctl status pmocr-srv
 
-## Support for Abbyy OCR Engine linux CLI
+## Support for OCR engines
 
-Has been tested so far with ABBYY FineReader Engine 11 CLI for Linux releases R2 (v 11.1.6.562411) and R3 (v 11.1.9.622165) but should virtually work with anything as long you adjust the parameters.
+Has been tested so far with ABBYY FineReader OCR Engine 11 CLI for Linux releases R2 (v 11.1.6.562411) and R3 (v 11.1.9.622165)
+Has been tested with tesseract-ocr 3.0
+It should virtually work with any engine as long as you adjust the parameters.
 Parameters include any arguments to pass to the OCR program depending on the target format.
 
 ## Troubleshooting
 
 Please check /var/log/pmocr.log or ./pmocr.log file for errors.
 Filenames containing special characters should work, nevertheless, if your file doesn't get converted, try to rename it and copy it again to the monitored directory or batch process it again.
-

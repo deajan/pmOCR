@@ -49,6 +49,8 @@ OCR_ENGINE_EXEC=/usr/bin/tesseract
 PDF_OCR_ENGINE_ARGS='pdf'
 OCR_ENGINE_INPUT_ARG='-l eng' # Language setting
 OCR_ENGINE_OUTPUT_ARG=
+OCR_PDF_TO_TIFF_EXEC=/usr/bin/gs
+OCR_PDF_TO_TIFF_OPTS='-dNOPAUSE -q -r300x300 -sDEVICE=tiff32nc -dBATCH -sOUTPUTFILE='
 elif [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 # OCR Engine Arguments
 ###############################
@@ -230,6 +232,33 @@ function OCR_service {
 	done
 }
 
+function proceed_tesseract {
+        file="$1"
+        inputfile="$file"
+	if [[ $file == *.[pP][dD][fF] ]]
+	then
+           inputfile="${file}.tif"
+           echo "Converting $file to $inputfile"
+	   $OCR_PDF_TO_TIFF_EXEC ${OCR_PDF_TO_TIFF_OPTS}"${inputfile}" "$file" 
+        fi
+        eval "fa=\"$FILENAME_ADDITION\""
+        $OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG "$inputfile" $OCR_ENGINE_OUTPUT_ARG "${file%.*}${fa}${FILENAME_SUFFIX}" $OCR_ENGINE_ARGS &&
+        if [ "$_BATCH_RUN" -eq 1 ] && [ "$_SILENT" -ne 1 ]
+        then
+                echo "Processed $file"
+        fi &&
+        echo -e "$(date) - Processed $file" >> $LOG_FILE &&
+        if [ "$DELETE_ORIGINAL" == "yes" ]
+        then
+                rm -f $file
+        fi
+ 
+        if [ "$file" != "$inputfile" ]
+        then
+            rm -f "$inputfile"
+        fi
+};
+
 
 function OCR {
 	## Function arguments
@@ -255,9 +284,23 @@ function OCR {
 				find "$DIRECTORY_TO_PROCESS" -type f -name "*$FILENAME_SUFFIX$FILE_EXTENSION" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
 			fi
 		elif [ "$OCR_ENGINE" == "tesseract" ]; then
-			find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} bash -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX"'\" '"$OCR_ENGINE_ARGS"' && if [ '"$_BATCH_RUN"' -eq 1 ] && [ '"$_SILENT"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
+			find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | 
+			while IFS= read -r -d $'\0' line; do 
+ 				if [ $CHECK_PDF == "yes" ]
+				then 
+	if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null
+					then 
+						proceed_tesseract "$line"
+					else 
+						echo "$(date) - Skipping file $file already containing text." >> $LOG_FILE
+					fi
+				else
+					proceed_tesseract "$line"
+				fi
+    			done
 		fi
 }
+
 
 function Usage {
 	echo ""

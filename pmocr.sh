@@ -233,15 +233,15 @@ function OCR_service {
 }
 
 function proceed_tesseract {
-        file="$1"
-        inputfile="$file"
+	file="$1"
+	inputfile="$file"
 	if [[ $file == *.[pP][dD][fF] ]]
 	then
-           inputfile="${file}.tif"
-           echo "Converting $file to $inputfile"
-	   $OCR_PDF_TO_TIFF_EXEC ${OCR_PDF_TO_TIFF_OPTS}"${inputfile}" "$file" 
-        fi
-        eval "fa=\"$FILENAME_ADDITION\""
+		inputfile="${file}.tif"
+		echo "Converting $file to $inputfile"
+		$OCR_PDF_TO_TIFF_EXEC ${OCR_PDF_TO_TIFF_OPTS}"${inputfile}" "$file" 
+	fi
+	eval "fa=\"$FILENAME_ADDITION\""
         $OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG "$inputfile" $OCR_ENGINE_OUTPUT_ARG "${file%.*}${fa}${FILENAME_SUFFIX}" $OCR_ENGINE_ARGS &&
         if [ "$_BATCH_RUN" -eq 1 ] && [ "$_SILENT" -ne 1 ]
         then
@@ -288,7 +288,7 @@ function OCR {
 			while IFS= read -r -d $'\0' line; do 
  				if [ $CHECK_PDF == "yes" ]
 				then 
-	if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null
+					if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null
 					then 
 						proceed_tesseract "$line"
 					else 

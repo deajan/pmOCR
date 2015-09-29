@@ -37,8 +37,6 @@ fi
 start() {
 		if [ -f $progpath/$progexec ]; then
 			$progpath/$progexec --service > /dev/null 2>&1 &
-		elif [ -f ./$progexec ]; then
-			./$progexec --service > /dev/null 2>&1 &
 		else
 			echo "Cannot find $prog executable in $progpath"
 			exit 1

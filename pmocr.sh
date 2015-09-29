@@ -47,7 +47,7 @@ if [ "$OCR_ENGINE" == "tesseract" ]; then
 ## Pay attention this is configured to french here
 OCR_ENGINE_EXEC=/usr/bin/tesseract
 PDF_OCR_ENGINE_ARGS='pdf'
-OCR_ENGINE_INPUT_ARG='-l fra'
+OCR_ENGINE_INPUT_ARG='-l eng' # Language setting
 OCR_ENGINE_OUTPUT_ARG=
 elif [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 # OCR Engine Arguments
@@ -200,52 +200,6 @@ function KillChilds {
 }
 
 function TrapQuit {
-#	if ps -p $$ > /dev/null 2>&1
-#	then
-#		if ps -p $child_ocr_pid_pdf > /dev/null 2>&1
-#		then
-#			if type -p pkill > /dev/null 2>&1
-#			then
-#				pkill -TERM -P $child_ocr_pid_pdf
-#			else
-#				ProcessChildKill $child_ocr_pid_pdf
-#			fi
-#			kill -9 $child_ocr_pid_pdf
-#		fi
-#
-#		if ps -p $child_ocr_pid_word > /dev/null 2>&1
-#		then
-#			if type -p pkill > /dev/null 2>&1
-#			then
-#				pkill -TERM -P $child_ocr_pid_word
-#			else
-#				ProcessChildKill $child_ocr_pid_word
-#			fi
-#			kill -9 $child_ocr_pid_word
-#		fi
-#
-#		if ps -p $child_ocr_pid_excel > /dev/null 2>&1
-#		then
-#			if type -p pkill > /dev/null 2>&1
-#			then
-#				pkill -TERM -P $child_ocr_pid_excel
-#			else
-#				ProcessChildKill $child_ocr_pid_excel
-#			fi
-#			kill -9 $child_ocr_pid_excel
-#		fi
-#
-#		if ps -p $child_ocr_pid_csv > /dev/null 2>&1
-#		then
-#			if type -p pkill > /dev/null 2>&1
-#			then
-#				pkill -TERM -P $child_ocr_pid_csv
-#			else
-#				ProcessChildKill $child_ocr_pid_csv
-#			fi
-#			kill -9 $child_ocr_pid_csv
-#		fi
-#	fi
 	KillChilds $$ > /dev/null 2>&1
 	Logger "Service $PROGRAM stopped instance $$." "NOTICE"
 	exit

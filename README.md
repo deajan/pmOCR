@@ -9,7 +9,7 @@ pOCR has some to include current date into the output filename, ignore already O
 
 ## Batch mode
 
-Use pmocr to batch convert / OCR all given files in a directory. Ignore already OCRed files (based on file suffix, or check if PDF already contains embedded fonts).
+Use pmocr to batch convert / OCR all files in a given directory and its subdirectories. Ignore already OCRed files (based on file suffix, or check if PDF already contains embedded fonts).
 You'll get the full command line usage by launching the program without any parameters.
 
 Example:
@@ -18,7 +18,7 @@ $ pmocr.sh --batch --target=pdf --skip-txt-pdf --delete-input /some/path
 
 ## Service mode
 
-Service mode monitors directories and launched an OCR conversion whenever a new file appears.
+Service mode monitors directories and their subdirectories and launched an OCR conversion whenever a new file appears.
 Basically it's written to monitor up to 4 directories, each producing a different target format (PDF, Word, Excel & CSV).
 There's also an option to avoid passing PDFs to the OCR engine that already contain text.
 

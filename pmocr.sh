@@ -4,7 +4,10 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.3-dev
-PROGRAM_BUILD=2015091601
+PROGRAM_BUILD=2015112001
+
+## Instance identification (used for mails only)
+INSTANCE_ID=MyOCRServer
 
 ## OCR Engine (can be tesseract or abbyyocr11)
 OCR_ENGINE=abbyyocr11
@@ -88,68 +91,56 @@ else
 fi
 
 function _Logger {
-	local value="${1}" # What to log
-	echo -e "$value" >> "$LOG_FILE"
+        local svalue="${1}" # What to log to screen
+        local lvalue="${2:-$svalue}" # What to log to logfile, defaults to screen value
+        echo -e "$lvalue" >> "$LOG_FILE"
 
-	if [ $_SILENT -eq 0 ]; then
-		echo -e "$value"
-	fi
+        if [ $_SILENT -eq 0 ]; then
+                echo -e "$svalue"
+        fi
 }
 
 function Logger {
-	local value="${1}" # Sentence to log (in double quotes)
-	local level="${2}" # Log level: DEBUG, NOTICE, WARN, ERROR, CRITIAL
+        local value="${1}" # Sentence to log (in double quotes)
+        local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, NOTICE, WARN, ERROR, CRITIAL
 
-	if [ "$level" == "CRITICAL" ]; then
-		_Logger "$prefix\e[41m$value\e[0m"
-		ERROR_ALERT=1
-		return
-	elif [ "$level" == "ERROR" ]; then
-		_Logger "$prefix\e[91m$value\e[0m"
-		ERROR_ALERT=1
-		return
-	elif [ "$level" == "WARN" ]; then
-		_Logger "$prefix\e[93m$value\e[0m"
-		return
-	elif [ "$level" == "NOTICE" ]; then
-		_Logger "$prefix$value"
-		return
-	elif [ "$level" == "DEBUG" ]; then
-		if [ "$_DEBUG" == "yes" ]; then
-			_Logger "$prefix$value"
-			return
-		fi
-	else
-		_Logger "\e[41mLogger function called without proper loglevel.\e[0m"
-		_Logger "$prefix$value"
-	fi
-}
+        # <OSYNC SPECIFIC> Special case in daemon mode we should timestamp instead of counting seconds
+        if [ "$sync_on_changes" == "1" ]; then
+                prefix="$(date) - "
+        else
+                prefix="TIME: $SECONDS - "
+        fi
+        # </OSYNC SPECIFIC>
 
-function SendAlert {
-	MAIL_ALERT_MSG=$MAIL_ALERT_MSG$'\n\n'$(tail -n 25 "$LOG_FILE")
-	if type -p mutt > /dev/null 2>&1
-	then
-		echo $MAIL_ALERT_MSG | $(type -p mutt) -x -s  "OCR_SERVICE Alerte on $LOCAL_HOST for $LOCAL_USER" $DESTINATION_MAILS -a "$LOG_FILE"
-		if [ $? != 0 ]; then
-			Logger "WARNING: Cannot send alert email via $(type -p mutt) !!!" "WARN"
-		else
-			Logger "Sent alert mail using mutt." "NOTICE"
-		fi
-	elif type -p mail > /dev/null 2>&1
-	then
-		echo $MAIL_ALERT_MSG | $(type -p mail) -a "$LOG_FILE" -s  "OCR_SERVICE Alerte on $LOCAL_HOST for $LOCAL_USER" $DESTINATION_MAILS
-		if [ $? != 0 ]; then
-			Logger "WARNING: Cannot send alert email via $(type -p mail) with attachments !!!" "WARN"
-			echo $MAIL_ALERT_MSG | $(type -p mail) -s  "OCR_SERVICE Alerte on $LOCAL_HOST for $LOCAL_USER" $DESTINATION_MAILS
-			if [ $? != 0 ]; then
-				Logger "WARNING: Cannot send alert email via $(type -p mail) without attachments !!!" "WARN"
-			else
-				Logger "Sent alert mail using mail command without attachment." "NOTICE"
-			fi
-		else
-			Logger "Sent alert mail using mail command." "NOTICE"
-		fi
-	fi
+        if [ "$level" == "CRITICAL" ]; then
+                _Logger "$prefix\e[41m$value\e[0m" "$prefix$value"
+                ERROR_ALERT=1
+                return
+        elif [ "$level" == "ERROR" ]; then
+                _Logger "$prefix\e[91m$value\e[0m" "$prefix$value"
+                ERROR_ALERT=1
+                return
+        elif [ "$level" == "WARN" ]; then
+                _Logger "$prefix\e[93m$value\e[0m" "$prefix$value"
+                WARN_ALERT=1
+                return
+        elif [ "$level" == "NOTICE" ]; then
+                _Logger "$prefix$value"
+                return
+        elif [ "$level" == "DEBUG" ]; then
+                if [ "$_DEBUG" == "yes" ]; then
+                        _Logger "$prefix$value"
+                        return
+                fi
+        elif [ "$level" == "PARANOIA_DEBUG" ]; then             #__WITH_PARANOIA_DEBUG
+                if [ "$_PARANOIA_DEBUG" == "yes" ]; then        #__WITH_PARANOIA_DEBUG
+                        _Logger "$prefix$value"                 #__WITH_PARANOIA_DEBUG
+                        return                                  #__WITH_PARANOIA_DEBUG
+                fi                                              #__WITH_PARANOIA_DEBUG
+        else
+                _Logger "\e[41mLogger function called without proper loglevel.\e[0m"
+                _Logger "$prefix$value"
+        fi
 }
 
 function CheckEnvironment {
@@ -170,6 +161,34 @@ function CheckEnvironment {
 		then
 			Logger "pgrep not present." "CRITICAL"
 			exit 1
+		fi
+
+		if [ "$PDF_MONITOR_DIR" != "" ]; then
+			if [ ! -w "$PDF_MONITOR_DIR" ]; then
+				Logger "Directory [$PDF_MONITOR_DIR] not writable."
+				exit 1
+			fi
+		fi
+
+		if [ "$WORD_MONITOR_DIR" != "" ]; then
+			if [ ! -w "$WORD_MONITOR_DIR" ]; then
+				Logger "Directory [$WORD_MONITOR_DIR] not writable."
+				exit 1
+			fi
+		fi
+
+		if [ "$EXCEL_MONITOR_DIR" != "" ]; then
+			if [ ! -w "$EXCEL_MONITOR_DIR" ]; then
+				Logger "Directory [$EXCEL_MONITOR_DIR] not writable."
+				exit 1
+			fi
+		fi
+
+		if [ "$CSV_MONITOR_DIR" != "" ]; then
+			if [ ! -w "$CSV_MONITOR_DIR" ]; then
+				Logger "Directory [$CSV_MONITOR_DIR] not writable."
+				exit 1
+			fi
 		fi
 	fi
 
@@ -194,8 +213,9 @@ function KillChilds {
 		done
 	fi
 
+	# Try to kill nicely, if not, wait 30 seconds to let Trap actions happen before killing
 	if [ "$self" == true ]; then
-		kill -s SIGTERM "$pid" || (sleep 10 && kill -9 "$pid" &)
+		kill -s SIGTERM "$pid" || (sleep 30 && kill -9 "$pid" &)
 	fi
 }
 
@@ -203,6 +223,92 @@ function TrapQuit {
 	KillChilds $$ > /dev/null 2>&1
 	Logger "Service $PROGRAM stopped instance $$." "NOTICE"
 	exit
+}
+
+function SendAlert {
+        __CheckArguments 0 $# $FUNCNAME "$@"    #__WITH_PARANOIA_DEBUG
+
+        if [ "$_DEBUG" == "yes" ]; then
+                Logger "Debug mode, no warning email will be sent." "NOTICE"
+                return 0
+        fi
+
+        # <OSYNC SPECIFIC>
+        if [ "$_QUICK_SYNC" == "2" ]; then
+                Logger "Current task is a quicksync task. Will not send any alert." "NOTICE"
+                return 0
+        fi
+        # </OSYNC SPECIFIC>
+
+        eval "cat \"$LOG_FILE\" $COMPRESSION_PROGRAM > $ALERT_LOG_FILE"
+        MAIL_ALERT_MSG="$MAIL_ALERT_MSG"$'\n\n'$(tail -n 25 "$LOG_FILE")
+        if [ $ERROR_ALERT -eq 1 ]; then
+                subject="Error alert for $INSTANCE_ID"
+        elif [ $WARN_ALERT -eq 1 ]; then
+                subject="Warning alert for $INSTANCE_ID"
+        else
+                subject="Alert for $INSTANCE_ID"
+        fi
+
+        if type mutt > /dev/null 2>&1 ; then
+                echo "$MAIL_ALERT_MSG" | $(type -p mutt) -x -s "$subject" $DESTINATION_MAILS -a "$ALERT_LOG_FILE"
+                if [ $? != 0 ]; then
+                        Logger "WARNING: Cannot send alert email via $(type -p mutt) !!!" "WARN"
+                else
+                        Logger "Sent alert mail using mutt." "NOTICE"
+                        return 0
+                fi
+        fi
+
+        if type mail > /dev/null 2>&1 ; then
+                echo "$MAIL_ALERT_MSG" | $(type -p mail) -a "$ALERT_LOG_FILE" -s "$subject" $DESTINATION_MAILS
+                if [ $? != 0 ]; then
+                        Logger "WARNING: Cannot send alert email via $(type -p mail) with attachments !!!" "WARN"
+                        echo "$MAIL_ALERT_MSG" | $(type -p mail) -s "$subject" $DESTINATION_MAILS
+                        if [ $? != 0 ]; then
+                                Logger "WARNING: Cannot send alert email via $(type -p mail) without attachments !!!" "WARN"
+                        else
+                                Logger "Sent alert mail using mail command without attachment." "NOTICE"
+                                return 0
+                        fi
+                else
+                        Logger "Sent alert mail using mail command." "NOTICE"
+                        return 0
+                fi
+        fi
+
+        if type sendmail > /dev/null 2>&1 ; then
+                echo -e "$subject\r\n$MAIL_ALERT_MSG" | $(type -p sendmail) $DESTINATION_MAILS
+                if [ $? != 0 ]; then
+                        Logger "WARNING: Cannot send alert email via $(type -p sendmail) !!!" "WARN"
+                else
+                        Logger "Sent alert mail using sendmail command without attachment." "NOTICE"
+                        return 0
+                fi
+        fi
+
+        if type sendemail > /dev/null 2>&1 ; then
+                if [ "$SMTP_USER" != "" ] && [ "$SMTP_PASSWORD" != "" ]; then
+                        SMTP_OPTIONS="-xu $SMTP_USER -xp $SMTP_PASSWORD"
+                else
+                        SMTP_OPTIONS=""
+                fi
+                $(type -p sendemail) -f $SENDER_MAIL -t $DESTINATION_MAILS -u "$subject" -m "$MAIL_ALERT_MSG" -s $SMTP_SERVER $SMTP_OPTIONS > /dev/null 2>&1
+                if [ $? != 0 ]; then
+                        Logger "WARNING: Cannot send alert email via $(type -p sendemail) !!!" "WARN"
+                else
+                        Logger "Sent alert mail using sendemail command without attachment." "NOTICE"
+                        return 0
+                fi
+        fi
+
+        # If function has not returned 0 yet, assume it's critical that no alert can be sent
+        Logger "/!\ CRITICAL: Cannot send alert" "ERROR" # Is not marked critical because execution must continue
+
+        # Delete tmp log file
+        if [ -f "$ALERT_LOG_FILE" ]; then
+                rm "$ALERT_LOG_FILE"
+        fi
 }
 
 function WaitForCompletion {
@@ -249,13 +355,26 @@ function OCR {
 		if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 			# full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
 			find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} bash -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_ARGS"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX$FILE_EXTENSION"'\" && if [ '"$_BATCH_RUN"' -eq 1 ] && [ '"$_SILENT"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
+			if [ $? != 0 ]; then
+				Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]."
+				SendAlert
+			fi
 
 			if [ "$CSV_HACK" == "txt2csv" ]; then
 				## Replace all occurences of 3 spaces or more by a semicolor (since Abbyy does a better doc to TXT than doc to CSV, ugly hack i know)
 				find "$DIRECTORY_TO_PROCESS" -type f -name "*$FILENAME_SUFFIX$FILE_EXTENSION" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
+				if [ $? != 0 ]; then
+					Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]."
+					SendAlert
+				fi
+
 			fi
 		elif [ "$OCR_ENGINE" == "tesseract" ]; then
 			find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} bash -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX"'\" '"$OCR_ENGINE_ARGS"' && if [ '"$_BATCH_RUN"' -eq 1 ] && [ '"$_SILENT"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if ! pdffonts "$file" 2>&1 | grep "yes" > /dev/null; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
+			if [ $? != 0 ]; then
+				Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]."
+				SendAlert
+			fi
 		fi
 }
 

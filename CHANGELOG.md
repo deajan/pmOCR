@@ -2,8 +2,10 @@ RECENT CHANGES
 --------------
 
 XX Sep 2015: v1.3
+- Added minimal email alerts
+- Ported some code from osync/obackup
 - Added LSB info to init script for Debian based distros
-! Check for service directories before launching service
+- Check for service directories before launching service
 - Added better KillChilds function on exit in service mode
 - Changed code to be code style V2 compliant
 - Added support for tesseract 3.x

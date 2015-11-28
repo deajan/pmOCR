@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.3-dev
-PROGRAM_BUILD=2015112001
+PROGRAM_BUILD=2015112801
 
 ## Instance identification (used for mails only)
 INSTANCE_ID=MyOCRServer
@@ -384,7 +384,7 @@ function Usage {
 	echo "$AUTHOR"
 	echo "$CONTACT"
 	echo ""
-	echo "pmocr can be launched as a directory monitoring service using \"service pmocr start\" or in batch processing mode"
+	echo "pmocr can be launched as a directory monitoring service using \"service pmocr-srv start\" or in batch processing mode"
 	echo "Batch mode usage:"
 	echo "pmocr.sh --batch [options] /path/to/folder"
 	echo ""

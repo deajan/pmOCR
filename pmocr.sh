@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.3-dev
-PROGRAM_BUILD=2016010601
+PROGRAM_BUILD=2016010602
 
 ## Instance identification (used for mails only)
 INSTANCE_ID=MyOCRServer
@@ -85,9 +85,9 @@ LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
 
 if [ -w /var/log ]; then
-	LOG_FILE=/var/log/pmocr.log
+	LOG_FILE=/var/log/$PROGRAM.log
 else
-	LOG_FILE=./pmocr.log
+	LOG_FILE=./$PROGRAM.log
 fi
 
 function _Logger {
@@ -384,9 +384,9 @@ function Usage {
 	echo "$AUTHOR"
 	echo "$CONTACT"
 	echo ""
-	echo "pmocr can be launched as a directory monitoring service using \"service pmocr-srv start\" or in batch processing mode"
+	echo "$PROGRAM can be launched as a directory monitoring service using \"service $PROGRAM-srv start\" or in batch processing mode"
 	echo "Batch mode usage:"
-	echo "pmocr.sh --batch [options] /path/to/folder"
+	echo "$PROGRAM.sh --batch [options] /path/to/folder"
 	echo ""
 	echo "[OPTIONS]"
 	echo "-p, --target=PDF		Creates a PDF document"
@@ -568,6 +568,6 @@ elif [ $_BATCH_RUN -eq 1 ]; then
 	fi
 
 else
-	Logger "pmOCR must be run as a system service or in batch mode." "ERROR"
+	Logger "$PROGRAM must be run as a system service or in batch mode." "ERROR"
 	Usage
 fi

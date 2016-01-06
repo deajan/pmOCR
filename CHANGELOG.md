@@ -1,7 +1,10 @@
+- If file not delete, must add _NO_OCR prefix.
+
 RECENT CHANGES
 --------------
 
 dd mmm YYYY: v1.3
+- Added a suffix to original files for recognition
 - Fixed detection of PDFs already containing text (pdffonts should output more than 2 lines if embedded fonts are found)
 - Added minimal email alerts
 - Ported some code from osync/obackup

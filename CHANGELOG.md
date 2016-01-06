@@ -1,7 +1,8 @@
 RECENT CHANGES
 --------------
 
-XX Sep 2015: v1.3
+dd mmm YYYY: v1.3
+- Fixed detection of PDFs already containing text (pdffonts should output more than 2 lines if embedded fonts are found)
 - Added minimal email alerts
 - Ported some code from osync/obackup
 - Added LSB info to init script for Debian based distros

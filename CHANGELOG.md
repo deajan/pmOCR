@@ -3,7 +3,9 @@
 RECENT CHANGES
 --------------
 
-dd mmm YYYY: v1.3
+03 Mar 2016: v1.3
+- Merged function codebase with osync and obackup
+- Fixed file extension should not change when DELETE_ORIGINAL=no
 - Added a suffix to original files for recognition
 - Fixed detection of PDFs already containing text (pdffonts should output more than 2 lines if embedded fonts are found)
 - Added minimal email alerts

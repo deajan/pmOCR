@@ -3,7 +3,7 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.3-dev
+PROGRAM_VERSION=1.3-release
 PROGRAM_BUILD=2016030303
 
 ## Instance identification (used for mails only)

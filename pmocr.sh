@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(L) 2015 by Orsiris \"Ozy\" de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.3-dev
-PROGRAM_BUILD=2016010603
+PROGRAM_BUILD=2016030301
 
 ## Instance identification (used for mails only)
 INSTANCE_ID=MyOCRServer
@@ -167,28 +167,28 @@ function CheckEnvironment {
 
 		if [ "$PDF_MONITOR_DIR" != "" ]; then
 			if [ ! -w "$PDF_MONITOR_DIR" ]; then
-				Logger "Directory [$PDF_MONITOR_DIR] not writable."
+				Logger "Directory [$PDF_MONITOR_DIR] not writable." "ERROR"
 				exit 1
 			fi
 		fi
 
 		if [ "$WORD_MONITOR_DIR" != "" ]; then
 			if [ ! -w "$WORD_MONITOR_DIR" ]; then
-				Logger "Directory [$WORD_MONITOR_DIR] not writable."
+				Logger "Directory [$WORD_MONITOR_DIR] not writable." "ERROR"
 				exit 1
 			fi
 		fi
 
 		if [ "$EXCEL_MONITOR_DIR" != "" ]; then
 			if [ ! -w "$EXCEL_MONITOR_DIR" ]; then
-				Logger "Directory [$EXCEL_MONITOR_DIR] not writable."
+				Logger "Directory [$EXCEL_MONITOR_DIR] not writable." "ERROR"
 				exit 1
 			fi
 		fi
 
 		if [ "$CSV_MONITOR_DIR" != "" ]; then
 			if [ ! -w "$CSV_MONITOR_DIR" ]; then
-				Logger "Directory [$CSV_MONITOR_DIR] not writable."
+				Logger "Directory [$CSV_MONITOR_DIR] not writable." "ERROR"
 				exit 1
 			fi
 		fi
@@ -358,7 +358,7 @@ function OCR {
 			# full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
 			find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} bash -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_ARGS"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX$FILE_EXTENSION"'\" && if [ '"$_BATCH_RUN"' -eq 1 ] && [ '"$_SILENT"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; else mv \"$file\" \"${file%.*}'"$NO_DELETE_SUFFIX$FILENAME_SUFFIX$FILE_EXTENSION"'\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if [ $(pdffonts "$file" 2> /dev/null | wc -l) -lt 3 ]; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
 			if [ $? != 0 ]; then
-				Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]."
+				Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]." "ERROR"
 				SendAlert
 			fi
 
@@ -366,7 +366,7 @@ function OCR {
 				## Replace all occurences of 3 spaces or more by a semicolor (since Abbyy does a better doc to TXT than doc to CSV, ugly hack i know)
 				find "$DIRECTORY_TO_PROCESS" -type f -name "*$FILENAME_SUFFIX$FILE_EXTENSION" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
 				if [ $? != 0 ]; then
-					Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]."
+					Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]." "ERROR"
 					SendAlert
 				fi
 
@@ -374,7 +374,7 @@ function OCR {
 		elif [ "$OCR_ENGINE" == "tesseract" ]; then
 			find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} bash -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX"'\" '"$OCR_ENGINE_ARGS"' && if [ '"$_BATCH_RUN"' -eq 1 ] && [ '"$_SILENT"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; else mv \"$file\" \"${file%.*}'"$NO_DELETE_SUFFIX$FILENAME_SUFFIX$FILE_EXTENSION"'\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if [ $(pdffonts "$file" 2> /dev/null | wc -l) -lt 3 ]; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
 			if [ $? != 0 ]; then
-				Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]."
+				Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]." "ERROR"
 				SendAlert
 			fi
 		fi

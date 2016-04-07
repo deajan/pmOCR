@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4-dev
-PROGRAM_BUILD=2016040701
+PROGRAM_BUILD=2016040702
 
 ## Instance identification (used for mails only)
 INSTANCE_ID=MyOCRServer
@@ -45,6 +45,9 @@ FILENAME_ADDITION='.$(date --utc +"%Y-%m-%dT%H-%M-%SZ")'
 # Wait a trivial number of seconds before launching OCR
 WAIT_TIME=1
 
+PDF_TO_TIFF_EXEC=/usr/bin/gs
+PDF_TO_TIFF_OPTS='-dNOPAUSE -q -density 300 -units pixelsperinch -sDEVICE=tiff32nc -dBATCH -sOUTPUTFILE='
+
 if [ "$OCR_ENGINE" == "tesseract3" ]; then
 # tesseract 3.x Engine Arguments
 ################################
@@ -54,8 +57,6 @@ OCR_ENGINE_EXEC=/usr/bin/tesseract
 PDF_OCR_ENGINE_ARGS='pdf'
 OCR_ENGINE_INPUT_ARG='-l fra' # Language setting
 OCR_ENGINE_OUTPUT_ARG=
-OCR_PDF_TO_TIFF_EXEC=/usr/bin/gs
-OCR_PDF_TO_TIFF_OPTS='-dNOPAUSE -q -r300x300 -sDEVICE=tiff32nc -dBATCH -sOUTPUTFILE='
 elif [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 # AbbyyOCR11 Engine Arguments
 ###############################
@@ -373,21 +374,18 @@ function LoadConfigFile {
 #### MINIMAL-FUNCTION-SET END ####
 
 function CheckEnvironment {
-	if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1
-	then
+	if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
 		Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"
 		exit 1
 	fi
 
 	if [ "$_SERVICE_RUN" -eq 1 ]; then
-		if ! type -p inotifywait > /dev/null 2>&1
-		then
+		if ! type -p inotifywait > /dev/null 2>&1; then
 			Logger "inotifywait not present (see inotify-tools package ?)." "CRITICAL"
 			exit 1
 		fi
 
-		if ! type -p pgrep > /dev/null 2>&1
-		then
+		if ! type -p pgrep > /dev/null 2>&1; then
 			Logger "pgrep not present." "CRITICAL"
 			exit 1
 		fi
@@ -423,10 +421,16 @@ function CheckEnvironment {
 
 	if [ "$CHECK_PDF" == "yes" ] && ( [ "$_SERVICE_RUN" -eq 1 ] || [ "$_BATCH_RUN" -eq 1 ])
 	then
-		if ! type -p pdffonts > /dev/null 2>&1
-		then
+		if ! type -p pdffonts > /dev/null 2>&1; then
 			Logger "pdffonts not present (see poppler-utils package ?)." "CRITICAL"
-		exit 1
+			exit 1
+		fi
+	fi
+
+	if [ "$OCR_ENGINE" == "tesseract3" ]; then
+		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
+			Logger "$PDF_TO_TIFF_EXEC not present." "CRITICAL"
+			exit 1
 		fi
 	fi
 }
@@ -471,14 +475,18 @@ function OCR {
 
 	find "$directory_to_process" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | while IFS= read -r -d $'\0' file; do
 
-
-		cmd_abbyyocr11="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $ocr_engine_args $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX$file_extension\""
-		cmd_tesseract3="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\" $ocr_engine_args"
-
 		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$file" 2> /dev/null | wc -l) -lt 3 ])); then
 			if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
+				cmd_abbyyocr11="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $ocr_engine_args $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX$file_extension\""
 				eval "$cmd_abbyyocr11"
 			elif [ "$OCR_ENGINE" == "tesseract3" ]; then
+				# Intermediary transformation of input pdf file to tiff
+				if [[ $file == *.[pP][dD][fF] ]]; then
+					subcmd="$OCR_PDF_TO_TIFF_EXEC ${OCR_PDF_TO_TIFF_OPTS} \"$file\" \"$file.tmp\""
+					eval "$subcmd"
+					file="$file.tmp"
+				fi
+				cmd_tesseract3="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\" $ocr_engine_args"
 				eval "$cmd_tesseract3"
 			else
 				Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"

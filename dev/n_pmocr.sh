@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4-dev
-PROGRAM_BUILD=2016040701
+PROGRAM_BUILD=2016040702
 
 ## Instance identification (used for mails only)
 INSTANCE_ID=MyOCRServer
@@ -45,6 +45,10 @@ FILENAME_ADDITION='.$(date --utc +"%Y-%m-%dT%H-%M-%SZ")'
 # Wait a trivial number of seconds before launching OCR
 WAIT_TIME=1
 
+# tesseract 3 intermediary transformation of PDF to TIFF
+PDF_TO_TIFF_EXEC=/usr/bin/gs
+PDF_TO_TIFF_OPTS=' -q -dNOPAUSE -r300x300 -sDEVICE=tiff32nc -sCompression=lzw -dBATCH -sOUTPUTFILE='
+
 if [ "$OCR_ENGINE" == "tesseract3" ]; then
 # tesseract 3.x Engine Arguments
 ################################
@@ -54,6 +58,7 @@ OCR_ENGINE_EXEC=/usr/bin/tesseract
 PDF_OCR_ENGINE_ARGS='pdf'
 OCR_ENGINE_INPUT_ARG='-l fra' # Language setting
 OCR_ENGINE_OUTPUT_ARG=
+
 elif [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 # AbbyyOCR11 Engine Arguments
 ###############################
@@ -86,21 +91,18 @@ CSV_EXTENSION=".csv"
 source "./ofunctions.sh"
 
 function CheckEnvironment {
-	if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1
-	then
+	if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
 		Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"
 		exit 1
 	fi
 
 	if [ "$_SERVICE_RUN" -eq 1 ]; then
-		if ! type -p inotifywait > /dev/null 2>&1
-		then
+		if ! type -p inotifywait > /dev/null 2>&1; then
 			Logger "inotifywait not present (see inotify-tools package ?)." "CRITICAL"
 			exit 1
 		fi
 
-		if ! type -p pgrep > /dev/null 2>&1
-		then
+		if ! type -p pgrep > /dev/null 2>&1; then
 			Logger "pgrep not present." "CRITICAL"
 			exit 1
 		fi
@@ -136,10 +138,16 @@ function CheckEnvironment {
 
 	if [ "$CHECK_PDF" == "yes" ] && ( [ "$_SERVICE_RUN" -eq 1 ] || [ "$_BATCH_RUN" -eq 1 ])
 	then
-		if ! type -p pdffonts > /dev/null 2>&1
-		then
+		if ! type pdffonts > /dev/null 2>&1; then
 			Logger "pdffonts not present (see poppler-utils package ?)." "CRITICAL"
-		exit 1
+			exit 1
+		fi
+	fi
+
+	if [ "$OCR_ENGINE" == "tesseract3" ]; then
+		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
+			Logger "$PDF_TO_TIFF_EXEC not present." "CRITICAL"
+			exit 1
 		fi
 	fi
 }
@@ -169,38 +177,54 @@ function OCR {
 
 	#TODO rewrite lowercase local variables
 	local directory_to_process="$1" 	#(contains some path)
-	local file_extension="$2" 		#(filename extension for excludes and output)
+	local file_extension="$2" 		#(filename extension for output file)
 	local ocr_engine_args="$3" 		#(transformation specific arguments)
-	local csv_hack="${4:-false}" 			#(CSV transformation flag)
+	local csv_hack="${4:-false}" 		#(CSV transformation flag)
 
 	local find_excludes=
+	local tmp_file=
+	local file=
+	local result=
 
 	## CHECK find excludes
 	if [ "$FILENAME_SUFFIX" != "" ]; then
-		find_excludes="*$FILENAME_SUFFIX$file_extension"
+		find_excludes="*$FILENAME_SUFFIX*"
 	else
 		find_excludes=""
 	fi
 
 	find "$directory_to_process" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | while IFS= read -r -d $'\0' file; do
 
-
-		cmd_abbyyocr11="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $ocr_engine_args $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX$file_extension\""
-		cmd_tesseract3="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\" $ocr_engine_args"
-
 		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$file" 2> /dev/null | wc -l) -lt 3 ])); then
 			if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
+				cmd_abbyyocr11="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $ocr_engine_args $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX$file_extension\""
 				eval "$cmd_abbyyocr11"
+				result=$?
 			elif [ "$OCR_ENGINE" == "tesseract3" ]; then
+				# Intermediary transformation of input pdf file to tiff
+                                if [[ $file == *.[pP][dD][fF] ]]; then
+					tmp_file="$file.tif"
+                                        subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmp_file\" \"$file\""
+                                        eval "$subcmd"
+					original_file="$file"
+                                       	file="$tmp_file"
+                               	fi
+				cmd_tesseract3="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\" $ocr_engine_args"
 				eval "$cmd_tesseract3"
+				result=$?
+				if [ "$original_file" != "" ]; then
+					file="$original_file"
+					if [ -f "$tmp_file" ]; then
+						rm -f "$tmp_file";
+					fi
+				fi
+
 			else
 				Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
 			fi
 		else
 			Logger "Skipping file [$file] already containing text." "NOTICE"
 		fi
-
-		result=$?
 
 		if [ $result != 0 ]; then
 			Logger "Could not process file [$file] (error code $result)." "ERROR"
@@ -221,50 +245,6 @@ function OCR {
 			fi
 		fi
 	done
-}
-
-function old_OCR {
-	## Function arguments
-	local DIRECTORY_TO_PROCESS="$1" 	#(contains some path)
-	local FILE_EXTENSION="$2" 		#(filename extension for excludes and output)
-	local OCR_ENGINE_ARGS="$3" 		#(transformation specific arguments)
-	local CSV_HACK="$4" 			#(CSV transformation flag)
-
-		## CHECK find excludes
-		if [ "$FILENAME_SUFFIX" != "" ]; then
-			find_excludes="*$FILENAME_SUFFIX$FILE_EXTENSION"
-		else
-			find_excludes=""
-		fi
-
-
-		if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
-			OCR_abbyyocr11
-			## full exec syntax for xargs arg: sh -c 'export local_var="{}"; eval "some stuff '"$SCRIPT_VARIABLE"' other stuff \"'"$SCRIPT_VARIABLE_WITH_SPACES"'\" \"$internal_variable\""'
-			#find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} bash -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_ARGS"' '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX$FILE_EXTENSION"'\" && if [ '"$_BATCH_RUN"' -eq 1 ] && [ '"$_SILENT"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; else mv \"$file\" \"${file%.*}'"$NO_DELETE_SUFFIX$FILENAME_SUFFIX"'.${file##*.}\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if [ $(pdffonts "$file" 2> /dev/null | wc -l) -lt 3 ]; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
-			#if [ $? != 0 ]; then
-			#	Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]." "ERROR"
-			#	SendAlert
-			#fi
-
-			#if [ "$CSV_HACK" == "txt2csv" ]; then
-			#	## Replace all occurences of 3 spaces or more by a semicolor (since Abbyy does a better doc to TXT than doc to CSV, ugly hack i know)
-			#	find "$DIRECTORY_TO_PROCESS" -type f -name "*$FILENAME_SUFFIX$FILE_EXTENSION" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
-			#	if [ $? != 0 ]; then
-			#		Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]." "ERROR"
-			#		SendAlert
-			#	fi
-			#fi
-		elif [ "$OCR_ENGINE" == "tesseract" ]; then
-			OCR_tesseract
-			#find "$DIRECTORY_TO_PROCESS" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$find_excludes" -print0 | xargs -0 -I {} bash -c 'export file="{}"; function proceed { eval "\"'"$OCR_ENGINE_EXEC"'\" '"$OCR_ENGINE_INPUT_ARG"' \"$file\" '"$OCR_ENGINE_OUTPUT_ARG"' \"${file%.*}'"$FILENAME_ADDITION""$FILENAME_SUFFIX"'\" '"$OCR_ENGINE_ARGS"' && if [ '"$_BATCH_RUN"' -eq 1 ] && [ '"$_SILENT"' -ne 1 ];then echo \"Processed $file\"; fi && echo -e \"$(date) - Processed $file\" >> '"$LOG_FILE"' && if [ '"$DELETE_ORIGINAL"' == \"yes\" ]; then rm -f \"$file\"; else mv \"$file\" \"${file%.*}'"$NO_DELETE_SUFFIX$FILENAME_SUFFIX"'.${file##*.}\"; fi"; }; if [ "'$CHECK_PDF'" == "yes" ]; then if [ $(pdffonts "$file" 2> /dev/null | wc -l) -lt 3 ]; then proceed; else echo "$(date) - Skipping file $file already containing text." >> '"$LOG_FILE"'; fi; else proceed; fi'
-			#if [ $? != 0 ]; then
-			#	Logger "Could not process [$DIRECTORY_TO_PROCESS] with [$OCR_ENGINE]." "ERROR"
-			#	SendAlert
-			#fi
-		fi
-
-		#CSV hack ?
 }
 
 function OCR_service {
@@ -291,7 +271,9 @@ function Usage {
 	echo "$AUTHOR"
 	echo "$CONTACT"
 	echo ""
-	echo "$PROGRAM can be launched as a directory monitoring service using \"service $PROGRAM-srv start\" or in batch processing mode"
+	echo "You may adjust file $(basename $0) according to your OCR needs (language, ocr engine, etc)."
+	echo ""
+	echo "$PROGRAM can be launched as a directory monitoring service using \"service $PROGRAM-srv start\" or \"systemctl start $PROGRAM-srv\" or in batch processing mode"
 	echo "Batch mode usage:"
 	echo "$PROGRAM.sh --batch [options] /path/to/folder"
 	echo ""
@@ -393,7 +375,7 @@ if [ $_BATCH_RUN -eq 1 ]; then
 
 	if [ $no_suffix == true ]; then
 		FILENAME_SUFFIX=""
-	elif [ "$suffix" != "" ]; then
+	else
 		FILENAME_SUFFIX="$suffix"
 	fi
 
@@ -471,7 +453,7 @@ elif [ $_BATCH_RUN -eq 1 ]; then
 
 	if [ $csv == true ]; then
 		Logger "Beginning CSV OCR recognition of $batch_path" "NOTICE"
-		OCR "$batch_path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" "txt2csv"
+		OCR "$batch_path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
 		Logger "Batch ended." "NOTICE"
 	fi
 

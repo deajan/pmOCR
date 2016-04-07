@@ -1,0 +1,11 @@
+[Unit]
+Description=monitors a local directory and gives any new file to an OCR engine, then deletes or renames the source file
+After=local-fs.target
+Requires=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pmocr.sh --service
+
+[Install]
+WantedBy=multi-user.target

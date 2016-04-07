@@ -42,17 +42,15 @@ start() {
 		fi
 
 		pid=$!
-		retval=$?
-
-		if [ $? == 0 ]; then
+		sleep 1
+		if kill -0 $pid > /dev/null 2>&1; then
 			echo $pid > "$pidfile"
-			echo "$prog successfully started" 
+			echo "$prog successfully started"
+			exit 0 
 		else
 			echo "Cannot start $prog"
-			errno = 1
+			exit 1
 		fi
-
-	exit $errno
 }
 
 stop() {

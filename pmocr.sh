@@ -205,23 +205,27 @@ function KillChilds {
 
 	if children="$(pgrep -P "$pid")"; then
 		for child in $children; do
-			Logger "Launching KillChilds \"$child\" true" "DEBUG"
 			KillChilds "$child" true
 		done
 	fi
 
 	# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
-	if [ "$self" == true ]; then
-		Logger "Killing process $pid" "DEBUG"
+	if ( [ "$self" == true ] && eval $PROCESS_TEST_CMD > /dev/null 2>&1); then
+		Logger "Sending SIGTERM to process [$pid]." "DEBUG"
 		kill -s SIGTERM "$pid"
 		if [ $? != 0 ]; then
-			sleep 15 && kill -9 "$pid" &
-			return 1
-		else
-			return 0
+			sleep 15
+			Logger "Sending SIGTERM to process [$pid] failed." "DEBUG"
+			kill -9 "$pid"
+			if [ $? != 0 ]; then
+				Logger "Sending SIGKILL to process [$pid] failed." "DEBUG"
+				return 1
+			fi
 		fi
+		return 0
+	else
+		return 0
 	fi
-	# sleep 15 needs to wait before killing itself
 }
 
 function SendAlert {

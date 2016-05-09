@@ -4,7 +4,7 @@ PROGRAM=pmocr
 PROGRAM_VERSION=1.4-dev
 PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
-SCRIPT_BUILD=2016040701
+SCRIPT_BUILD=2016050901
 
 ## osync / obackup / pmocr / zsnap install script
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8 & 10
@@ -41,12 +41,19 @@ case $local_os_var in
 	*"BSD"*)
 	GROUP=wheel
 	;;
+	*"Darwin"*)
+	GROUP=admin
+	;;
 	*)
 	GROUP=root
 	;;
+	*"MINGW32"*|*"CYGWIN"*)
+	USER=""
+	GROUP=""
+	;;
 esac
 
-if [ "$(whoami)" != "$USER" ]; then
+if ([ "$USER" != "" ] && [ "$(whoami)" != "$USER" ]); then
   echo "Must be run as $USER."
   exit 1
 fi
@@ -74,20 +81,20 @@ else
 	echo "Config directory [$CONF_DIR] exists."
 fi
 
-if [ -f "./sync.conf" ]; then
-	cp "./sync.conf" "/etc/$PROGRAM/sync.conf.example"
+if [ -f "./sync.conf.example" ]; then
+	cp "./sync.conf.example" "/etc/$PROGRAM/sync.conf.example"
 fi
 
-if [ -f "./host_backup.conf" ]; then
-	cp "./host_backup.conf" "/etc/$PROGRAM/host_backup.conf.example"
+if [ -f "./host_backup.conf.example" ]; then
+	cp "./host_backup.conf.example" "/etc/$PROGRAM/host_backup.conf.example"
 fi
 
 if [ -f "./exlude.list.example" ]; then
 	cp "./exclude.list.example" "/etc/$PROGRAM"
 fi
 
-if [ -f "./snapshot.conf" ]; then
-	cp "./snapshot.conf" "/etc/$PROGRAM/snapshot.conf.example"
+if [ -f "./snapshot.conf.example" ]; then
+	cp "./snapshot.conf.example" "/etc/$PROGRAM/snapshot.conf.example"
 fi
 
 cp "./$PROGRAM_BINARY" "$BIN_DIR"
@@ -114,7 +121,9 @@ if [  -f "./ssh_filter.sh" ]; then
 		echo "Cannot copy ssh_filter.sh to [$BIN_DIR]."
 	else
 		chmod 755 "$BIN_DIR/ssh_filter.sh"
-		chown $USER:$GROUP "$BIN_DIR/ssh_filter.sh"
+		if ([ "$USER" != "" ] && [ "$GROUP" != "" ]); then
+			chown $USER:$GROUP "$BIN_DIR/ssh_filter.sh"
+		fi
 		echo "Copied ssh_filter.sh to [$BIN_DIR]."
 	fi
 fi
@@ -166,7 +175,7 @@ fi
 
 function Statistics {
 
-        local link="http://instcount.netpower.fr?program=$PROGRAM&version=$PROGRAM_VERSION"
+        local link="http://instcount.netpower.fr?program=$PROGRAM&version=$PROGRAM_VERSION&os=$local_os_var"
         if type wget > /dev/null; then
                 wget -qO- $link > /dev/null 2>&1
                 if [ $? == 0 ]; then
@@ -175,7 +184,7 @@ function Statistics {
 	fi
 
         if type curl > /dev/null; then
-                curl $link > /dev/null 2>&1
+                curl -o /dev/null $link > /dev/null 2>&1
                 if [ $? == 0 ]; then
                         return 0
                 fi

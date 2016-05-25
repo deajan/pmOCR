@@ -4,7 +4,7 @@ PROGRAM=pmocr
 PROGRAM_VERSION=1.4-dev
 PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
-SCRIPT_BUILD=2016050901
+SCRIPT_BUILD=2016052501
 
 ## osync / obackup / pmocr / zsnap install script
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8 & 10
@@ -13,7 +13,8 @@ SCRIPT_BUILD=2016050901
 CONF_DIR=/etc/$PROGRAM
 BIN_DIR=/usr/local/bin
 SERVICE_DIR_INIT=/etc/init.d
-SERVICE_DIR_SYSTEMD_SYSTEM=/usr/lib/systemd/system
+# Should be /usr/lib/systemd/system, but /lib/systemd/system exists on debian & rhel / fedora
+SERVICE_DIR_SYSTEMD_SYSTEM=/lib/systemd/system
 SERVICE_DIR_SYSTEMD_USER=/etc/systemd/user
 
 ## osync specific code
@@ -60,13 +61,13 @@ fi
 
 if [ -f /sbin/init ]; then
 	if file /sbin/init | grep systemd > /dev/null; then
-		init=systemd
+		init="systemd"
 	else
-		init=init
+		init="initV"
 	fi
 else
-	echo "Can't detect init system."
-	exit 1
+	echo "Can't detect initV or systemd. Service files won't be installed. You can still run $PROGRAM manually or via cron."
+	init=none
 fi
 
 if [ ! -d "$CONF_DIR" ]; then
@@ -128,6 +129,7 @@ if [  -f "./ssh_filter.sh" ]; then
 	fi
 fi
 
+
 # OSYNC SPECIFIC
 if ([ "$init" == "systemd" ] && [ -f "./$OSYNC_SERVICE_FILE_SYSTEMD_SYSTEM" ]); then
 	cp "./$OSYNC_SERVICE_FILE_SYSTEMD_SYSTEM" "$SERVICE_DIR_SYSTEMD_SYSTEM" && cp "./$OSYNC_SERVICE_FILE_SYSTEMD_USER" "$SERVICE_DIR_SYSTEMD_USER/$SERVICE_FILE_SYSTEMD_SYSTEM"
@@ -139,7 +141,7 @@ if ([ "$init" == "systemd" ] && [ -f "./$OSYNC_SERVICE_FILE_SYSTEMD_SYSTEM" ]); 
 		echo "Can be enabled on boot with [systemctl enable osync-srv@instance.conf]."
 		echo "In userland, active with [systemctl --user start osync-srv@instance.conf]."
 	fi
-elif [ -f "./$OSYNC_SERVICE_FILE_INIT" ]; then
+elif ( "$init" == "initV" ] && [ -f "./$OSYNC_SERVICE_FILE_INIT" ]); then
 	cp "./$OSYNC_SERVICE_FILE_INIT" "$SERVICE_DIR_INIT"
 	if [ $? != 0 ]; then
 		echo "Cannot copy osync-srv to [$SERVICE_DIR_INIT]."
@@ -161,7 +163,7 @@ if ([ "$init" == "systemd" ] && [ -f "./$PMOCR_SERVICE_FILE_SYSTEMD_SYSTEM" ]); 
 		echo "Can be activated with [systemctl start pmocr-srv] after configuring file options in [$BIN_DIR/$PROGRAM]."
 		echo "Can be enabled on boot with [systemctl enable pmocr-srv]."
 	fi
-elif [ -f "./$PMOCR_SERVICE_FILE_INIT" ]; then
+elif ([ "$init" == "initV" ] && [ -f "./$PMOCR_SERVICE_FILE_INIT" ]); then
 	cp "./$PMOCR_SERVICE_FILE_INIT" "$SERVICE_DIR_INIT"
 	if [ $? != 0 ]; then
 		echo "Cannot copy pmoct-srv to [$SERVICE_DIR_INIT]."

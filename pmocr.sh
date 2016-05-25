@@ -155,7 +155,7 @@ function _Logger {
 	# <OSYNC SPECIFIC> Special case in daemon mode where systemctl doesn't need double timestamps
 	if [ "$sync_on_changes" == "1" ]; then
 		cat <<< "$evalue" 1>&2	# Log to stderr in daemon mode
-	elif [ $_SILENT -eq 0 ]; then
+	elif [ "$_SILENT" -eq 0 ]; then
 		echo -e "$svalue"
 	fi
 }
@@ -228,18 +228,23 @@ function KillChilds {
 	fi
 }
 
+# osync/obackup/pmocr script specific mail alert function, use SendEmail function for generic mail sending
 function SendAlert {
 
 	local mail_no_attachment=
 	local attachment_command=
 	local subject=
 
+	# Windows specific settings
+	local encryption_string=
+	local auth_string=
+
 	if [ "$DESTINATION_MAILS" == "" ]; then
 		return 0
 	fi
 
 	if [ "$_DEBUG" == "yes" ]; then
-		Logger "Debug mode, no warning email will be sent." "NOTICE"
+		Logger "Debug mode, no warning mail will be sent." "NOTICE"
 		return 0
 	fi
 
@@ -272,7 +277,7 @@ function SendAlert {
 	if type mutt > /dev/null 2>&1 ; then
 		echo "$MAIL_ALERT_MSG" | $(type -p mutt) -x -s "$subject" $DESTINATION_MAILS $attachment_command
 		if [ $? != 0 ]; then
-			Logger "Cannot send alert email via $(type -p mutt) !!!" "WARN"
+			Logger "Cannot send alert mail via $(type -p mutt) !!!" "WARN"
 		else
 			Logger "Sent alert mail using mutt." "NOTICE"
 			return 0
@@ -289,10 +294,10 @@ function SendAlert {
 		fi
 		echo "$MAIL_ALERT_MSG" | $(type -p mail) $attachment_command -s "$subject" $DESTINATION_MAILS
 		if [ $? != 0 ]; then
-			Logger "Cannot send alert email via $(type -p mail) with attachments !!!" "WARN"
+			Logger "Cannot send alert mail via $(type -p mail) with attachments !!!" "WARN"
 			echo "$MAIL_ALERT_MSG" | $(type -p mail) -s "$subject" $DESTINATION_MAILS
 			if [ $? != 0 ]; then
-				Logger "Cannot send alert email via $(type -p mail) without attachments !!!" "WARN"
+				Logger "Cannot send alert mail via $(type -p mail) without attachments !!!" "WARN"
 			else
 				Logger "Sent alert mail using mail command without attachment." "NOTICE"
 				return 0
@@ -306,22 +311,46 @@ function SendAlert {
 	if type sendmail > /dev/null 2>&1 ; then
 		echo -e "Subject:$subject\r\n$MAIL_ALERT_MSG" | $(type -p sendmail) $DESTINATION_MAILS
 		if [ $? != 0 ]; then
-			Logger "Cannot send alert email via $(type -p sendmail) !!!" "WARN"
+			Logger "Cannot send alert mail via $(type -p sendmail) !!!" "WARN"
 		else
 			Logger "Sent alert mail using sendmail command without attachment." "NOTICE"
 			return 0
 		fi
 	fi
 
+	# Windows specific
+        if type "mailsend.exe" > /dev/null 2>&1 ; then
+
+		if [ "$SMTP_ENCRYPTION" != "tls" ] && [ "$SMTP_ENCRYPTION" != "ssl" ]  && [ "$SMTP_ENCRYPTION" != "none" ]; then
+			Logger "Bogus smtp encryption, assuming none." "WARN"
+			encryption_string=
+		elif [ "$SMTP_ENCRYPTION" == "tls" ]; then
+			encryption_string=-starttls
+		elif [ "$SMTP_ENCRYPTION" == "ssl" ]:; then
+			encryption_string=-ssl
+		fi
+		if [ "$SMTP_USER" != "" ] && [ "$SMTP_USER" != "" ]; then
+			auth_string="-auth -user \"$SMTP_USER\" -pass \"$SMTP_PASSWORD\""
+		fi
+                $(type mailsend.exe) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -sub "$subject" -M "$MAIL_ALERT_MSG" -attach "$attachment" -smtp "$SMTP_SERVER" -port "$SMTP_PORT" $encryption_string $auth_string
+                if [ $? != 0 ]; then
+                        Logger "Cannot send mail via $(type mailsend.exe) !!!" "WARN"
+                else
+                        Logger "Sent mail using mailsend.exe command with attachment." "NOTICE"
+                        return 0
+                fi
+        fi
+
+	# Windows specific, kept for compatibility (sendemail from http://caspian.dotconf.net/menu/Software/SendEmail/)
 	if type sendemail > /dev/null 2>&1 ; then
 		if [ "$SMTP_USER" != "" ] && [ "$SMTP_PASSWORD" != "" ]; then
 			SMTP_OPTIONS="-xu $SMTP_USER -xp $SMTP_PASSWORD"
 		else
 			SMTP_OPTIONS=""
 		fi
-		$(type -p sendemail) -f $SENDER_MAIL -t $DESTINATION_MAILS -u "$subject" -m "$MAIL_ALERT_MSG" -s $SMTP_SERVER $SMTP_OPTIONS > /dev/null 2>&1
+		$(type -p sendemail) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -u "$subject" -m "$MAIL_ALERT_MSG" -s $SMTP_SERVER $SMTP_OPTIONS > /dev/null 2>&1
 		if [ $? != 0 ]; then
-			Logger "Cannot send alert email via $(type -p sendemail) !!!" "WARN"
+			Logger "Cannot send alert mail via $(type -p sendemail) !!!" "WARN"
 		else
 			Logger "Sent alert mail using sendemail command without attachment." "NOTICE"
 			return 0
@@ -332,7 +361,7 @@ function SendAlert {
 	if [ -f /usr/local/bin/mail.php ]; then
 		echo "$MAIL_ALERT_MSG" | /usr/local/bin/mail.php -s="$subject"
 		if [ $? != 0 ]; then
-			Logger "Cannot send alert email via /usr/local/bin/mail.php (pfsense) !!!" "WARN"
+			Logger "Cannot send alert mail via /usr/local/bin/mail.php (pfsense) !!!" "WARN"
 		else
 			Logger "Sent alert mail using pfSense mail.php." "NOTICE"
 			return 0
@@ -340,12 +369,141 @@ function SendAlert {
 	fi
 
 	# If function has not returned 0 yet, assume it's critical that no alert can be sent
-	Logger "Cannot send alert (neither mutt, mail, sendmail, sendemail or pfSense mail.php could be used)." "ERROR" # Is not marked critical because execution must continue
+	Logger "Cannot send alert (neither mutt, mail, sendmail, mailsend, sendemail or pfSense mail.php could be used)." "ERROR" # Is not marked critical because execution must continue
 
 	# Delete tmp log file
 	if [ -f "$ALERT_LOG_FILE" ]; then
 		rm "$ALERT_LOG_FILE"
 	fi
+}
+
+# Generic email sending function.
+# Usage (linux / BSD), attachment is optional, can be "/path/to/my.file" or ""
+# SendEmail "subject" "Body text" "receiver@example.com receiver2@otherdomain.com" "/path/to/attachment.file"
+# Usage (Windows, make sure you have mailsend.exe in executable path, see http://github.com/muquit/mailsend)
+# attachment is optional but must be in windows format like "c:\\some\path\\my.file", or ""
+# smtp_server.domain.tld is mandatory, as is smtp_port (should be 25, 465 or 587)
+# encryption can be set to tls, ssl or none
+# smtp_user and smtp_password are optional
+# SendEmail "subject" "Body text" "receiver@example.com receiver2@otherdomain.com" "/path/to/attachment.file" "sender_email@example.com" "smtp_server.domain.tld" "smtp_port" "encrpytion" "smtp_user" "smtp_password"
+function SendEmail {
+	local subject="${1}"
+	local message="${2}"
+	local destination_mails="${3}"
+	local attachment="${4}"
+	local sender_email="${5}"
+	local smtp_server="${6}"
+	local smtp_port="${7}"
+	local encrpytion="${8}"
+	local smtp_user="${9}"
+	local smtp_password="${10}"
+
+	# CheckArguments will report a warning that can be ignored if used in Windows with paranoia debug enabled
+
+	local mail_no_attachment=
+	local attachment_command=
+
+	local encryption_string=
+	local auth_string=
+
+	if [ ! -f "$attachment" ]; then
+		attachment_command="-a $ALERT_LOG_FILE"
+		mail_no_attachment=1
+	else
+		mail_no_attachment=0
+	fi
+
+	if type mutt > /dev/null 2>&1 ; then
+		echo "$message" | $(type -p mutt) -x -s "$subject" "$destination_mails" $attachment_command
+		if [ $? != 0 ]; then
+			Logger "Cannot send mail via $(type -p mutt) !!!" "WARN"
+		else
+			Logger "Sent mail using mutt." "NOTICE"
+			return 0
+		fi
+	fi
+
+	if type mail > /dev/null 2>&1 ; then
+		if [ "$mail_no_attachment" -eq 0 ] && $(type -p mail) -V | grep "GNU" > /dev/null; then
+			attachment_command="-A $attachment"
+		elif [ "$mail_no_attachment" -eq 0 ] && $(type -p mail) -V > /dev/null; then
+			attachment_command="-a$attachment"
+		else
+			attachment_command=""
+		fi
+		echo "$message" | $(type -p mail) $attachment_command -s "$subject" "$destination_mails"
+		if [ $? != 0 ]; then
+			Logger "Cannot send mail via $(type -p mail) with attachments !!!" "WARN"
+			echo "$message" | $(type -p mail) -s "$subject" "$destination_mails"
+			if [ $? != 0 ]; then
+				Logger "Cannot send mail via $(type -p mail) without attachments !!!" "WARN"
+			else
+				Logger "Sent mail using mail command without attachment." "NOTICE"
+				return 0
+			fi
+		else
+			Logger "Sent mail using mail command." "NOTICE"
+			return 0
+		fi
+	fi
+
+	if type sendmail > /dev/null 2>&1 ; then
+		echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) "$destination_mails"
+		if [ $? != 0 ]; then
+			Logger "Cannot send mail via $(type -p sendmail) !!!" "WARN"
+		else
+			Logger "Sent mail using sendmail command without attachment." "NOTICE"
+			return 0
+		fi
+	fi
+
+	# Windows specific
+        if type "mailsend.exe" > /dev/null 2>&1 ; then
+		if [ "$sender_email" == "" ]; then
+			Logger "Missing sender email." "ERROR"
+			return 1
+		fi
+		if [ "$smtp_server" == "" ]; then
+			Logger "Missing smtp port." "ERROR"
+			return 1
+		fi
+		if [ "$smtp_port" == "" ]; then
+			Logger "Missing smtp port, assuming 25." "WARN"
+			smtp_port=25
+		fi
+		if [ "$encryption" != "tls" ] && [ "$encryption" != "ssl" ]  && [ "$encryption" != "none" ]; then
+			Logger "Bogus smtp encryption, assuming none." "WARN"
+			encryption_string=
+		elif [ "$encryption" == "tls" ]; then
+			encryption_string=-starttls
+		elif [ "$encryption" == "ssl" ]:; then
+			encryption_string=-ssl
+		fi
+		if [ "$smtp_user" != "" ] && [ "$smtp_password" != "" ]; then
+			auth_string="-auth -user \"$smtp_user\" -pass \"$smtp_password\""
+		fi
+                $(type mailsend.exe) -f "$sender_email" -t "$destination_mails" -sub "$subject" -M "$message" -attach "$attachment" -smtp "$smtp_server" -port "$smtp_port" $encryption_string $auth_string
+                if [ $? != 0 ]; then
+                        Logger "Cannot send mail via $(type mailsend.exe) !!!" "WARN"
+                else
+                        Logger "Sent mail using mailsend.exe command with attachment." "NOTICE"
+                        return 0
+                fi
+        fi
+
+	# pfSense specific
+	if [ -f /usr/local/bin/mail.php ]; then
+		echo "$message" | /usr/local/bin/mail.php -s="$subject"
+		if [ $? != 0 ]; then
+			Logger "Cannot send mail via /usr/local/bin/mail.php (pfsense) !!!" "WARN"
+		else
+			Logger "Sent mail using pfSense mail.php." "NOTICE"
+			return 0
+		fi
+	fi
+
+	# If function has not returned 0 yet, assume it's critical that no alert can be sent
+	Logger "Cannot send mail (neither mutt, mail, sendmail, sendemail, mailsend (windows) or pfSense mail.php could be used)." "ERROR" # Is not marked critical because execution must continue
 }
 
 function TrapError {

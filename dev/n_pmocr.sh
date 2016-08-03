@@ -4,7 +4,10 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4-dev
-PROGRAM_BUILD=2016040702
+PROGRAM_BUILD=2016080301
+
+## Debug parameter for service
+_DEBUG=no
 
 ## Instance identification (used for mails only)
 INSTANCE_ID=MyOCRServer
@@ -257,7 +260,7 @@ function OCR_service {
 
 	while true
 	do
-		Logger "Started $PROGRAM instance $INSTANCE_ID." "NOTICE"
+		Logger "Started $PROGRAM instance $INSTANCE_ID for directory [$DIRECTORY_TO_PROCESS], monitoring extension [$FILE_EXTENSION]." "NOTICE"
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$FILE_EXTENSION" -qq -r -e create "$DIRECTORY_TO_PROCESS" &
 		WaitForIt $!
 		sleep $WAIT_TIME

@@ -21,7 +21,7 @@ prog=pmocr
 progexec=pmocr.sh
 progpath=/usr/local/bin
 pidfile=/var/run/$prog
-SCRIPT_BUILD=2015091701
+SCRIPT_BUILD=2016080301
 
 
 if [ ! -f $progpath/$progexec ] && [ ! -f $progexec ]; then
@@ -48,7 +48,7 @@ start() {
 			echo "$prog successfully started"
 			exit 0 
 		else
-			echo "Cannot start $prog"
+			echo "Cannot start $prog (see log file)."
 			exit 1
 		fi
 }

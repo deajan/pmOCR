@@ -91,7 +91,7 @@ CSV_EXTENSION=".csv"
 
 #### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
 
-_LOGGER_PREFIX="time"
+_LOGGER_PREFIX="date"
 
 source "./ofunctions.sh"
 

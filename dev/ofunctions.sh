@@ -104,17 +104,11 @@ function Logger {
 	local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, NOTICE, WARN, ERROR, CRITIAL
 	local time_type="{3:-false}" # Time type: if true, log lines are prefixed with seconds since beginning, if false, log lines are prefixed with current date
 
-	# <OSYNC SPECIFIC> Special case in daemon mode we should timestamp instead of counting seconds
-	if [ "$sync_on_changes" != "1" ]; then
-		time_type=true
-	fi
-
-	if [ $time_type == true ]; then
+	if [ "$_LOGGER_TYPE" == "time" ]; then
 		prefix="TIME: $SECONDS - "
 	else
 		prefix="$(date) - "
 	fi
-	# </OSYNC SPECIFIC>
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "$prefix\e[41m$value\e[0m" "$prefix$level:$value" "$level:$value"

@@ -91,7 +91,7 @@ CSV_EXTENSION=".csv"
 
 #### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
 
-_LOGGER_PREFIX="time"
+_LOGGER_PREFIX="date"
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
@@ -160,8 +160,7 @@ function _Logger {
 
 	if [ "$_LOGGER_STDERR" -eq 1 ]; then
 		cat <<< "$evalue" 1>&2
-	fi
-	if [ "$_SILENT" -eq 0 ]; then
+	elif [ "$_SILENT" -eq 0 ]; then
 		echo -e "$svalue"
 	fi
 }

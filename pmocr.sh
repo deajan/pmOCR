@@ -4,7 +4,10 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4-dev
-PROGRAM_BUILD=2016040702
+PROGRAM_BUILD=2016080302
+
+## Debug parameter for service
+_DEBUG=no
 
 ## Instance identification (used for mails only)
 INSTANCE_ID=MyOCRServer
@@ -88,6 +91,8 @@ CSV_EXTENSION=".csv"
 
 #### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
 
+_LOGGER_TYPE="time"
+
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
 # Environment variables
@@ -102,7 +107,7 @@ WARN_ALERT=0
 ## allow debugging from command line with _DEBUG=yes
 if [ ! "$_DEBUG" == "yes" ]; then
 	_DEBUG=no
-	SLEEP_TIME=.1
+	SLEEP_TIME=.05 # Tested under linux and FreeBSD bash, #TODO tests on cygwin / msys
 	_VERBOSE=0
 else
 	SLEEP_TIME=1
@@ -146,13 +151,14 @@ function Dummy {
 	sleep .1
 }
 
+# Sub function of Logger
 function _Logger {
 	local svalue="${1}" # What to log to stdout
 	local lvalue="${2:-$svalue}" # What to log to logfile, defaults to screen value
 	local evalue="${3}" # What to log to stderr
 	echo -e "$lvalue" >> "$LOG_FILE"
 
-	# <OSYNC SPECIFIC> Special case in daemon mode where systemctl doesn't need double timestamps
+	# <OSYNC SPECIFIC> Special case in daemon mode where systemctl does not need double timestamps
 	if [ "$sync_on_changes" == "1" ]; then
 		cat <<< "$evalue" 1>&2	# Log to stderr in daemon mode
 	elif [ "$_SILENT" -eq 0 ]; then
@@ -160,17 +166,17 @@ function _Logger {
 	fi
 }
 
+# General log function with log levels
 function Logger {
 	local value="${1}" # Sentence to log (in double quotes)
 	local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, NOTICE, WARN, ERROR, CRITIAL
+	local time_type="{3:-false}" # Time type: if true, log lines are prefixed with seconds since beginning, if false, log lines are prefixed with current date
 
-	# <OSYNC SPECIFIC> Special case in daemon mode we should timestamp instead of counting seconds
-	if [ "$sync_on_changes" == "1" ]; then
-		prefix="$(date) - "
-	else
+	if [ "$_LOGGER_TYPE" == "time" ]; then
 		prefix="TIME: $SECONDS - "
+	else
+		prefix="$(date) - "
 	fi
-	# </OSYNC SPECIFIC>
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "$prefix\e[41m$value\e[0m" "$prefix$level:$value" "$level:$value"
@@ -198,34 +204,65 @@ function Logger {
 	fi
 }
 
+# QuickLogger subfunction, can be called directly
+function _QuickLogger {
+	local value="${1}"
+	local destination="${2}" # Destination: stdout, log, both
+
+	if ([ "$destination" == "log" ] || [ "$destination" == "both" ]); then
+		echo -e "$(date) - $value" >> "$LOG_FILE"
+	elif ([ "$destination" == "stdout" ] || [ "$destination" == "both" ]); then
+		echo -e "$value"
+	fi
+}
+
+# Generic quick logging function
+function QuickLogger {
+	local value="${1}"
+
+	if [ "$_SILENT" -eq 1 ]; then
+		_QuickLogger "$value" "log"
+	else
+		_QuickLogger "$value" "stdout"
+	fi
+}
+
 # Portable child (and grandchild) kill function tester under Linux, BSD and MacOS X
 function KillChilds {
-	local pid="${1}"
+	local pids="${1}"
 	local self="${2:-false}"
 
-	if children="$(pgrep -P "$pid")"; then
-		for child in $children; do
-			KillChilds "$child" true
-		done
-	fi
+	local errorcount=0
 
-	# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
-	if ( [ "$self" == true ] && eval $PROCESS_TEST_CMD > /dev/null 2>&1); then
-		Logger "Sending SIGTERM to process [$pid]." "DEBUG"
-		kill -s SIGTERM "$pid"
-		if [ $? != 0 ]; then
-			sleep 15
-			Logger "Sending SIGTERM to process [$pid] failed." "DEBUG"
-			kill -9 "$pid"
-			if [ $? != 0 ]; then
-				Logger "Sending SIGKILL to process [$pid] failed." "DEBUG"
-				return 1
-			fi
+	IFS=';' read -a pidsArray <<< "$pids"
+	for pid in "${pidsArray[@]}"; do
+
+		if children="$(pgrep -P "$pid")"; then
+			for child in $children; do
+				KillChilds "$child" true
+			done
 		fi
-		return 0
-	else
-		return 0
-	fi
+
+		# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
+		if ( [ "$self" == true ] && kill -0 $pid > /dev/null 2>&1); then
+			Logger "Sending SIGTERM to process [$pid]." "DEBUG"
+			kill -s SIGTERM "$pid"
+			if [ $? != 0 ]; then
+				sleep 15
+				Logger "Sending SIGTERM to process [$pid] failed." "DEBUG"
+				kill -9 "$pid"
+				if [ $? != 0 ]; then
+					Logger "Sending SIGKILL to process [$pid] failed." "DEBUG"
+					errorcount=$((errorcount+1))
+				fi
+			fi
+			#return 0
+		else
+			echo ""
+			#return 0
+		fi
+	done
+	return $errorcount
 }
 
 # osync/obackup/pmocr script specific mail alert function, use SendEmail function for generic mail sending
@@ -368,7 +405,7 @@ function SendAlert {
 		fi
 	fi
 
-	# If function has not returned 0 yet, assume it's critical that no alert can be sent
+	# If function has not returned 0 yet, assume it is critical that no alert can be sent
 	Logger "Cannot send alert (neither mutt, mail, sendmail, mailsend, sendemail or pfSense mail.php could be used)." "ERROR" # Is not marked critical because execution must continue
 
 	# Delete tmp log file
@@ -385,7 +422,7 @@ function SendAlert {
 # smtp_server.domain.tld is mandatory, as is smtp_port (should be 25, 465 or 587)
 # encryption can be set to tls, ssl or none
 # smtp_user and smtp_password are optional
-# SendEmail "subject" "Body text" "receiver@example.com receiver2@otherdomain.com" "/path/to/attachment.file" "sender_email@example.com" "smtp_server.domain.tld" "smtp_port" "encrpytion" "smtp_user" "smtp_password"
+# SendEmail "subject" "Body text" "receiver@example.com receiver2@otherdomain.com" "/path/to/attachment.file" "sender_email@example.com" "smtp_server.domain.tld" "smtp_port" "encryption" "smtp_user" "smtp_password"
 function SendEmail {
 	local subject="${1}"
 	local message="${2}"
@@ -394,7 +431,7 @@ function SendEmail {
 	local sender_email="${5}"
 	local smtp_server="${6}"
 	local smtp_port="${7}"
-	local encrpytion="${8}"
+	local encryption="${8}"
 	local smtp_user="${9}"
 	local smtp_password="${10}"
 
@@ -502,7 +539,7 @@ function SendEmail {
 		fi
 	fi
 
-	# If function has not returned 0 yet, assume it's critical that no alert can be sent
+	# If function has not returned 0 yet, assume it is critical that no alert can be sent
 	Logger "Cannot send mail (neither mutt, mail, sendmail, sendemail, mailsend (windows) or pfSense mail.php could be used)." "ERROR" # Is not marked critical because execution must continue
 }
 
@@ -703,7 +740,7 @@ function OCR_service {
 
 	while true
 	do
-		Logger "Started $PROGRAM instance $INSTANCE_ID." "NOTICE"
+		Logger "Started $PROGRAM instance $INSTANCE_ID for directory [$DIRECTORY_TO_PROCESS], monitoring extension [$FILE_EXTENSION]." "NOTICE"
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$FILE_EXTENSION" -qq -r -e create "$DIRECTORY_TO_PROCESS" &
 		WaitForIt $!
 		sleep $WAIT_TIME
@@ -864,12 +901,13 @@ if [ $_SERVICE_RUN -eq 1 ]; then
 		OCR_service "$CSV_MONITOR_DIR" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true &
 	fi
 
-	Logger "Service $PROGRAM instance $$ started as $LOCAL_USER on $LOCAL_HOST." "NOTICE"
+	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST]." "NOTICE"
 
 	while true
 	do
 		sleep $WAIT_TIME
 	done
+
 elif [ $_BATCH_RUN -eq 1 ]; then
 
 	# Get last argument that should be a path

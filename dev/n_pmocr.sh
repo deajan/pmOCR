@@ -82,9 +82,6 @@ EXCEL_OCR_ENGINE_ARGS=' -lpp TextExtraction_Accuracy -adb -ido -adtop -rl French
 CSV_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -trl -f TextUnicodeDefaults'
 OCR_ENGINE_INPUT_ARG='-if'
 OCR_ENGINE_OUTPUT_ARG='-of'
-else
-Logger "[$OCR_ENGINE] is not a valid ocr engine." "CRITICAL"
-exit 1
 fi
 
 PDF_EXTENSION=".pdf"

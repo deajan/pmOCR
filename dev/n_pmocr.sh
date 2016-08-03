@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4-dev
-PROGRAM_BUILD=2016080301
+PROGRAM_BUILD=2016080302
 
 ## Debug parameter for service
 _DEBUG=no
@@ -421,12 +421,13 @@ if [ $_SERVICE_RUN -eq 1 ]; then
 		OCR_service "$CSV_MONITOR_DIR" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true &
 	fi
 
-	Logger "Service $PROGRAM instance $$ started as $LOCAL_USER on $LOCAL_HOST." "NOTICE"
+	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST]." "NOTICE"
 
 	while true
 	do
 		sleep $WAIT_TIME
 	done
+
 elif [ $_BATCH_RUN -eq 1 ]; then
 
 	# Get last argument that should be a path

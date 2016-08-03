@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4-dev
-PROGRAM_BUILD=2016080302
+PROGRAM_BUILD=2016080303
 
 ## Debug parameter for service
 _DEBUG=no
@@ -91,7 +91,7 @@ CSV_EXTENSION=".csv"
 
 #### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
 
-_LOGGER_TYPE="time"
+_LOGGER_PREFIX="time"
 
 source "./ofunctions.sh"
 
@@ -159,7 +159,7 @@ function CheckEnvironment {
 
 function TrapQuit {
 	KillChilds $$ > /dev/null 2>&1
-	Logger "Service $PROGRAM stopped instance $$." "NOTICE"
+	Logger "Service $PROGRAM stopped instance [$INSTANCE_ID] with pid [$$]." "NOTICE"
 	exit
 }
 
@@ -262,7 +262,7 @@ function OCR_service {
 
 	while true
 	do
-		Logger "Started $PROGRAM instance $INSTANCE_ID for directory [$DIRECTORY_TO_PROCESS], monitoring extension [$FILE_EXTENSION]." "NOTICE"
+		Logger "Started $PROGRAM instance [$INSTANCE_ID] for directory [$DIRECTORY_TO_PROCESS], monitoring extension [$FILE_EXTENSION]." "NOTICE"
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$FILE_EXTENSION" -qq -r -e create "$DIRECTORY_TO_PROCESS" &
 		WaitForIt $!
 		sleep $WAIT_TIME
@@ -326,6 +326,7 @@ do
 		;;
 		--service)
 		_SERVICE_RUN=1
+		_LOGGER_STDERR=1
 		;;
 		--silent|-s)
 		_SILENT=1

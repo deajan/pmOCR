@@ -91,6 +91,8 @@ CSV_EXTENSION=".csv"
 
 #### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
 
+_LOGGER_TYPE="time"
+
 source "./ofunctions.sh"
 
 function CheckEnvironment {

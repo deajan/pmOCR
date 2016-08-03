@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4-dev
-PROGRAM_BUILD=2016080302
+PROGRAM_BUILD=2016080303
 
 ## Debug parameter for service
 _DEBUG=no
@@ -91,7 +91,7 @@ CSV_EXTENSION=".csv"
 
 #### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
 
-_LOGGER_TYPE="time"
+_LOGGER_PREFIX="time"
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
@@ -158,10 +158,10 @@ function _Logger {
 	local evalue="${3}" # What to log to stderr
 	echo -e "$lvalue" >> "$LOG_FILE"
 
-	# <OSYNC SPECIFIC> Special case in daemon mode where systemctl does not need double timestamps
-	if [ "$sync_on_changes" == "1" ]; then
-		cat <<< "$evalue" 1>&2	# Log to stderr in daemon mode
-	elif [ "$_SILENT" -eq 0 ]; then
+	if [ "$_LOGGER_STDERR" -eq 1 ]; then
+		cat <<< "$evalue" 1>&2
+	fi
+	if [ "$_SILENT" -eq 0 ]; then
 		echo -e "$svalue"
 	fi
 }
@@ -170,12 +170,13 @@ function _Logger {
 function Logger {
 	local value="${1}" # Sentence to log (in double quotes)
 	local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, NOTICE, WARN, ERROR, CRITIAL
-	local time_type="{3:-false}" # Time type: if true, log lines are prefixed with seconds since beginning, if false, log lines are prefixed with current date
 
-	if [ "$_LOGGER_TYPE" == "time" ]; then
+	if [ "$_LOGGER_PREFIX" == "time" ]; then
 		prefix="TIME: $SECONDS - "
-	else
+	elif [ "$_LOGGER_PREFIX" == "date" ]; then
 		prefix="$(date) - "
+	else
+		prefix=""
 	fi
 
 	if [ "$level" == "CRITICAL" ]; then
@@ -229,38 +230,46 @@ function QuickLogger {
 
 # Portable child (and grandchild) kill function tester under Linux, BSD and MacOS X
 function KillChilds {
-	local pids="${1}"
+	local pid="${1}" # Parent pid to kill
 	local self="${2:-false}"
+
+
+	if children="$(pgrep -P "$pid")"; then
+		for child in $children; do
+			KillChilds "$child" true
+		done
+	fi
+		# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
+	if ( [ "$self" == true ] && kill -0 $pid > /dev/null 2>&1); then
+		Logger "Sending SIGTERM to process [$pid]." "DEBUG"
+		kill -s SIGTERM "$pid"
+		if [ $? != 0 ]; then
+			sleep 15
+			Logger "Sending SIGTERM to process [$pid] failed." "DEBUG"
+			kill -9 "$pid"
+			if [ $? != 0 ]; then
+				Logger "Sending SIGKILL to process [$pid] failed." "DEBUG"
+				return 1
+			fi
+		else
+			return 0
+		fi
+	else
+		return 0
+	fi
+}
+
+function KillAllChilds {
+	local pids="${1}" # List of parent pids to kill separated by semi-colon
 
 	local errorcount=0
 
 	IFS=';' read -a pidsArray <<< "$pids"
 	for pid in "${pidsArray[@]}"; do
-
-		if children="$(pgrep -P "$pid")"; then
-			for child in $children; do
-				KillChilds "$child" true
-			done
-		fi
-
-		# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
-		if ( [ "$self" == true ] && kill -0 $pid > /dev/null 2>&1); then
-			Logger "Sending SIGTERM to process [$pid]." "DEBUG"
-			kill -s SIGTERM "$pid"
-			if [ $? != 0 ]; then
-				sleep 15
-				Logger "Sending SIGTERM to process [$pid] failed." "DEBUG"
-				kill -9 "$pid"
-				if [ $? != 0 ]; then
-					Logger "Sending SIGKILL to process [$pid] failed." "DEBUG"
-					errorcount=$((errorcount+1))
-				fi
+		KillChilds $pid
+		if [ $? != 0 ]; then
+			errorcount=$((errorcount+1))
 			fi
-			#return 0
-		else
-			echo ""
-			#return 0
-		fi
 	done
 	return $errorcount
 }
@@ -637,7 +646,7 @@ function CheckEnvironment {
 
 function TrapQuit {
 	KillChilds $$ > /dev/null 2>&1
-	Logger "Service $PROGRAM stopped instance $$." "NOTICE"
+	Logger "Service $PROGRAM stopped instance [$INSTANCE_ID] with pid [$$]." "NOTICE"
 	exit
 }
 
@@ -740,7 +749,7 @@ function OCR_service {
 
 	while true
 	do
-		Logger "Started $PROGRAM instance $INSTANCE_ID for directory [$DIRECTORY_TO_PROCESS], monitoring extension [$FILE_EXTENSION]." "NOTICE"
+		Logger "Started $PROGRAM instance [$INSTANCE_ID] for directory [$DIRECTORY_TO_PROCESS], monitoring extension [$FILE_EXTENSION]." "NOTICE"
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$FILE_EXTENSION" -qq -r -e create "$DIRECTORY_TO_PROCESS" &
 		WaitForIt $!
 		sleep $WAIT_TIME
@@ -804,6 +813,7 @@ do
 		;;
 		--service)
 		_SERVICE_RUN=1
+		_LOGGER_STDERR=1
 		;;
 		--silent|-s)
 		_SILENT=1

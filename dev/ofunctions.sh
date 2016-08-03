@@ -1,5 +1,8 @@
-## FUNC_BUILD=2016080303
+## FUNC_BUILD=2016080304
 ## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
+
+#TODO: set _LOGGER_PREFIX in other apps, specially for osync daemon mode
+#TODO: set _LOGGER_STDERR in other apps
 
 ## type -p does not work on platforms other than linux (bash). If if does not work, always assume output is not a zero exitcode
 if ! type "$BASH" > /dev/null; then
@@ -90,10 +93,10 @@ function _Logger {
 	local evalue="${3}" # What to log to stderr
 	echo -e "$lvalue" >> "$LOG_FILE"
 
-	# <OSYNC SPECIFIC> Special case in daemon mode where systemctl does not need double timestamps
-	if [ "$sync_on_changes" == "1" ]; then
-		cat <<< "$evalue" 1>&2	# Log to stderr in daemon mode
-	elif [ "$_SILENT" -eq 0 ]; then
+	if [ "$_LOGGER_STDERR" -eq 1 ]; then
+		cat <<< "$evalue" 1>&2
+	fi
+	if [ "$_SILENT" -eq 0 ]; then
 		echo -e "$svalue"
 	fi
 }
@@ -102,12 +105,13 @@ function _Logger {
 function Logger {
 	local value="${1}" # Sentence to log (in double quotes)
 	local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, NOTICE, WARN, ERROR, CRITIAL
-	local time_type="{3:-false}" # Time type: if true, log lines are prefixed with seconds since beginning, if false, log lines are prefixed with current date
 
-	if [ "$_LOGGER_TYPE" == "time" ]; then
+	if [ "$_LOGGER_PREFIX" == "time" ]; then
 		prefix="TIME: $SECONDS - "
-	else
+	elif [ "$_LOGGER_PREFIX" == "date" ]; then
 		prefix="$(date) - "
+	else
+		prefix=""
 	fi
 
 	if [ "$level" == "CRITICAL" ]; then

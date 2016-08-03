@@ -82,9 +82,6 @@ EXCEL_OCR_ENGINE_ARGS=' -lpp TextExtraction_Accuracy -adb -ido -adtop -rl French
 CSV_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -trl -f TextUnicodeDefaults'
 OCR_ENGINE_INPUT_ARG='-if'
 OCR_ENGINE_OUTPUT_ARG='-of'
-else
-Logger "[$OCR_ENGINE] is not a valid ocr engine." "CRITICAL"
-exit 1
 fi
 
 PDF_EXTENSION=".pdf"
@@ -163,7 +160,8 @@ function _Logger {
 
 	if [ "$_LOGGER_STDERR" -eq 1 ]; then
 		cat <<< "$evalue" 1>&2
-	elif [ "$_SILENT" -eq 0 ]; then
+	fi
+	if [ "$_SILENT" -eq 0 ]; then
 		echo -e "$svalue"
 	fi
 }

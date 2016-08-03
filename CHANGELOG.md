@@ -1,7 +1,18 @@
-- If file not delete, must add _NO_OCR prefix.
-
 RECENT CHANGES
 --------------
+
+XX xxx 2016: v1.4
+- Merged more recent ofunctions
+- Improved logging
+- Improved installer
+- Added a systemd unit file
+- Added pdf2tiff intermediary transformation for tesseract3 to support pdf input (thanks to mhelff, https://github.com/mhelff)
+- Set pdf conversion as default choice in batch mode
+- Added preflight checks for tesseract3 engine
+- Refactored code that became totally unreadable for human being :)
+- Improved sub process terminate code
+- Improved daemon logging
+- Improved mail alert support
 
 03 Mar 2016: v1.3
 - Merged function codebase with osync and obackup

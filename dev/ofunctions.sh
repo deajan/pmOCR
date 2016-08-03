@@ -1,4 +1,4 @@
-## FUNC_BUILD=2016080301
+## FUNC_BUILD=2016080302
 ## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## type -p does not work on platforms other than linux (bash). If if does not work, always assume output is not a zero exitcode
@@ -102,12 +102,17 @@ function _Logger {
 function Logger {
 	local value="${1}" # Sentence to log (in double quotes)
 	local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, NOTICE, WARN, ERROR, CRITIAL
+	local time_type="{3:-false}" # Time type: if true, log lines are prefixed with seconds since beginning, if false, log lines are prefixed with current date
 
 	# <OSYNC SPECIFIC> Special case in daemon mode we should timestamp instead of counting seconds
-	if [ "$sync_on_changes" == "1" ]; then
-		prefix="$(date) - "
-	else
+	if [ "$sync_on_changes" != "1" ]; then
+		time_type=true
+	fi
+
+	if [ $time_type == true ]; then
 		prefix="TIME: $SECONDS - "
+	else
+		prefix="$(date) - "
 	fi
 	# </OSYNC SPECIFIC>
 

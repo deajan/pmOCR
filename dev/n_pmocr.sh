@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4-dev
-PROGRAM_BUILD=2016080303
+PROGRAM_BUILD=2016080401
 
 ## Debug parameter for service
 _DEBUG=no
@@ -163,21 +163,6 @@ function TrapQuit {
 	exit
 }
 
-function WaitForIt {
-	local pid="${1}"
-
-	if [ "$pid" != "" ]; then
-		while ps -p "$1" > /dev/null 2>&1
-		do
-			sleep $WAIT_TIME
-		done
-		return 0
-	else
-		Logger "Bogus pid [$pid] given to [$FUNCNAME]." "ERROR"
-		return 1
-	fi
-}
-
 function OCR {
 
 	#TODO rewrite lowercase local variables
@@ -264,7 +249,7 @@ function OCR_service {
 	do
 		Logger "Started $PROGRAM instance [$INSTANCE_ID] for directory [$DIRECTORY_TO_PROCESS], monitoring extension [$FILE_EXTENSION]." "NOTICE"
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$FILE_EXTENSION" -qq -r -e create "$DIRECTORY_TO_PROCESS" &
-		WaitForIt $!
+		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} false
 		sleep $WAIT_TIME
 		OCR "$DIRECTORY_TO_PROCESS" "$FILE_EXTENSION" "$OCR_ENGINE_ARGS" "$CSV_HACK"
 	done

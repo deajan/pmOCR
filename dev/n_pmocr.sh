@@ -95,6 +95,9 @@ _LOGGER_PREFIX="date"
 
 source "./ofunctions.sh"
 
+# Fix SLEEP_TIME set to low in ofunctions
+SLEEP_TIME=$WAIT_TIME
+
 function CheckEnvironment {
 	if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
 		Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"

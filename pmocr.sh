@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4-beta
-PROGRAM_BUILD=2016080401
+PROGRAM_BUILD=2016080402
 
 ## Debug parameter for service
 _DEBUG=no
@@ -892,6 +892,9 @@ function OCR {
 
 		if [ $result != 0 ]; then
 			Logger "Could not process file [$file] (error code $result)." "ERROR"
+			if [ "$SERVICE_RUN" -eq 1 ]; then
+				SendAlert
+			fi
 		else
 			# Convert 4 spaces or more to semi colon (hack to transform abbyyocr11 txt output to CSV)
 			if [ $csv_hack == true ]; then
@@ -942,21 +945,21 @@ function Usage {
 	echo "$PROGRAM.sh --batch [options] /path/to/folder"
 	echo ""
 	echo "[OPTIONS]"
-	echo "-p, --target=PDF		Creates a PDF document (default)"
-	echo "-w, --target=DOCX		Creates a WORD document"
-	echo "-e, --target=XLSX		Creates an EXCEL document"
-	echo "-c, --target=CSV		Creates a CSV file"
+	echo "-p, --target=PDF          Creates a PDF document (default)"
+	echo "-w, --target=DOCX         Creates a WORD document"
+	echo "-e, --target=XLSX         Creates an EXCEL document"
+	echo "-c, --target=CSV          Creates a CSV file"
 	echo "(multiple targets can be set)"
 	echo ""
-	echo "-k, --skip-txt-pdf	Skips PDF files already containing indexable text"
-	echo "-d, --delete-input	Deletes input file after processing ( preventing them to be processed again)"
-	echo "--suffix=...		Adds a given suffix to the output filename (in order to not process them again, ex: pdf to pdf conversion)."
-	echo "				By default, the suffix is '_OCR'"
-	echo "--no-suffix		Won't add any suffix to the output filename"
-	echo "--text=...		Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)').
-					By default, the text is the conversion date in pseudo ISO format."
-	echo "--no-text			Won't add any text to the output filename"
-	echo "-s, --silent		Will not output anything to stdout"
+	echo "-k, --skip-txt-pdf        Skips PDF files already containing indexable text"
+	echo "-d, --delete-input        Deletes input file after processing ( preventing them to be processed again)"
+	echo "--suffix=...              Adds a given suffix to the output filename (in order to not process them again, ex: pdf to pdf conversion)."
+	echo "                          By default, the suffix is '_OCR'"
+	echo "--no-suffix               Won't add any suffix to the output filename"
+	echo "--text=...                Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)')."
+	echo "                          By default, the text is the conversion date in pseudo ISO format."
+	echo "--no-text                 Won't add any text to the output filename"
+	echo "-s, --silent              Will not output anything to stdout"
 	echo ""
 	exit 128
 }
@@ -1100,25 +1103,25 @@ elif [ $_BATCH_RUN -eq 1 ]; then
 	fi
 
 	if [ $pdf == true ]; then
-		Logger "Beginning PDF OCR recognition of $batch_path" "NOTICE"
+		Logger "Beginning PDF OCR recognition of files in [$batch_path]." "NOTICE"
 		OCR "$batch_path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS"
 		Logger "Process ended." "NOTICE"
 	fi
 
 	if [ $docx == true ]; then
-		Logger "Beginning DOCX OCR recognition of $batch_path" "NOTICE"
+		Logger "Beginning DOCX OCR recognition of files in [$batch_path]." "NOTICE"
 		OCR "$batch_path" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS"
 		Logger "Batch ended." "NOTICE"
 	fi
 
 	if [ $xlsx == true ]; then
-		Logger "Beginning XLSX OCR recognition of $batch_path" "NOTICE"
+		Logger "Beginning XLSX OCR recognition of files in [$batch_path]." "NOTICE"
 		OCR "$batch_path" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS"
 		Logger "batch ended." "NOTICE"
 	fi
 
 	if [ $csv == true ]; then
-		Logger "Beginning CSV OCR recognition of $batch_path" "NOTICE"
+		Logger "Beginning CSV OCR recognition of files in [$batch_path]." "NOTICE"
 		OCR "$batch_path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
 		Logger "Batch ended." "NOTICE"
 	fi

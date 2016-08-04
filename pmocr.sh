@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4-dev
-PROGRAM_BUILD=2016080303
+PROGRAM_BUILD=2016080401
 
 ## Debug parameter for service
 _DEBUG=no
@@ -95,9 +95,33 @@ _LOGGER_PREFIX="date"
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-# Environment variables
+## FUNC_BUILD=2016080401
+## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
+
+#TODO: set _LOGGER_PREFIX in other apps, specially for osync daemon mode
+#TODO: set _LOGGER_STDERR in other apps
+
+## type -p does not work on platforms other than linux (bash). If if does not work, always assume output is not a zero exitcode
+if ! type "$BASH" > /dev/null; then
+	echo "Please run this script only with bash shell. Tested on bash >= 3.2"
+	exit 127
+fi
+
+## Log a state message every $KEEP_LOGGING seconds. Should not be equal to soft or hard execution time so your log will not be unnecessary big.
+KEEP_LOGGING=1801
+
+## Correct output of sort command (language agnostic sorting)
+export LC_ALL=C
+
+# Standard alert mail body
+MAIL_ALERT_MSG="Execution of $PROGRAM instance $INSTANCE_ID on $(date) has warnings/errors."
+
+# Environment variables that can be overriden by programs
 _DRYRUN=0
 _SILENT=0
+_LOGGER_PREFIX="date"
+_LOGGER_STDERR=0
+
 
 # Initial error status, logging 'WARN', 'ERROR' or 'CRITICAL' will enable alerts flags
 ERROR_ALERT=0
@@ -148,7 +172,8 @@ ALERT_LOG_FILE="$RUN_DIR/$PROGRAM.last.log"
 
 
 function Dummy {
-	sleep .1
+
+	sleep $SLEEP_TIME
 }
 
 # Sub function of Logger
@@ -156,6 +181,7 @@ function _Logger {
 	local svalue="${1}" # What to log to stdout
 	local lvalue="${2:-$svalue}" # What to log to logfile, defaults to screen value
 	local evalue="${3}" # What to log to stderr
+
 	echo -e "$lvalue" >> "$LOG_FILE"
 
 	if [ "$_LOGGER_STDERR" -eq 1 ]; then
@@ -169,6 +195,7 @@ function _Logger {
 function Logger {
 	local value="${1}" # Sentence to log (in double quotes)
 	local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, NOTICE, WARN, ERROR, CRITIAL
+
 
 	if [ "$_LOGGER_PREFIX" == "time" ]; then
 		prefix="TIME: $SECONDS - "
@@ -209,6 +236,7 @@ function _QuickLogger {
 	local value="${1}"
 	local destination="${2}" # Destination: stdout, log, both
 
+
 	if ([ "$destination" == "log" ] || [ "$destination" == "both" ]); then
 		echo -e "$(date) - $value" >> "$LOG_FILE"
 	elif ([ "$destination" == "stdout" ] || [ "$destination" == "both" ]); then
@@ -219,6 +247,7 @@ function _QuickLogger {
 # Generic quick logging function
 function QuickLogger {
 	local value="${1}"
+
 
 	if [ "$_SILENT" -eq 1 ]; then
 		_QuickLogger "$value" "log"
@@ -260,6 +289,7 @@ function KillChilds {
 
 function KillAllChilds {
 	local pids="${1}" # List of parent pids to kill separated by semi-colon
+
 
 	local errorcount=0
 
@@ -579,6 +609,164 @@ function LoadConfigFile {
 	CONFIG_FILE="$config_file"
 }
 
+function Spinner {
+	if [ $_SILENT -eq 1 ]; then
+		return 0
+	fi
+
+	case $toggle
+	in
+	1)
+	echo -n " \ "
+	echo -ne "\r"
+	toggle="2"
+	;;
+
+	2)
+	echo -n " | "
+	echo -ne "\r"
+	toggle="3"
+	;;
+
+	3)
+	echo -n " / "
+	echo -ne "\r"
+	toggle="4"
+	;;
+
+	*)
+	echo -n " - "
+	echo -ne "\r"
+	toggle="1"
+	;;
+	esac
+}
+
+function WaitForTaskCompletion {
+	local pids="${1}" # pids to wait for, separated by semi-colon
+	local soft_max_time="${2}" # If program with pid $pid takes longer than $soft_max_time seconds, will log a warning, unless $soft_max_time equals 0.
+	local hard_max_time="${3}" # If program with pid $pid takes longer than $hard_max_time seconds, will stop execution, unless $hard_max_time equals 0.
+	local caller_name="${4}" # Who called this function
+	local exit_on_error="${5:-false}" # Should the function exit on subprocess errors
+
+
+	local soft_alert=0 # Does a soft alert need to be triggered, if yes, send an alert once
+	local log_ttime=0 # local time instance for comparaison
+
+	local seconds_begin=$SECONDS # Seconds since the beginning of the script
+	local exec_time=0 # Seconds since the beginning of this function
+
+	local retval=0 # return value of monitored pid process
+	local errorcount=0 # Number of pids that finished with errors
+
+	local pidCount # number of given pids
+
+	IFS=';' read -a pidsArray <<< "$pids"
+	pidCount=${#pidsArray[@]}
+
+	while [ ${#pidsArray[@]} -gt 0 ]; do
+		newPidsArray=()
+		for pid in "${pidsArray[@]}"; do
+			if kill -0 $pid > /dev/null 2>&1; then
+				newPidsArray+=($pid)
+			else
+				wait $pid
+				result=$?
+				if [ $result -ne 0 ]; then
+					errorcount=$((errorcount+1))
+					Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$result]." "DEBUG"
+				fi
+			fi
+		done
+
+		Spinner
+		exec_time=$(($SECONDS - $seconds_begin))
+		if [ $((($exec_time + 1) % $KEEP_LOGGING)) -eq 0 ]; then
+			if [ $log_ttime -ne $exec_time ]; then
+				log_ttime=$exec_time
+				Logger "Current tasks still running with pids [${pidsArray[@]}]." "NOTICE"
+			fi
+		fi
+
+		if [ $exec_time -gt $soft_max_time ]; then
+			if [ $soft_alert -eq 0 ] && [ $soft_max_time -ne 0 ]; then
+				Logger "Max soft execution time exceeded for task [$caller_name] with pids [${pidsArray[@]}]." "WARN"
+				soft_alert=1
+				SendAlert
+
+			fi
+			if [ $exec_time -gt $hard_max_time ] && [ $hard_max_time -ne 0 ]; then
+				Logger "Max hard execution time exceeded for task [$caller_name] with pids [${pidsArray[@]}]. Stopping task execution." "ERROR"
+				KillChilds $pid
+				if [ $? == 0 ]; then
+					Logger "Task stopped successfully" "NOTICE"
+					#return 0
+				else
+					errrorcount=$((errorcount+1))
+					#return 1
+				fi
+			fi
+		fi
+
+		pidsArray=("${newPidsArray[@]}")
+		sleep $SLEEP_TIME
+	done
+
+	if [ $exit_on_error == true ] && [ $errorcount -gt 0 ]; then
+		Logger "Stopping execution." "CRITICAL"
+		exit 1337
+	else
+		return $errorcount
+	fi
+}
+
+function WaitForCompletion {
+	local pid="${1}" # pid to wait for
+	local soft_max_time="${2}" # If program with pid $pid takes longer than $soft_max_time seconds, will log a warning, unless $soft_max_time equals 0.
+	local hard_max_time="${3}" # If program with pid $pid takes longer than $hard_max_time seconds, will stop execution, unless $hard_max_time equals 0.
+	local caller_name="${4}" # Who called this function
+
+	local soft_alert=0 # Does a soft alert need to be triggered, if yes, send an alert once
+	local log_time=0 # local time instance for comparaison
+
+	local seconds_begin=$SECONDS # Seconds since the beginning of the script
+	local exec_time=0 # Seconds since the beginning of this function
+
+	local retval=0 # return value of monitored pid process
+
+	while eval "$PROCESS_TEST_CMD" > /dev/null
+	do
+		Spinner
+		if [ $((($SECONDS + 1) % $KEEP_LOGGING)) -eq 0 ]; then
+			if [ $log_time -ne $SECONDS ]; then
+				log_time=$SECONDS
+				Logger "Current task still running." "NOTICE"
+			fi
+		fi
+		if [ $SECONDS -gt $soft_max_time ]; then
+			if [ $soft_alert -eq 0 ] && [ $soft_max_time != 0 ]; then
+				Logger "Max soft execution time exceeded for script." "WARN"
+				soft_alert=1
+				SendAlert
+			fi
+			if [ $SECONDS -gt $hard_max_time ] && [ $hard_max_time != 0 ]; then
+				Logger "Max hard execution time exceeded for script in [$caller_name]. Stopping current task execution." "ERROR"
+				KillChilds $pid
+				if [ $? == 0 ]; then
+					Logger "Task stopped successfully" "NOTICE"
+					return 0
+				else
+					return 1
+				fi
+			fi
+		fi
+		sleep $SLEEP_TIME
+	done
+	wait $pid
+	retval=$?
+	return $retval
+}
+
 #### MINIMAL-FUNCTION-SET END ####
 
 function CheckEnvironment {
@@ -647,21 +835,6 @@ function TrapQuit {
 	KillChilds $$ > /dev/null 2>&1
 	Logger "Service $PROGRAM stopped instance [$INSTANCE_ID] with pid [$$]." "NOTICE"
 	exit
-}
-
-function WaitForIt {
-	local pid="${1}"
-
-	if [ "$pid" != "" ]; then
-		while ps -p "$1" > /dev/null 2>&1
-		do
-			sleep $WAIT_TIME
-		done
-		return 0
-	else
-		Logger "Bogus pid [$pid] given to [$FUNCNAME]." "ERROR"
-		return 1
-	fi
 }
 
 function OCR {
@@ -750,7 +923,7 @@ function OCR_service {
 	do
 		Logger "Started $PROGRAM instance [$INSTANCE_ID] for directory [$DIRECTORY_TO_PROCESS], monitoring extension [$FILE_EXTENSION]." "NOTICE"
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$FILE_EXTENSION" -qq -r -e create "$DIRECTORY_TO_PROCESS" &
-		WaitForIt $!
+		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} false
 		sleep $WAIT_TIME
 		OCR "$DIRECTORY_TO_PROCESS" "$FILE_EXTENSION" "$OCR_ENGINE_ARGS" "$CSV_HACK"
 	done

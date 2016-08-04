@@ -1,8 +1,8 @@
 RECENT CHANGES
 --------------
 
-XX xxx 2016: v1.4
-- Merged more recent ofunctions
+04 Aug 2016: v1.4
+- Merged more recent common function set
 - Improved logging
 - Improved installer
 - Added a systemd unit file
@@ -12,7 +12,7 @@ XX xxx 2016: v1.4
 - Refactored code that became totally unreadable for human being :)
 - Improved sub process terminate code
 - Improved daemon logging
-- Improved mail alert support
+- Improved mail alert support in daemon mode
 
 03 Mar 2016: v1.3
 - Merged function codebase with osync and obackup

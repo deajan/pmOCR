@@ -20,7 +20,7 @@ FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\|bmp\|pcx\|dcx\)"
 
 ##### THE FOLLOWING PARAMETERS ARE USED WHEN pmOCR IS RUN AS SERVICE
 
-## List of alert mails separated by spaces Default log file until config file is loaded
+## List of alert mails separated by spaces
 DESTINATION_MAILS="infrastructure@example.com"
 
 ## Directories to monitor (Leave variables empty in order to disable specific monitoring).
@@ -768,6 +768,9 @@ function WaitForCompletion {
 }
 
 #### MINIMAL-FUNCTION-SET END ####
+
+# Fix SLEEP_TIME set to low in ofunctions
+SLEEP_TIME=$WAIT_TIME
 
 function CheckEnvironment {
 	if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then

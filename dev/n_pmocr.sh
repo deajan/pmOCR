@@ -20,7 +20,7 @@ FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\|bmp\|pcx\|dcx\)"
 
 ##### THE FOLLOWING PARAMETERS ARE USED WHEN pmOCR IS RUN AS SERVICE
 
-## List of alert mails separated by spaces Default log file until config file is loaded
+## List of alert mails separated by spaces
 DESTINATION_MAILS="infrastructure@example.com"
 
 ## Directories to monitor (Leave variables empty in order to disable specific monitoring).

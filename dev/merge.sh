@@ -22,7 +22,7 @@ function Merge {
 }
 
 function CopyCommons {
-        sed "s/\[prgname\]/$PROGRAM/g" /home/git/common/common_install.sh > ../tmp_install.sh
+        sed "s/\[prgname\]/$PROGRAM/g" common_install.sh > ../tmp_install.sh
         sed "s/\[version\]/$VERSION/g" ../tmp_install.sh > ../install.sh
         chmod +x ../install.sh
 }

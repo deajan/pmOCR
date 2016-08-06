@@ -1,6 +1,12 @@
 RECENT CHANGES
 --------------
 
+06 Aug 2016: v1.4.1
+- Fixed mail alerts not sent
+- Improved debugging and logging
+- Merged dev builder with other projects
+- Cleaned code (a bit)
+
 04 Aug 2016: v1.4
 - Merged more recent common function set
 - Improved logging

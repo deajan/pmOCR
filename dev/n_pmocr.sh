@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.4.1
-PROGRAM_BUILD=2016080604
+PROGRAM_BUILD=2016080605
 
 ## Debug parameter for service
 _DEBUG=no
@@ -24,15 +24,14 @@ FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\|bmp\|pcx\|dcx\)"
 #######################################################################
 
 ## List of alert mails separated by spaces
-DESTINATION_MAILS="ozy@netpower.fr"
+DESTINATION_MAILS="infrastructure@example.com"
 
 ## Directories to monitor (Leave variables empty in order to disable specific monitoring).
 ## As of today, Tesseract only handles PDF
-PDF_MONITOR_DIR="/home/git/pmOCR/dev/test"
-#PDF_MONITOR_DIR="/storage/service_ocr/PDF"
-#WORD_MONITOR_DIR="/storage/service_ocr/WORD"
-#EXCEL_MONITOR_DIR="/storage/service_ocr/EXCEL"
-#CSV_MONITOR_DIR="/storage/service_ocr/CSV"
+PDF_MONITOR_DIR="/storage/service_ocr/PDF"
+WORD_MONITOR_DIR="/storage/service_ocr/WORD"
+EXCEL_MONITOR_DIR="/storage/service_ocr/EXCEL"
+CSV_MONITOR_DIR="/storage/service_ocr/CSV"
 
 ## Adds the following suffix to OCRed files (ex: input.tiff becomes input_OCR.pdf). Any file containing this suffix will be ignored.
 FILENAME_SUFFIX="_OCR"

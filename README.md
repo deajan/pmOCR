@@ -12,6 +12,12 @@ In service mode, it will monitor directories and launch OCR conversions as soon 
 
 pOCR has some to include current date into the output filename, ignore already OCRed PDF files and delete input file after successful conversion.
 
+## Install it
+
+    $ git clone -b "v1.4.1" https://github.com/deajan/pmOCR
+    $ cd pmOCR
+    $ ./install.sh
+
 ## Batch mode
 
 Use pmocr to batch convert / OCR all files in a given directory and its subdirectories. Ignore already OCRed files (based on file suffix, or check if PDF already contains embedded fonts).
@@ -20,18 +26,17 @@ You'll get the full command line usage by launching the program without any para
 
 Example:
 
-$ pmocr.sh --batch --target=pdf --skip-txt-pdf --delete-input /some/path
+    $ pmocr.sh --batch --target=pdf --skip-txt-pdf --delete-input /some/path
 
 ## Service mode
 
 Service mode monitors directories and their subdirectories and launched an OCR conversion whenever a new file appears.
+Keep in mind that only file creations are monitored. File moves aren't.
 
 Basically it's written to monitor up to 4 directories, each producing a different target format (PDF, Word, Excel & CSV).
 
 There's also an option to avoid passing PDFs to the OCR engine that already contain text.
 
-
-Use install.sh script or copy pmocr.sh to /usr/local/bin and pmocr-srv to /etc/init.d
 
 After installation, please configure /usr/local/bin/pmocr.sh script variables in order to monitor the directories you need, and adjust your specific options.
 

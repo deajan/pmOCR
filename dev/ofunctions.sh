@@ -1,6 +1,6 @@
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016080403
+## FUNC_BUILD=2016080602
 ## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 #TODO: set _LOGGER_PREFIX in other apps, specially for osync daemon mode
@@ -694,6 +694,16 @@ function WaitForCompletion {
 	return $retval
 }
 
+function CleanUp {
+	__CheckArguments 0 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
+
+	if [ "$_DEBUG" != "yes" ]; then
+		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID"
+		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
+		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.tmp"
+	fi
+}
+
 #### MINIMAL-FUNCTION-SET END ####
 
 # obsolete, use StripQuotes
@@ -760,16 +770,6 @@ function urlDecode {
     local url_encoded="${1//+/ }"
 
     printf '%b' "${url_encoded//%/\\x}"
-}
-
-function CleanUp {
-	__CheckArguments 0 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
-
-	if [ "$_DEBUG" != "yes" ]; then
-		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID"
-		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
-		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.tmp"
-	fi
 }
 
 function GetLocalOS {
@@ -1099,8 +1099,6 @@ function RsyncPatternsFromAdd {
         local pattern_type="${1}"
         local pattern_from="${2}"
 	__CheckArguments 2 $# ${FUNCNAME[0]} "$@"    #__WITH_PARANOIA_DEBUG
-
-	local pattern_from=
 
         ## Check if the exclude list has a full path, and if not, add the config file path if there is one
         if [ "$(basename $pattern_from)" == "$pattern_from" ]; then

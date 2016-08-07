@@ -1,6 +1,8 @@
 RECENT CHANGES
 --------------
 
+- Updated ofunctions from other projects
+
 06 Aug 2016: v1.4.1
 - Fixed mail alerts not sent
 - Improved debugging and logging

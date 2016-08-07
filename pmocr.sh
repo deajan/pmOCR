@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.4.1
-PROGRAM_BUILD=2016080605
+PROGRAM_VERSION=1.5-dev
+PROGRAM_BUILD=2016080701
 
 ## Debug parameter for service
 _DEBUG=no
@@ -98,7 +98,7 @@ _LOGGER_PREFIX="date"
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016080602
+## FUNC_BUILD=2016080702
 ## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 #TODO: set _LOGGER_PREFIX in other apps, specially for osync daemon mode
@@ -650,6 +650,7 @@ function WaitForTaskCompletion {
 	local hard_max_time="${3}" # If program with pid $pid takes longer than $hard_max_time seconds, will stop execution, unless $hard_max_time equals 0.
 	local caller_name="${4}" # Who called this function
 	local exit_on_error="${5:-false}" # Should the function exit on subprocess errors
+	local counting="{6:-true}" # Count time since function launch if true, script launch if false
 
 
 	local soft_alert=0 # Does a soft alert need to be triggered, if yes, send an alert once
@@ -682,7 +683,12 @@ function WaitForTaskCompletion {
 		done
 
 		Spinner
-		exec_time=$(($SECONDS - $seconds_begin))
+		if [ $counting == true ]; then
+			exec_time=$(($SECONDS - $seconds_begin))
+		else
+			exec_time=$SECONDS
+		fi
+
 		if [ $((($exec_time + 1) % $KEEP_LOGGING)) -eq 0 ]; then
 			if [ $log_ttime -ne $exec_time ]; then
 				log_ttime=$exec_time
@@ -702,10 +708,8 @@ function WaitForTaskCompletion {
 				KillChilds $pid
 				if [ $? == 0 ]; then
 					Logger "Task stopped successfully" "NOTICE"
-					#return 0
 				else
 					errrorcount=$((errorcount+1))
-					#return 1
 				fi
 			fi
 		fi
@@ -720,53 +724,6 @@ function WaitForTaskCompletion {
 	else
 		return $errorcount
 	fi
-}
-
-function WaitForCompletion {
-	local pid="${1}" # pid to wait for
-	local soft_max_time="${2}" # If program with pid $pid takes longer than $soft_max_time seconds, will log a warning, unless $soft_max_time equals 0.
-	local hard_max_time="${3}" # If program with pid $pid takes longer than $hard_max_time seconds, will stop execution, unless $hard_max_time equals 0.
-	local caller_name="${4}" # Who called this function
-
-	local soft_alert=0 # Does a soft alert need to be triggered, if yes, send an alert once
-	local log_time=0 # local time instance for comparaison
-
-	local seconds_begin=$SECONDS # Seconds since the beginning of the script
-	local exec_time=0 # Seconds since the beginning of this function
-
-	local retval=0 # return value of monitored pid process
-
-	while eval "$PROCESS_TEST_CMD" > /dev/null
-	do
-		Spinner
-		if [ $((($SECONDS + 1) % $KEEP_LOGGING)) -eq 0 ]; then
-			if [ $log_time -ne $SECONDS ]; then
-				log_time=$SECONDS
-				Logger "Current task still running." "NOTICE"
-			fi
-		fi
-		if [ $SECONDS -gt $soft_max_time ]; then
-			if [ $soft_alert -eq 0 ] && [ $soft_max_time != 0 ]; then
-				Logger "Max soft execution time exceeded for script." "WARN"
-				soft_alert=1
-				SendAlert
-			fi
-			if [ $SECONDS -gt $hard_max_time ] && [ $hard_max_time != 0 ]; then
-				Logger "Max hard execution time exceeded for script in [$caller_name]. Stopping current task execution." "ERROR"
-				KillChilds $pid
-				if [ $? == 0 ]; then
-					Logger "Task stopped successfully" "NOTICE"
-					return 0
-				else
-					return 1
-				fi
-			fi
-		fi
-		sleep $SLEEP_TIME
-	done
-	wait $pid
-	retval=$?
-	return $retval
 }
 
 function CleanUp {
@@ -948,7 +905,7 @@ function OCR_service {
 	while true
 	do
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess" &
-		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} false
+		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} false true
 		sleep $WAIT_TIME
 		OCR "$directoryToProcess" "$fileExtension" "$ocrEngineArgs" "$csvHack"
 	done

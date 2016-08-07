@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.4.1
-PROGRAM_BUILD=2016080605
+PROGRAM_VERSION=1.5-dev
+PROGRAM_BUILD=2016080701
 
 ## Debug parameter for service
 _DEBUG=no
@@ -266,7 +266,7 @@ function OCR_service {
 	while true
 	do
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess" &
-		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} false
+		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} false true
 		sleep $WAIT_TIME
 		OCR "$directoryToProcess" "$fileExtension" "$ocrEngineArgs" "$csvHack"
 	done

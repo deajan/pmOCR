@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-dev
-PROGRAM_BUILD=2016080701
+PROGRAM_BUILD=2016081501
 
 ## Debug parameter for service
 _DEBUG=no
@@ -98,11 +98,8 @@ _LOGGER_PREFIX="date"
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016080702
+## FUNC_BUILD=2016081501
 ## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
-
-#TODO: set _LOGGER_PREFIX in other apps, specially for osync daemon mode
-#TODO: set _LOGGER_STDERR in other apps
 
 ## type -p does not work on platforms other than linux (bash). If if does not work, always assume output is not a zero exitcode
 if ! type "$BASH" > /dev/null; then
@@ -396,7 +393,7 @@ function SendAlert {
 	fi
 
 	# Windows specific
-        if type "mailsend.exe" > /dev/null 2>&1 ; then
+	if type "mailsend.exe" > /dev/null 2>&1 ; then
 
 		if [ "$SMTP_ENCRYPTION" != "tls" ] && [ "$SMTP_ENCRYPTION" != "ssl" ]  && [ "$SMTP_ENCRYPTION" != "none" ]; then
 			Logger "Bogus smtp encryption, assuming none." "WARN"
@@ -409,14 +406,14 @@ function SendAlert {
 		if [ "$SMTP_USER" != "" ] && [ "$SMTP_USER" != "" ]; then
 			auth_string="-auth -user \"$SMTP_USER\" -pass \"$SMTP_PASSWORD\""
 		fi
-                $(type mailsend.exe) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -sub "$subject" -M "$MAIL_ALERT_MSG" -attach "$attachment" -smtp "$SMTP_SERVER" -port "$SMTP_PORT" $encryption_string $auth_string
-                if [ $? != 0 ]; then
-                        Logger "Cannot send mail via $(type mailsend.exe) !!!" "WARN"
-                else
-                        Logger "Sent mail using mailsend.exe command with attachment." "NOTICE"
-                        return 0
-                fi
-        fi
+		$(type mailsend.exe) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -sub "$subject" -M "$MAIL_ALERT_MSG" -attach "$attachment" -smtp "$SMTP_SERVER" -port "$SMTP_PORT" $encryption_string $auth_string
+		if [ $? != 0 ]; then
+			Logger "Cannot send mail via $(type mailsend.exe) !!!" "WARN"
+		else
+			Logger "Sent mail using mailsend.exe command with attachment." "NOTICE"
+			return 0
+		fi
+	fi
 
 	# Windows specific, kept for compatibility (sendemail from http://caspian.dotconf.net/menu/Software/SendEmail/)
 	if type sendemail > /dev/null 2>&1 ; then
@@ -535,7 +532,7 @@ function SendEmail {
 	fi
 
 	# Windows specific
-        if type "mailsend.exe" > /dev/null 2>&1 ; then
+	if type "mailsend.exe" > /dev/null 2>&1 ; then
 		if [ "$sender_email" == "" ]; then
 			Logger "Missing sender email." "ERROR"
 			return 1
@@ -559,14 +556,14 @@ function SendEmail {
 		if [ "$smtp_user" != "" ] && [ "$smtp_password" != "" ]; then
 			auth_string="-auth -user \"$smtp_user\" -pass \"$smtp_password\""
 		fi
-                $(type mailsend.exe) -f "$sender_email" -t "$destination_mails" -sub "$subject" -M "$message" -attach "$attachment" -smtp "$smtp_server" -port "$smtp_port" $encryption_string $auth_string
-                if [ $? != 0 ]; then
-                        Logger "Cannot send mail via $(type mailsend.exe) !!!" "WARN"
-                else
-                        Logger "Sent mail using mailsend.exe command with attachment." "NOTICE"
-                        return 0
-                fi
-        fi
+		$(type mailsend.exe) -f "$sender_email" -t "$destination_mails" -sub "$subject" -M "$message" -attach "$attachment" -smtp "$smtp_server" -port "$smtp_port" $encryption_string $auth_string
+		if [ $? != 0 ]; then
+			Logger "Cannot send mail via $(type mailsend.exe) !!!" "WARN"
+		else
+			Logger "Sent mail using mailsend.exe command with attachment." "NOTICE"
+			return 0
+		fi
+	fi
 
 	# pfSense specific
 	if [ -f /usr/local/bin/mail.php ]; then
@@ -644,13 +641,22 @@ function Spinner {
 	esac
 }
 
+# Array to string converter, see http://stackoverflow.com/questions/1527049/bash-join-elements-of-an-array
+# usage: joinString separaratorChar Array
+function joinString {
+	local IFS="$1"; shift; echo "$*";
+}
+
+# Time control function for background processes, suitable for multiple synchronous processes
+# Fills a global variable called WAIT_FOR_TASK_COMPLETION that contains list of failed pids in format pid1:result1;pid2:result2
+# Warning: Don't imbricate this function into another run if you plan to use the global variable output
 function WaitForTaskCompletion {
 	local pids="${1}" # pids to wait for, separated by semi-colon
 	local soft_max_time="${2}" # If program with pid $pid takes longer than $soft_max_time seconds, will log a warning, unless $soft_max_time equals 0.
 	local hard_max_time="${3}" # If program with pid $pid takes longer than $hard_max_time seconds, will stop execution, unless $hard_max_time equals 0.
 	local caller_name="${4}" # Who called this function
 	local exit_on_error="${5:-false}" # Should the function exit on subprocess errors
-	local counting="{6:-true}" # Count time since function launch if true, script launch if false
+	local counting="${6:-true}" # Count time since function launch if true, script launch if false
 
 
 	local soft_alert=0 # Does a soft alert need to be triggered, if yes, send an alert once
@@ -663,21 +669,36 @@ function WaitForTaskCompletion {
 	local errorcount=0 # Number of pids that finished with errors
 
 	local pidCount # number of given pids
+	local pidState # State of the process
 
 	IFS=';' read -a pidsArray <<< "$pids"
 	pidCount=${#pidsArray[@]}
+
+	WAIT_FOR_TASK_COMPLETION=""
+
+	#TODO: need to find a way to properly handle processes in unterruptible sleep state
 
 	while [ ${#pidsArray[@]} -gt 0 ]; do
 		newPidsArray=()
 		for pid in "${pidsArray[@]}"; do
 			if kill -0 $pid > /dev/null 2>&1; then
-				newPidsArray+=($pid)
+				# Handle uninterruptible sleep state or zombies by ommiting them from running process array
+				#TODO(high): have this tested on *BSD, Mac & Win
+				pidState=$(ps -p$pid -o state=)
+				if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
+					newPidsArray+=($pid)
+				fi
 			else
 				wait $pid
 				result=$?
 				if [ $result -ne 0 ]; then
 					errorcount=$((errorcount+1))
 					Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$result]." "DEBUG"
+					if [ "$WAIT_FOR_TASK_COMPLETION" == "" ]; then
+						WAIT_FOR_TASK_COMPLETION="$pid:$result"
+					else
+						WAIT_FOR_TASK_COMPLETION=";$pid:$result"
+					fi
 				fi
 			fi
 		done
@@ -692,25 +713,27 @@ function WaitForTaskCompletion {
 		if [ $((($exec_time + 1) % $KEEP_LOGGING)) -eq 0 ]; then
 			if [ $log_ttime -ne $exec_time ]; then
 				log_ttime=$exec_time
-				Logger "Current tasks still running with pids [${pidsArray[@]}]." "NOTICE"
+				Logger "Current tasks still running with pids [$(joinString , ${pidsArray[@]})]." "NOTICE"
 			fi
 		fi
 
 		if [ $exec_time -gt $soft_max_time ]; then
 			if [ $soft_alert -eq 0 ] && [ $soft_max_time -ne 0 ]; then
-				Logger "Max soft execution time exceeded for task [$caller_name] with pids [${pidsArray[@]}]." "WARN"
+				Logger "Max soft execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]." "WARN"
 				soft_alert=1
 				SendAlert
 
 			fi
 			if [ $exec_time -gt $hard_max_time ] && [ $hard_max_time -ne 0 ]; then
-				Logger "Max hard execution time exceeded for task [$caller_name] with pids [${pidsArray[@]}]. Stopping task execution." "ERROR"
+				Logger "Max hard execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]. Stopping task execution." "ERROR"
 				KillChilds $pid
 				if [ $? == 0 ]; then
-					Logger "Task stopped successfully" "NOTICE"
+					Logger "Task stopped successfully." "NOTICE"
 				else
-					errrorcount=$((errorcount+1))
+					Logger "Could not stop task." "ERROR"
 				fi
+				SendAlert
+				errrorcount=$((errorcount+1))
 			fi
 		fi
 

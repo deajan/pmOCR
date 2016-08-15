@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-dev
-PROGRAM_BUILD=2016080701
+PROGRAM_BUILD=2016081501
 
 ## Debug parameter for service
 _DEBUG=no

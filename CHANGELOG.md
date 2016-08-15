@@ -3,6 +3,7 @@ RECENT CHANGES
 
 15 Aug 2016: v1.4.2
 
+- Removed keep logging statement from WaitForTaskCompletion function
 - Fixed rare bug where original PDF file gets deleted without succeded transformation
 - Removed NO_DELETE_SUFFIX that is not used anymore
 - More debug logs

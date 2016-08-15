@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5-dev
-PROGRAM_BUILD=2016081501
+PROGRAM_VERSION=1.4.2
+PROGRAM_BUILD=2016081503
 
 ## Debug parameter for service
 _DEBUG=no
@@ -38,8 +38,6 @@ FILENAME_SUFFIX="_OCR"
 
 ## Delete original file upon successful OCR
 DELETE_ORIGINAL=no
-## If file is not deleted, add a suffix so it won't be processed again. This suffix is added toghether with FILENAME_SUFFIX.
-NO_DELETE_SUFFIX="_NO"
 
 # Alternative check if PDFs are already OCRed (checks if a pdf contains a font). This will prevent images integrated in already indexed PDFs to get OCRed.
 CHECK_PDF=yes
@@ -860,19 +858,27 @@ function OCR {
 
 		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$file" 2> /dev/null | wc -l) -lt 3 ])); then
 			if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
-				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX$fileExtension\"" > "$RUN_DIR/$PROGRAM.$FUNCNAME[0].$SCRIPT_PID"
+				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+				Logger "Executing: $cmd" "DEBUG"
 				eval "$cmd"
 				result=$?
 			elif [ "$OCR_ENGINE" == "tesseract3" ]; then
+				# Empty tmp log file first
+				echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
 				# Intermediary transformation of input pdf file to tiff
 				if [[ $file == *.[pP][dD][fF] ]]; then
 					tmpFile="$file.tif"
-					subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFile\" \"$file\""
+					subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFile\" \"$file\" >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+					Logger "Executing: $subcmd" "DEBUG"
 					eval "$subcmd"
+					if [ $? != "" ]; then
+						Logger "Subcmd failed." "ERROR"
+					fi
 					originalFile="$file"
 					file="$tmpFile"
 				fi
-				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\" $ocrEngineArgs" > "$RUN_DIR/$PROGRAM.$FUNCNAME[0].$SCRIPT_PID"
+				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\" $ocrEngineArgs >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+				Logger "Executing: $cmd" "DEBUG"
 				eval "$cmd"
 				result=$?
 				if [ "$originalFile" != "" ]; then
@@ -885,33 +891,37 @@ function OCR {
 			else
 				Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
 			fi
-		else
-			Logger "Skipping file [$file] already containing text." "NOTICE"
-		fi
 
-		if [ $result != 0 ]; then
-			Logger "Could not process file [$file] (error code $result)." "ERROR"
-			Logger "$(cat $RUN_DIR/$PROGRAM.$FUNCNAME[0].$SCRIPT_PID)" "ERROR"
-			if [ "$_SERVICE_RUN" -eq 1 ]; then
-				SendAlert
-			fi
-		else
-			# Convert 4 spaces or more to semi colon (hack to transform abbyyocr11 txt output to CSV)
-			if [ $csvHack == true ]; then
-				find "$directoryToProcess" -type f -name "*$FILENAME_SUFFIX$fileExtension" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
-			fi
+			if [ $result != 0 ]; then
+				Logger "Could not process file [$file] (error code $result)." "ERROR"
+				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "ERROR"
+				if [ "$_SERVICE_RUN" -eq 1 ]; then
+					SendAlert
+				fi
+			else
+				# Convert 4 spaces or more to semi colon (hack to transform abbyyocr11 txt output to CSV)
+				if [ $csvHack == true ]; then
+					Logger "Applying CSV fix" "DEBUG"
+					find "$directoryToProcess" -type f -name "*$FILENAME_SUFFIX$fileExtension" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
+				fi
 
-			if ( [ "$_BATCH_RUN" -eq 1 ] && [ "$_SILENT" -ne 1 ]); then
+				if ( [ "$_BATCH_RUN" -eq 1 ] && [ "$_SILENT" -ne 1 ]); then
+					Logger "Processed file [$file]." "NOTICE"
+				fi
+
+				if [ "$DELETE_ORIGINAL" == "yes" ]; then
+					Logger "Deleting file [$file]." "DEBUG"
+					rm -f "$file"
+				else
+					Logger "Renaming file [$file] to [${file%.*}$FILENAME_SUFFIX.${file##*.}]." "DEBUG"
+					mv "$file" "${file%.*}$FILENAME_SUFFIX.${file##*.}"
+				fi
+
 				Logger "Processed file [$file]." "NOTICE"
 			fi
 
-			if [ "$DELETE_ORIGINAL" == "yes" ]; then
-				rm -f "$file"
-			else
-				mv "$file" "${file%.*}$NO_DELETE_SUFFIX$FILENAME_SUFFIX.${file##*.}"
-			fi
-
-			Logger "Processed file [$file]." "NOTICE"
+		else
+			Logger "Skipping file [$file] already containing text." "NOTICE"
 		fi
 	done
 }

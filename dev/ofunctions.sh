@@ -1,6 +1,6 @@
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016081502
+## FUNC_BUILD=2016081602
 ## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## type -p does not work on platforms other than linux (bash). If if does not work, always assume output is not a zero exitcode
@@ -576,10 +576,10 @@ function WaitForTaskCompletion {
 	local caller_name="${4}" # Who called this function
 	local exit_on_error="${5:-false}" # Should the function exit on subprocess errors
 	local counting="${6:-true}" # Count time since function launch if true, script launch if false
-	local keep_logging="${7}" # Log a standby message every X seconds. Set to zero to disable logging
+	local keep_logging="${7:-0}" # Log a standby message every X seconds. Set to zero to disable logging
 
 	Logger "${FUNCNAME[0]} called by [$caller_name]." "PARANOIA_DEBUG"	#__WITH_PARANOIA_DEBUG
-	__CheckArguments 6 $# ${FUNCNAME[0]} "$@"				#__WITH_PARANOIA_DEBUG
+	__CheckArguments 7 $# ${FUNCNAME[0]} "$@"				#__WITH_PARANOIA_DEBUG
 
 	local soft_alert=0 # Does a soft alert need to be triggered, if yes, send an alert once
 	local log_ttime=0 # local time instance for comparaison
@@ -648,12 +648,14 @@ function WaitForTaskCompletion {
 			fi
 			if [ $exec_time -gt $hard_max_time ] && [ $hard_max_time -ne 0 ]; then
 				Logger "Max hard execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]. Stopping task execution." "ERROR"
-				KillChilds $pid
-				if [ $? == 0 ]; then
-					Logger "Task stopped successfully." "NOTICE"
-				else
-					Logger "Could not stop task." "ERROR"
-				fi
+				for pid in "${pidsArray[@]}"; do
+					KillChilds $pid
+					if [ $? == 0 ]; then
+						Logger "Task with pid [$pid] stopped successfully." "NOTICE"
+					else
+						Logger "Could not stop task with pid [$pid]." "ERROR"
+					fi
+				done
 				SendAlert
 				errrorcount=$((errorcount+1))
 			fi

@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.4.2
-PROGRAM_BUILD=2016081504
+PROGRAM_VERSION=1.5-dev
+PROGRAM_BUILD=2016082602
 
 ## Debug parameter for service
 _DEBUG=no
@@ -45,6 +45,9 @@ CHECK_PDF=yes
 ## Add some extra info to the filename. Example here adds a pseudo ISO 8601 timestamp after a dot (pseudo because the colon sign would render the filename quite weird).
 ## Keep variables between singlequotes if you want them to expand at runtime. Leave this variable empty if you don't want to add anything.
 FILENAME_ADDITION='.$(date --utc +"%Y-%m-%dT%H-%M-%SZ")'
+
+# Number of OCR subprocesses to start simultaneously. Do not exceed the number of CPU cores.
+NUMBER_OF_PROCESSES=4
 
 # Wait a trivial number of seconds before launching OCR
 WAIT_TIME=1
@@ -93,10 +96,11 @@ CSV_EXTENSION=".csv"
 #### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
 
 _LOGGER_PREFIX="date"
+KEEP_LOGGING=0
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016081502
+## FUNC_BUILD=2016082607
 ## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## type -p does not work on platforms other than linux (bash). If if does not work, always assume output is not a zero exitcode
@@ -104,9 +108,6 @@ if ! type "$BASH" > /dev/null; then
 	echo "Please run this script only with bash shell. Tested on bash >= 3.2"
 	exit 127
 fi
-
-## Log a state message every $KEEP_LOGGING seconds. Should not be equal to soft or hard execution time so your log will not be unnecessary big.
-KEEP_LOGGING=1801
 
 ## Correct output of sort command (language agnostic sorting)
 export LC_ALL=C
@@ -119,11 +120,16 @@ _DRYRUN=0
 _SILENT=0
 _LOGGER_PREFIX="date"
 _LOGGER_STDERR=0
-
+if [ "$KEEP_LOGGING" == "" ]; then
+        KEEP_LOGGING=1801
+fi
 
 # Initial error status, logging 'WARN', 'ERROR' or 'CRITICAL' will enable alerts flags
 ERROR_ALERT=0
 WARN_ALERT=0
+
+# Current log
+CURRENT_LOG=
 
 
 ## allow debugging from command line with _DEBUG=yes
@@ -181,6 +187,7 @@ function _Logger {
 	local evalue="${3}" # What to log to stderr
 
 	echo -e "$lvalue" >> "$LOG_FILE"
+	CURRENT_LOG="$CURRENT_LOG"$'\n'"$lvalue"
 
 	if [ "$_LOGGER_STDERR" -eq 1 ]; then
 		cat <<< "$evalue" 1>&2
@@ -255,8 +262,8 @@ function QuickLogger {
 
 # Portable child (and grandchild) kill function tester under Linux, BSD and MacOS X
 function KillChilds {
-	local pid="${1}" # Parent pid to kill
-	local self="${2:-false}"
+	local pid="${1}" # Parent pid to kill childs
+	local self="${2:-false}" # Should parent be killed too ?
 
 
 	if children="$(pgrep -P "$pid")"; then
@@ -267,7 +274,7 @@ function KillChilds {
 		# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
 	if ( [ "$self" == true ] && kill -0 $pid > /dev/null 2>&1); then
 		Logger "Sending SIGTERM to process [$pid]." "DEBUG"
-		kill -s SIGTERM "$pid"
+		kill -s TERM "$pid"
 		if [ $? != 0 ]; then
 			sleep 15
 			Logger "Sending SIGTERM to process [$pid] failed." "DEBUG"
@@ -286,13 +293,14 @@ function KillChilds {
 
 function KillAllChilds {
 	local pids="${1}" # List of parent pids to kill separated by semi-colon
+	local self="${2:-false}" # Should parent be killed too ?
 
 
 	local errorcount=0
 
 	IFS=';' read -a pidsArray <<< "$pids"
 	for pid in "${pidsArray[@]}"; do
-		KillChilds $pid
+		KillChilds $pid $self
 		if [ $? != 0 ]; then
 			errorcount=$((errorcount+1))
 			fi
@@ -302,10 +310,13 @@ function KillAllChilds {
 
 # osync/obackup/pmocr script specific mail alert function, use SendEmail function for generic mail sending
 function SendAlert {
+	local runAlert="${1:-false}" # Specifies if current message is sent while running or at the end of a run
+
 
 	local mail_no_attachment=
 	local attachment_command=
 	local subject=
+	local body=
 
 	# Windows specific settings
 	local encryption_string=
@@ -334,7 +345,8 @@ function SendAlert {
 	else
 		mail_no_attachment=0
 	fi
-	MAIL_ALERT_MSG="$MAIL_ALERT_MSG"$'\n\n'$(tail -n 50 "$LOG_FILE")
+	body="$MAIL_ALERT_MSG"$'\n\n'"$CURRENT_LOG"
+
 	if [ $ERROR_ALERT -eq 1 ]; then
 		subject="Error alert for $INSTANCE_ID"
 	elif [ $WARN_ALERT -eq 1 ]; then
@@ -343,11 +355,17 @@ function SendAlert {
 		subject="Alert for $INSTANCE_ID"
 	fi
 
+	if [ $runAlert == true ]; then
+		subject="Currently runing - $subject"
+	else
+		subject="Fnished run - $subject"
+	fi
+
 	if [ "$mail_no_attachment" -eq 0 ]; then
 		attachment_command="-a $ALERT_LOG_FILE"
 	fi
 	if type mutt > /dev/null 2>&1 ; then
-		echo "$MAIL_ALERT_MSG" | $(type -p mutt) -x -s "$subject" $DESTINATION_MAILS $attachment_command
+		echo "$body" | $(type -p mutt) -x -s "$subject" $DESTINATION_MAILS $attachment_command
 		if [ $? != 0 ]; then
 			Logger "Cannot send alert mail via $(type -p mutt) !!!" "WARN"
 		else
@@ -364,10 +382,10 @@ function SendAlert {
 		else
 			attachment_command=""
 		fi
-		echo "$MAIL_ALERT_MSG" | $(type -p mail) $attachment_command -s "$subject" $DESTINATION_MAILS
+		echo "$body" | $(type -p mail) $attachment_command -s "$subject" $DESTINATION_MAILS
 		if [ $? != 0 ]; then
 			Logger "Cannot send alert mail via $(type -p mail) with attachments !!!" "WARN"
-			echo "$MAIL_ALERT_MSG" | $(type -p mail) -s "$subject" $DESTINATION_MAILS
+			echo "$body" | $(type -p mail) -s "$subject" $DESTINATION_MAILS
 			if [ $? != 0 ]; then
 				Logger "Cannot send alert mail via $(type -p mail) without attachments !!!" "WARN"
 			else
@@ -381,7 +399,7 @@ function SendAlert {
 	fi
 
 	if type sendmail > /dev/null 2>&1 ; then
-		echo -e "Subject:$subject\r\n$MAIL_ALERT_MSG" | $(type -p sendmail) $DESTINATION_MAILS
+		echo -e "Subject:$subject\r\n$body" | $(type -p sendmail) $DESTINATION_MAILS
 		if [ $? != 0 ]; then
 			Logger "Cannot send alert mail via $(type -p sendmail) !!!" "WARN"
 		else
@@ -404,7 +422,7 @@ function SendAlert {
 		if [ "$SMTP_USER" != "" ] && [ "$SMTP_USER" != "" ]; then
 			auth_string="-auth -user \"$SMTP_USER\" -pass \"$SMTP_PASSWORD\""
 		fi
-		$(type mailsend.exe) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -sub "$subject" -M "$MAIL_ALERT_MSG" -attach "$attachment" -smtp "$SMTP_SERVER" -port "$SMTP_PORT" $encryption_string $auth_string
+		$(type mailsend.exe) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -sub "$subject" -M "$body" -attach "$attachment" -smtp "$SMTP_SERVER" -port "$SMTP_PORT" $encryption_string $auth_string
 		if [ $? != 0 ]; then
 			Logger "Cannot send mail via $(type mailsend.exe) !!!" "WARN"
 		else
@@ -420,7 +438,7 @@ function SendAlert {
 		else
 			SMTP_OPTIONS=""
 		fi
-		$(type -p sendemail) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -u "$subject" -m "$MAIL_ALERT_MSG" -s $SMTP_SERVER $SMTP_OPTIONS > /dev/null 2>&1
+		$(type -p sendemail) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -u "$subject" -m "$body" -s $SMTP_SERVER $SMTP_OPTIONS > /dev/null 2>&1
 		if [ $? != 0 ]; then
 			Logger "Cannot send alert mail via $(type -p sendemail) !!!" "WARN"
 		else
@@ -431,7 +449,7 @@ function SendAlert {
 
 	# pfSense specific
 	if [ -f /usr/local/bin/mail.php ]; then
-		echo "$MAIL_ALERT_MSG" | /usr/local/bin/mail.php -s="$subject"
+		echo "$body" | /usr/local/bin/mail.php -s="$subject"
 		if [ $? != 0 ]; then
 			Logger "Cannot send alert mail via /usr/local/bin/mail.php (pfsense) !!!" "WARN"
 		else
@@ -653,9 +671,8 @@ function WaitForTaskCompletion {
 	local soft_max_time="${2}" # If program with pid $pid takes longer than $soft_max_time seconds, will log a warning, unless $soft_max_time equals 0.
 	local hard_max_time="${3}" # If program with pid $pid takes longer than $hard_max_time seconds, will stop execution, unless $hard_max_time equals 0.
 	local caller_name="${4}" # Who called this function
-	local exit_on_error="${5:-false}" # Should the function exit on subprocess errors
-	local counting="${6:-true}" # Count time since function launch if true, script launch if false
-	local keep_logging="${7}" # Log a standby message every X seconds. Set to zero to disable logging
+	local counting="${5:-true}" # Count time since function has been launched if true, since script has been launched if false
+	local keep_logging="${6:-0}" # Log a standby message every X seconds. Set to zero to disable logging
 
 
 	local soft_alert=0 # Does a soft alert need to be triggered, if yes, send an alert once
@@ -677,28 +694,6 @@ function WaitForTaskCompletion {
 
 	while [ ${#pidsArray[@]} -gt 0 ]; do
 		newPidsArray=()
-		for pid in "${pidsArray[@]}"; do
-			if kill -0 $pid > /dev/null 2>&1; then
-				# Handle uninterruptible sleep state or zombies by ommiting them from running process array
-				#TODO(high): have this tested on *BSD, Mac & Win
-				pidState=$(ps -p$pid -o state=)
-				if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
-					newPidsArray+=($pid)
-				fi
-			else
-				wait $pid
-				result=$?
-				if [ $result -ne 0 ]; then
-					errorcount=$((errorcount+1))
-					Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$result]." "DEBUG"
-					if [ "$WAIT_FOR_TASK_COMPLETION" == "" ]; then
-						WAIT_FOR_TASK_COMPLETION="$pid:$result"
-					else
-						WAIT_FOR_TASK_COMPLETION=";$pid:$result"
-					fi
-				fi
-			fi
-		done
 
 		Spinner
 		if [ $counting == true ]; then
@@ -720,29 +715,56 @@ function WaitForTaskCompletion {
 			if [ $soft_alert -eq 0 ] && [ $soft_max_time -ne 0 ]; then
 				Logger "Max soft execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]." "WARN"
 				soft_alert=1
-				SendAlert
+				SendAlert true
 
 			fi
 			if [ $exec_time -gt $hard_max_time ] && [ $hard_max_time -ne 0 ]; then
 				Logger "Max hard execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]. Stopping task execution." "ERROR"
-				KillChilds $pid
-				if [ $? == 0 ]; then
-					Logger "Task stopped successfully." "NOTICE"
-				else
-					Logger "Could not stop task." "ERROR"
-				fi
-				SendAlert
+				for pid in "${pidsArray[@]}"; do
+					KillChilds $pid true
+					if [ $? == 0 ]; then
+						Logger "Task with pid [$pid] stopped successfully." "NOTICE"
+					else
+						Logger "Could not stop task with pid [$pid]." "ERROR"
+					fi
+				done
+				SendAlert true
 				errrorcount=$((errorcount+1))
 			fi
 		fi
+
+		for pid in "${pidsArray[@]}"; do
+			if kill -0 $pid > /dev/null 2>&1; then
+				# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
+				#TODO(high): have this tested on *BSD, Mac & Win
+				pidState=$(ps -p$pid -o state= 2 > /dev/null)
+				if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
+					newPidsArray+=($pid)
+				fi
+			else
+				# pid is dead, get it's exit code from wait command
+				wait $pid
+				retval=$?
+				if [ $retval -ne 0 ]; then
+					errorcount=$((errorcount+1))
+					Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$retval]." "DEBUG"
+					if [ "$WAIT_FOR_TASK_COMPLETION" == "" ]; then
+						WAIT_FOR_TASK_COMPLETION="$pid:$retval"
+					else
+						WAIT_FOR_TASK_COMPLETION=";$pid:$retval"
+					fi
+				fi
+			fi
+		done
 
 		pidsArray=("${newPidsArray[@]}")
 		sleep $SLEEP_TIME
 	done
 
-	if [ $exit_on_error == true ] && [ $errorcount -gt 0 ]; then
-		Logger "Stopping execution." "CRITICAL"
-		exit 1337
+
+	# Return exit code if only one process was monitored, else return number of errors
+	if [ $pidCount -eq 1 ] && [ $errorcount -eq 0 ]; then
+		return $errorcount
 	else
 		return $errorcount
 	fi
@@ -831,7 +853,7 @@ function TrapQuit {
 	exit
 }
 
-function OCR {
+function OCR_old {
 	local directoryToProcess="$1" 	#(contains some path)
 	local fileExtension="$2" 		#(filename extension for output file)
 	local ocrEngineArgs="$3" 		#(transformation specific arguments)
@@ -927,6 +949,145 @@ function OCR {
 	done
 }
 
+function OCR {
+	local fileToProcess="$1" 	#(contains some path)
+	local fileExtension="$2" 		#(filename extension for output file)
+	local ocrEngineArgs="$3" 		#(transformation specific arguments)
+	local csvHack="${4:-false}" 		#(CSV transformation flag)
+
+	__CheckArguments 4 $# ${FUNCNAME[0]} "$@"
+
+	local findExcludes
+	local tmpFile
+	local originalFile
+	local file
+	local result
+
+	local cmd
+	local subcmd
+
+
+		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$fileToProcess" 2> /dev/null | wc -l) -lt 3 ])); then
+			if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
+				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"${fileToProcess%.*}$FILENAME_ADDITION$FILENAME_SUFFIX$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+				Logger "Executing: $cmd" "DEBUG"
+				eval "$cmd"
+				result=$?
+			elif [ "$OCR_ENGINE" == "tesseract3" ]; then
+				# Empty tmp log file first
+				echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+				# Intermediary transformation of input pdf file to tiff
+				if [[ $fileToProcess == *.[pP][dD][fF] ]]; then
+					tmpFile="$fileToProcess.tif"
+					subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFile\" \"$fileToProcess\" >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+					Logger "Executing: $subcmd" "DEBUG"
+					eval "$subcmd"
+					if [ $? != "" ]; then
+						Logger "Subcmd failed." "ERROR"
+					fi
+					originalFile="$fileToProcess"
+					file="$tmpFile"
+				fi
+				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"${fileToProcess%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\" $ocrEngineArgs >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+				Logger "Executing: $cmd" "DEBUG"
+				eval "$cmd"
+				result=$?
+				if [ "$originalFile" != "" ]; then
+					file="$originalFile"
+					if [ -f "$tmpFile" ]; then
+						rm -f "$tmpFile";
+					fi
+				fi
+
+			else
+				Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
+			fi
+
+			if [ $result != 0 ]; then
+				Logger "Could not process file [$fileToProcess] (error code $result)." "ERROR"
+				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "ERROR"
+				if [ "$_SERVICE_RUN" -eq 1 ]; then
+					SendAlert
+				fi
+			else
+				# Convert 4 spaces or more to semi colon (hack to transform abbyyocr11 txt output to CSV)
+				if [ $csvHack == true ]; then
+					Logger "Applying CSV fix" "DEBUG"
+					#find "$directoryToProcess" -type f -name "*$FILENAME_SUFFIX$fileExtension" -print0 | xargs -0 -I {}
+					#TODO: test this
+					sed -i 's/   */;/g' "{}" "$fileToProcess"
+				fi
+
+				if ( [ "$_BATCH_RUN" -eq 1 ] && [ "$_SILENT" -ne 1 ]); then
+					Logger "Processed file [$fileToProcess]." "NOTICE"
+				fi
+
+				if [ "$DELETE_ORIGINAL" == "yes" ]; then
+					Logger "Deleting file [$fileToProcess]." "DEBUG"
+					rm -f "$fileToProcess"
+				else
+					Logger "Renaming file [$fileToProcess] to [${fileToProcess%.*}$FILENAME_SUFFIX.${fileToProcess##*.}]." "DEBUG"
+					mv "$fileToProcess" "${fileToProcess%.*}$FILENAME_SUFFIX.${fileToProcess##*.}"
+				fi
+
+				Logger "Processed file [$fileToProcess]." "NOTICE"
+			fi
+
+		else
+			Logger "Skipping file [$fileToProcess] already containing text." "NOTICE"
+		fi
+}
+
+function OCR_Dispatch {
+	local directoryToProcess="$1" 	#(contains some path)
+	local fileExtension="$2" 		#(filename endings to exclude from processing)
+	local ocrEngineArgs="$3" 		#(transformation specific arguments)
+	local csvHack="$4" 			#(CSV transformation flag)
+
+	local fileList=()
+	local runningPids=0
+	local counter=0
+	local pids=()
+	local newPids=()
+
+	## CHECK find excludes
+	if [ "$FILENAME_SUFFIX" != "" ]; then
+		findExcludes="*$FILENAME_SUFFIX*"
+	else
+		findExcludes=""
+	fi
+
+
+	# Read filelist into array
+	while IFS= read -r -d $'\0' file; do
+		echo "the file = $file"
+		fileList+=($file)
+	#TODO: check this for spaces in filename
+	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+
+	while [ $counter -lt ${#fileList[@]} ]; do
+		while [ $counter -lt "${#fileList[@]}" ] && [ $runningPids -lt $NUMBER_OF_PROCESSES ]; do
+			cmd="OCR \"${fileList[$counter]}\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\" &"
+			Logger "cmd: $cmd" "NOTICE"
+			eval $cmd
+			pids+=($!)
+			counter=$((counter+1))
+			runningPids=$((runningPids+1))
+		done
+
+		newPids=()
+		for pid in "${pids[@]}"; do
+			if kill -0 $pid > /dev/null 2>&1; then
+				newPids+=($pid)
+			fi
+		done
+		pids=("${newPids[@]}")
+		runningPids=${#pids[@]}
+
+		sleep $SLEEP_TIME
+	done
+}
+
 function OCR_service {
 	## Function arguments
 	local directoryToProcess="$1" 	#(contains some path)
@@ -939,9 +1100,9 @@ function OCR_service {
 	while true
 	do
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess" &
-		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} false true 0
+		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} true 0
 		sleep $WAIT_TIME
-		OCR "$directoryToProcess" "$fileExtension" "$ocrEngineArgs" "$csvHack"
+		OCR_Dispatch "$directoryToProcess" "$fileExtension" "$ocrEngineArgs" "$csvHack"
 	done
 }
 
@@ -1117,25 +1278,25 @@ elif [ $_BATCH_RUN -eq 1 ]; then
 
 	if [ $pdf == true ]; then
 		Logger "Beginning PDF OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR "$batch_path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
+		OCR_Dispatch "$batch_path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
 		Logger "Process ended." "NOTICE"
 	fi
 
 	if [ $docx == true ]; then
 		Logger "Beginning DOCX OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR "$batch_path" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" false
+		OCR_Dispatch "$batch_path" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" false
 		Logger "Batch ended." "NOTICE"
 	fi
 
 	if [ $xlsx == true ]; then
 		Logger "Beginning XLSX OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR "$batch_path" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false
+		OCR_Dispatch "$batch_path" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false
 		Logger "batch ended." "NOTICE"
 	fi
 
 	if [ $csv == true ]; then
 		Logger "Beginning CSV OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR "$batch_path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
+		OCR_Dispatch "$batch_path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
 		Logger "Batch ended." "NOTICE"
 	fi
 

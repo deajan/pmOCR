@@ -1,6 +1,6 @@
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016081602
+## FUNC_BUILD=2016082606
 ## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## type -p does not work on platforms other than linux (bash). If if does not work, always assume output is not a zero exitcode
@@ -8,9 +8,6 @@ if ! type "$BASH" > /dev/null; then
 	echo "Please run this script only with bash shell. Tested on bash >= 3.2"
 	exit 127
 fi
-
-## Log a state message every $KEEP_LOGGING seconds. Should not be equal to soft or hard execution time so your log will not be unnecessary big.
-KEEP_LOGGING=1801
 
 ## Correct output of sort command (language agnostic sorting)
 export LC_ALL=C
@@ -23,11 +20,16 @@ _DRYRUN=0
 _SILENT=0
 _LOGGER_PREFIX="date"
 _LOGGER_STDERR=0
-
+if [ "$KEEP_LOGGING" == "" ]; then
+        KEEP_LOGGING=1801
+fi
 
 # Initial error status, logging 'WARN', 'ERROR' or 'CRITICAL' will enable alerts flags
 ERROR_ALERT=0
 WARN_ALERT=0
+
+# Current log
+CURRENT_LOG
 
 ## allow function call checks			#__WITH_PARANOIA_DEBUG
 if [ "$_PARANOIA_DEBUG" == "yes" ];then		#__WITH_PARANOIA_DEBUG
@@ -90,6 +92,7 @@ function _Logger {
 	local evalue="${3}" # What to log to stderr
 
 	echo -e "$lvalue" >> "$LOG_FILE"
+	CURRENT_LOG="$CURRENT_LOG"$'\n'"$lvalue"
 
 	if [ "$_LOGGER_STDERR" -eq 1 ]; then
 		cat <<< "$evalue" 1>&2
@@ -171,8 +174,8 @@ function QuickLogger {
 
 # Portable child (and grandchild) kill function tester under Linux, BSD and MacOS X
 function KillChilds {
-	local pid="${1}" # Parent pid to kill
-	local self="${2:-false}"
+	local pid="${1}" # Parent pid to kill childs
+	local self="${2:-false}" # Should parent be killed too ?
 
 
 	if children="$(pgrep -P "$pid")"; then
@@ -184,7 +187,7 @@ function KillChilds {
 		# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
 	if ( [ "$self" == true ] && kill -0 $pid > /dev/null 2>&1); then
 		Logger "Sending SIGTERM to process [$pid]." "DEBUG"
-		kill -s SIGTERM "$pid"
+		kill -s TERM "$pid"
 		if [ $? != 0 ]; then
 			sleep 15
 			Logger "Sending SIGTERM to process [$pid] failed." "DEBUG"
@@ -203,6 +206,7 @@ function KillChilds {
 
 function KillAllChilds {
 	local pids="${1}" # List of parent pids to kill separated by semi-colon
+	local self="${2:-false}" # Should parent be killed too ?
 
 	__CheckArguments 1 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
@@ -210,7 +214,7 @@ function KillAllChilds {
 
 	IFS=';' read -a pidsArray <<< "$pids"
 	for pid in "${pidsArray[@]}"; do
-		KillChilds $pid
+		KillChilds $pid $self
 		if [ $? != 0 ]; then
 			errorcount=$((errorcount+1))
 			fi
@@ -220,11 +224,14 @@ function KillAllChilds {
 
 # osync/obackup/pmocr script specific mail alert function, use SendEmail function for generic mail sending
 function SendAlert {
-	__CheckArguments 0 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
+	local runAlert="${1:-false}" # Specifies if current message is sent while running or at the end of a run
+
+	__CheckArguments 0-1 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
 	local mail_no_attachment=
 	local attachment_command=
 	local subject=
+	local body=
 
 	# Windows specific settings
 	local encryption_string=
@@ -253,7 +260,8 @@ function SendAlert {
 	else
 		mail_no_attachment=0
 	fi
-	MAIL_ALERT_MSG="$MAIL_ALERT_MSG"$'\n\n'$(tail -n 50 "$LOG_FILE")
+	body="$MAIL_ALERT_MSG"$'\n\n'"$CURRENT_LOG"
+
 	if [ $ERROR_ALERT -eq 1 ]; then
 		subject="Error alert for $INSTANCE_ID"
 	elif [ $WARN_ALERT -eq 1 ]; then
@@ -262,11 +270,17 @@ function SendAlert {
 		subject="Alert for $INSTANCE_ID"
 	fi
 
+	if [ $runAlert == true ]; then
+		subject="Currently runing - $subject"
+	else
+		subject="Fnished run - $subject"
+	fi
+
 	if [ "$mail_no_attachment" -eq 0 ]; then
 		attachment_command="-a $ALERT_LOG_FILE"
 	fi
 	if type mutt > /dev/null 2>&1 ; then
-		echo "$MAIL_ALERT_MSG" | $(type -p mutt) -x -s "$subject" $DESTINATION_MAILS $attachment_command
+		echo "$body" | $(type -p mutt) -x -s "$subject" $DESTINATION_MAILS $attachment_command
 		if [ $? != 0 ]; then
 			Logger "Cannot send alert mail via $(type -p mutt) !!!" "WARN"
 		else
@@ -283,10 +297,10 @@ function SendAlert {
 		else
 			attachment_command=""
 		fi
-		echo "$MAIL_ALERT_MSG" | $(type -p mail) $attachment_command -s "$subject" $DESTINATION_MAILS
+		echo "$body" | $(type -p mail) $attachment_command -s "$subject" $DESTINATION_MAILS
 		if [ $? != 0 ]; then
 			Logger "Cannot send alert mail via $(type -p mail) with attachments !!!" "WARN"
-			echo "$MAIL_ALERT_MSG" | $(type -p mail) -s "$subject" $DESTINATION_MAILS
+			echo "$body" | $(type -p mail) -s "$subject" $DESTINATION_MAILS
 			if [ $? != 0 ]; then
 				Logger "Cannot send alert mail via $(type -p mail) without attachments !!!" "WARN"
 			else
@@ -300,7 +314,7 @@ function SendAlert {
 	fi
 
 	if type sendmail > /dev/null 2>&1 ; then
-		echo -e "Subject:$subject\r\n$MAIL_ALERT_MSG" | $(type -p sendmail) $DESTINATION_MAILS
+		echo -e "Subject:$subject\r\n$body" | $(type -p sendmail) $DESTINATION_MAILS
 		if [ $? != 0 ]; then
 			Logger "Cannot send alert mail via $(type -p sendmail) !!!" "WARN"
 		else
@@ -323,7 +337,7 @@ function SendAlert {
 		if [ "$SMTP_USER" != "" ] && [ "$SMTP_USER" != "" ]; then
 			auth_string="-auth -user \"$SMTP_USER\" -pass \"$SMTP_PASSWORD\""
 		fi
-		$(type mailsend.exe) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -sub "$subject" -M "$MAIL_ALERT_MSG" -attach "$attachment" -smtp "$SMTP_SERVER" -port "$SMTP_PORT" $encryption_string $auth_string
+		$(type mailsend.exe) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -sub "$subject" -M "$body" -attach "$attachment" -smtp "$SMTP_SERVER" -port "$SMTP_PORT" $encryption_string $auth_string
 		if [ $? != 0 ]; then
 			Logger "Cannot send mail via $(type mailsend.exe) !!!" "WARN"
 		else
@@ -339,7 +353,7 @@ function SendAlert {
 		else
 			SMTP_OPTIONS=""
 		fi
-		$(type -p sendemail) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -u "$subject" -m "$MAIL_ALERT_MSG" -s $SMTP_SERVER $SMTP_OPTIONS > /dev/null 2>&1
+		$(type -p sendemail) -f $SENDER_MAIL -t "$DESTINATION_MAILS" -u "$subject" -m "$body" -s $SMTP_SERVER $SMTP_OPTIONS > /dev/null 2>&1
 		if [ $? != 0 ]; then
 			Logger "Cannot send alert mail via $(type -p sendemail) !!!" "WARN"
 		else
@@ -350,7 +364,7 @@ function SendAlert {
 
 	# pfSense specific
 	if [ -f /usr/local/bin/mail.php ]; then
-		echo "$MAIL_ALERT_MSG" | /usr/local/bin/mail.php -s="$subject"
+		echo "$body" | /usr/local/bin/mail.php -s="$subject"
 		if [ $? != 0 ]; then
 			Logger "Cannot send alert mail via /usr/local/bin/mail.php (pfsense) !!!" "WARN"
 		else
@@ -574,12 +588,11 @@ function WaitForTaskCompletion {
 	local soft_max_time="${2}" # If program with pid $pid takes longer than $soft_max_time seconds, will log a warning, unless $soft_max_time equals 0.
 	local hard_max_time="${3}" # If program with pid $pid takes longer than $hard_max_time seconds, will stop execution, unless $hard_max_time equals 0.
 	local caller_name="${4}" # Who called this function
-	local exit_on_error="${5:-false}" # Should the function exit on subprocess errors
-	local counting="${6:-true}" # Count time since function launch if true, script launch if false
-	local keep_logging="${7:-0}" # Log a standby message every X seconds. Set to zero to disable logging
+	local counting="${5:-true}" # Count time since function has been launched if true, since script has been launched if false
+	local keep_logging="${6:-0}" # Log a standby message every X seconds. Set to zero to disable logging
 
 	Logger "${FUNCNAME[0]} called by [$caller_name]." "PARANOIA_DEBUG"	#__WITH_PARANOIA_DEBUG
-	__CheckArguments 7 $# ${FUNCNAME[0]} "$@"				#__WITH_PARANOIA_DEBUG
+	__CheckArguments 6 $# ${FUNCNAME[0]} "$@"				#__WITH_PARANOIA_DEBUG
 
 	local soft_alert=0 # Does a soft alert need to be triggered, if yes, send an alert once
 	local log_ttime=0 # local time instance for comparaison
@@ -600,28 +613,6 @@ function WaitForTaskCompletion {
 
 	while [ ${#pidsArray[@]} -gt 0 ]; do
 		newPidsArray=()
-		for pid in "${pidsArray[@]}"; do
-			if kill -0 $pid > /dev/null 2>&1; then
-				# Handle uninterruptible sleep state or zombies by ommiting them from running process array
-				#TODO(high): have this tested on *BSD, Mac & Win
-				pidState=$(ps -p$pid -o state=)
-				if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
-					newPidsArray+=($pid)
-				fi
-			else
-				wait $pid
-				result=$?
-				if [ $result -ne 0 ]; then
-					errorcount=$((errorcount+1))
-					Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$result]." "DEBUG"
-					if [ "$WAIT_FOR_TASK_COMPLETION" == "" ]; then
-						WAIT_FOR_TASK_COMPLETION="$pid:$result"
-					else
-						WAIT_FOR_TASK_COMPLETION=";$pid:$result"
-					fi
-				fi
-			fi
-		done
 
 		Spinner
 		if [ $counting == true ]; then
@@ -643,32 +634,57 @@ function WaitForTaskCompletion {
 			if [ $soft_alert -eq 0 ] && [ $soft_max_time -ne 0 ]; then
 				Logger "Max soft execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]." "WARN"
 				soft_alert=1
-				SendAlert
+				SendAlert true
 
 			fi
 			if [ $exec_time -gt $hard_max_time ] && [ $hard_max_time -ne 0 ]; then
 				Logger "Max hard execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]. Stopping task execution." "ERROR"
 				for pid in "${pidsArray[@]}"; do
-					KillChilds $pid
+					KillChilds $pid true
 					if [ $? == 0 ]; then
 						Logger "Task with pid [$pid] stopped successfully." "NOTICE"
 					else
 						Logger "Could not stop task with pid [$pid]." "ERROR"
 					fi
 				done
-				SendAlert
+				SendAlert true
 				errrorcount=$((errorcount+1))
 			fi
 		fi
+
+		for pid in "${pidsArray[@]}"; do
+			if kill -0 $pid > /dev/null 2>&1; then
+				# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
+				#TODO(high): have this tested on *BSD, Mac & Win
+				pidState=$(ps -p$pid -o state= 2 > /dev/null)
+				if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
+					newPidsArray+=($pid)
+				fi
+			else
+				# pid is dead, get it's exit code from wait command
+				wait $pid
+				retval=$?
+				if [ $retval -ne 0 ]; then
+					errorcount=$((errorcount+1))
+					Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$retval]." "DEBUG"
+					if [ "$WAIT_FOR_TASK_COMPLETION" == "" ]; then
+						WAIT_FOR_TASK_COMPLETION="$pid:$retval"
+					else
+						WAIT_FOR_TASK_COMPLETION=";$pid:$retval"
+					fi
+				fi
+			fi
+		done
 
 		pidsArray=("${newPidsArray[@]}")
 		sleep $SLEEP_TIME
 	done
 
 	Logger "${FUNCNAME[0]} ended for [$caller_name] using [$pidCount] subprocesses with [$errorcount] errors." "PARANOIA_DEBUG"	#__WITH_PARANOIA_DEBUG
-	if [ $exit_on_error == true ] && [ $errorcount -gt 0 ]; then
-		Logger "Stopping execution." "CRITICAL"
-		exit 1337
+
+	# Return exit code if only one process was monitored, else return number of errors
+	if [ $pidCount -eq 1 ] && [ $errorcount -eq 0 ]; then
+		return $errorcount
 	else
 		return $errorcount
 	fi
@@ -718,7 +734,7 @@ function EscapeSpaces {
 }
 
 function IsNumeric {
-	eval "local value=\"${1}\"" # Needed so variable variables can be processed
+	eval "local value=\"${1}\"" # Needed eval so variable variables can be processed
 
 	local re="^-?[0-9]+([.][0-9]+)?$"
 	if [[ $value =~ $re ]]; then
@@ -747,9 +763,9 @@ function urlEncode {
 }
 
 function urlDecode {
-    local url_encoded="${1//+/ }"
+	local url_encoded="${1//+/ }"
 
-    printf '%b' "${url_encoded//%/\\x}"
+	printf '%b' "${url_encoded//%/\\x}"
 }
 
 function GetLocalOS {
@@ -803,19 +819,19 @@ function GetRemoteOS {
 		cmd=$SSH_CMD' "uname -spio" > "'$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID'" 2>&1'
 		Logger "cmd: $cmd" "DEBUG"
 		eval "$cmd" &
-		WaitForTaskCompletion $! 120 240 ${FUNCNAME[0]}"-1" false true
+		WaitForTaskCompletion $! 120 240 ${FUNCNAME[0]}"-1" true $KEEP_LOGGING
 		retval=$?
 		if [ $retval != 0 ]; then
 			cmd=$SSH_CMD' "uname -v" > "'$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID'" 2>&1'
 			Logger "cmd: $cmd" "DEBUG"
 			eval "$cmd" &
-			WaitForTaskCompletion $! 120 240 ${FUNCNAME[0]}"-2" false true
+			WaitForTaskCompletion $! 120 240 ${FUNCNAME[0]}"-2" true $KEEP_LOGGING
 			retval=$?
 			if [ $retval != 0 ]; then
 				cmd=$SSH_CMD' "uname" > "'$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID'" 2>&1'
 				Logger "cmd: $cmd" "DEBUG"
 				eval "$cmd" &
-				WaitForTaskCompletion $! 120 240 ${FUNCNAME[0]}"-3" false true
+				WaitForTaskCompletion $! 120 240 ${FUNCNAME[0]}"-3" true $KEEP_LOGGING
 				retval=$?
 				if [ $retval != 0 ]; then
 					Logger "Cannot Get remote OS type." "ERROR"
@@ -868,7 +884,7 @@ function RunLocalCommand {
 
 	Logger "Running command [$command] on local host." "NOTICE"
 	eval "$command" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" 2>&1 &
-	WaitForTaskCompletion $! 0 $hard_max_time ${FUNCNAME[0]} false true
+	WaitForTaskCompletion $! 0 $hard_max_time ${FUNCNAME[0]} true $KEEP_LOGGING
 	retval=$?
 	if [ $retval -eq 0 ]; then
 		Logger "Command succeded." "NOTICE"
@@ -903,7 +919,7 @@ function RunRemoteCommand {
 	cmd=$SSH_CMD' "$command" > "'$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID'" 2>&1'
 	Logger "cmd: $cmd" "DEBUG"
 	eval "$cmd" &
-	WaitForTaskCompletion $! 0 $hard_max_time ${FUNCNAME[0]} false true
+	WaitForTaskCompletion $! 0 $hard_max_time ${FUNCNAME[0]} true $KEEP_LOGGING
 	retval=$?
 	if [ $retval -eq 0 ]; then
 		Logger "Command succeded." "NOTICE"
@@ -937,7 +953,7 @@ function RunBeforeHook {
 		pids="$pids;$!"
 	fi
 	if [ "$pids" != "" ]; then
-		WaitForTaskCompletion $pids 0 0 ${FUNCNAME[0]} false true
+		WaitForTaskCompletion $pids 0 0 ${FUNCNAME[0]} true $KEEP_LOGGING
 	fi
 }
 
@@ -956,7 +972,7 @@ function RunAfterHook {
 		pids="$pids;$!"
 	fi
 	if [ "$pids" != "" ]; then
-		WaitForTaskCompletion $pids 0 0 ${FUNCNAME[0]} false true
+		WaitForTaskCompletion $pids 0 0 ${FUNCNAME[0]} true $KEEP_LOGGING
 	fi
 }
 
@@ -967,7 +983,7 @@ function CheckConnectivityRemoteHost {
 
 		if [ "$REMOTE_HOST_PING" != "no" ] && [ "$REMOTE_OPERATION" != "no" ]; then
 			eval "$PING_CMD $REMOTE_HOST > /dev/null 2>&1" &
-			WaitForTaskCompletion $! 10 180 ${FUNCNAME[0]} false true
+			WaitForTaskCompletion $! 60 180 ${FUNCNAME[0]} true $KEEP_LOGGING
 			if [ $? != 0 ]; then
 				Logger "Cannot ping $REMOTE_HOST" "ERROR"
 				return 1
@@ -989,7 +1005,7 @@ function CheckConnectivity3rdPartyHosts {
 			for i in $REMOTE_3RD_PARTY_HOSTS
 			do
 				eval "$PING_CMD $i > /dev/null 2>&1" &
-				WaitForTaskCompletion $! 10 360 ${FUNCNAME[0]} false true
+				WaitForTaskCompletion $! 180 360 ${FUNCNAME[0]} true $KEEP_LOGGING
 				if [ $? != 0 ]; then
 					Logger "Cannot ping 3rd party host $i" "NOTICE"
 				else
@@ -1012,12 +1028,15 @@ function __CheckArguments {
 	# Checks the number of arguments of a function and raises an error if some are missing
 
 	if [ "$_DEBUG" == "yes" ]; then
-		local number_of_arguments="${1}" # Number of arguments the tested function should have
-		local number_of_given_arguments="${2}" # Number of arguments that have been passed
-		local function_name="${3}" # Function name that called __CheckArguments
+		local numberOfArguments="${1}" # Number of arguments the tested function should have, can be a number of a range, eg 0-2 for zero to two arguments
+		local numberOfGivenArguments="${2}" # Number of arguments that have been passed
+		local functionName="${3}" # Function name that called __CheckArguments
+
+		local minArgs
+		local maxArgs
 
 		if [ "$_PARANOIA_DEBUG" == "yes" ]; then
-			Logger "Entering function [$function_name]." "DEBUG"
+			Logger "Entering function [$functionName]." "DEBUG"
 		fi
 
 		# All arguments of the function to check are passed as array in ${4} (the function call waits for $@)
@@ -1025,23 +1044,31 @@ function __CheckArguments {
 		# In order to avoid this, we need to iterate over ${4} and count
 
 		local iterate=4
-		local fetch_arguments=1
-		local arg_list=""
-		while [ $fetch_arguments -eq 1 ]; do
+		local fetchArguments=1
+		local argList=""
+		local countedArguments
+		while [ $fetchArguments -eq 1 ]; do
 			cmd='argument=${'$iterate'}'
 			eval $cmd
 			if [ "$argument" = "" ]; then
-				fetch_arguments=0
+				fetchArguments=0
 			else
-				arg_list="$arg_list [Argument $(($iterate-3)): $argument]"
+				argList="$arg_list [Argument $(($iterate-3)): $argument]"
 				iterate=$(($iterate+1))
 			fi
 		done
-		local counted_arguments=$((iterate-4))
+		countedArguments=$((iterate-4))
 
-		if [ $counted_arguments -ne $number_of_arguments ]; then
-			Logger "Function $function_name may have inconsistent number of arguments. Expected: $number_of_arguments, count: $counted_arguments, bash seen: $number_of_given_arguments. see log file." "ERROR"
-			Logger "Arguments passed: $arg_list" "ERROR"
+		if [ $(IsNumeric "$numberOfArguments") -eq 1 ]; then
+			minArgs=$numberOfArguments
+			maxArgs=$numberOfArguments
+		else
+			IFS='-' read minArgs maxArgs <<< "$numberOfArguments"
+		fi
+
+		if ! ([ $countedArguments -ge $minArgs ] && [ $countedArguments -le $maxArgs ]); then
+			Logger "Function $functionName may have inconsistent number of arguments. Expected min: $minArgs, max: $maxArgs, count: $countedArguments, bash seen: $numberOfGivenArguments. see log file." "ERROR"
+			Logger "Arguments passed: $argList" "ERROR"
 		fi
 	fi
 }
@@ -1285,7 +1312,6 @@ function InitLocalOSSettings {
 function InitRemoteOSSettings {
 	__CheckArguments 0 $# ${FUNCNAME[0]} "$@"    #__WITH_PARANOIA_DEBUG
 
-	#TODO: fix add -E when both initiator and targets don't run MacOSX and PRESERVE_EXECUTABILITY=yes
 	## MacOSX does not use the -E parameter like Linux or BSD does (-E is mapped to extended attrs instead of preserve executability)
 	if [ "$PRESERVE_EXECUTABILITY" != "no" ];then
 		if [ "$LOCAL_OS" != "MacOSX" ] && [ "$REMOTE_OS" != "MacOSX" ]; then
@@ -1308,6 +1334,11 @@ function InitRemoteOSSettings {
 		REMOTE_STAT_CTIME_MTIME_CMD="stat -c \\\"%n;%Z;%Y\\\""
 	fi
 
+}
+
+## IFS debug function
+function PrintIFS {
+	printf "IFS is: %q" "$IFS"
 }
 
 ## END Generic functions

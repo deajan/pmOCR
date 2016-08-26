@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.4.2
-PROGRAM_BUILD=2016081504
+PROGRAM_VERSION=1.5-dev
+PROGRAM_BUILD=2016082602
 
 ## Debug parameter for service
 _DEBUG=no
@@ -45,6 +45,9 @@ CHECK_PDF=yes
 ## Add some extra info to the filename. Example here adds a pseudo ISO 8601 timestamp after a dot (pseudo because the colon sign would render the filename quite weird).
 ## Keep variables between singlequotes if you want them to expand at runtime. Leave this variable empty if you don't want to add anything.
 FILENAME_ADDITION='.$(date --utc +"%Y-%m-%dT%H-%M-%SZ")'
+
+# Number of OCR subprocesses to start simultaneously. Do not exceed the number of CPU cores.
+NUMBER_OF_PROCESSES=4
 
 # Wait a trivial number of seconds before launching OCR
 WAIT_TIME=1
@@ -93,6 +96,7 @@ CSV_EXTENSION=".csv"
 #### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
 
 _LOGGER_PREFIX="date"
+KEEP_LOGGING=0
 
 source "./ofunctions.sh"
 
@@ -168,7 +172,7 @@ function TrapQuit {
 	exit
 }
 
-function OCR {
+function OCR_old {
 	local directoryToProcess="$1" 	#(contains some path)
 	local fileExtension="$2" 		#(filename extension for output file)
 	local ocrEngineArgs="$3" 		#(transformation specific arguments)
@@ -264,6 +268,145 @@ function OCR {
 	done
 }
 
+function OCR {
+	local fileToProcess="$1" 	#(contains some path)
+	local fileExtension="$2" 		#(filename extension for output file)
+	local ocrEngineArgs="$3" 		#(transformation specific arguments)
+	local csvHack="${4:-false}" 		#(CSV transformation flag)
+
+	__CheckArguments 4 $# ${FUNCNAME[0]} "$@"
+
+	local findExcludes
+	local tmpFile
+	local originalFile
+	local file
+	local result
+
+	local cmd
+	local subcmd
+
+
+		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$fileToProcess" 2> /dev/null | wc -l) -lt 3 ])); then
+			if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
+				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"${fileToProcess%.*}$FILENAME_ADDITION$FILENAME_SUFFIX$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+				Logger "Executing: $cmd" "DEBUG"
+				eval "$cmd"
+				result=$?
+			elif [ "$OCR_ENGINE" == "tesseract3" ]; then
+				# Empty tmp log file first
+				echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+				# Intermediary transformation of input pdf file to tiff
+                                if [[ $fileToProcess == *.[pP][dD][fF] ]]; then
+					tmpFile="$fileToProcess.tif"
+                                        subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFile\" \"$fileToProcess\" >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+					Logger "Executing: $subcmd" "DEBUG"
+                                        eval "$subcmd"
+					if [ $? != "" ]; then
+						Logger "Subcmd failed." "ERROR"
+					fi
+					originalFile="$fileToProcess"
+                                       	file="$tmpFile"
+                               	fi
+				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"${fileToProcess%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\" $ocrEngineArgs >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+				Logger "Executing: $cmd" "DEBUG"
+				eval "$cmd"
+				result=$?
+				if [ "$originalFile" != "" ]; then
+					file="$originalFile"
+					if [ -f "$tmpFile" ]; then
+						rm -f "$tmpFile";
+					fi
+				fi
+
+			else
+				Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
+			fi
+
+			if [ $result != 0 ]; then
+				Logger "Could not process file [$fileToProcess] (error code $result)." "ERROR"
+				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "ERROR"
+				if [ "$_SERVICE_RUN" -eq 1 ]; then
+					SendAlert
+				fi
+			else
+				# Convert 4 spaces or more to semi colon (hack to transform abbyyocr11 txt output to CSV)
+				if [ $csvHack == true ]; then
+					Logger "Applying CSV fix" "DEBUG"
+					#find "$directoryToProcess" -type f -name "*$FILENAME_SUFFIX$fileExtension" -print0 | xargs -0 -I {}
+					#TODO: test this
+					sed -i 's/   */;/g' "{}" "$fileToProcess"
+				fi
+
+				if ( [ "$_BATCH_RUN" -eq 1 ] && [ "$_SILENT" -ne 1 ]); then
+					Logger "Processed file [$fileToProcess]." "NOTICE"
+				fi
+
+				if [ "$DELETE_ORIGINAL" == "yes" ]; then
+					Logger "Deleting file [$fileToProcess]." "DEBUG"
+					rm -f "$fileToProcess"
+				else
+					Logger "Renaming file [$fileToProcess] to [${fileToProcess%.*}$FILENAME_SUFFIX.${fileToProcess##*.}]." "DEBUG"
+					mv "$fileToProcess" "${fileToProcess%.*}$FILENAME_SUFFIX.${fileToProcess##*.}"
+				fi
+
+				Logger "Processed file [$fileToProcess]." "NOTICE"
+			fi
+
+		else
+			Logger "Skipping file [$fileToProcess] already containing text." "NOTICE"
+		fi
+}
+
+function OCR_Dispatch {
+	local directoryToProcess="$1" 	#(contains some path)
+	local fileExtension="$2" 		#(filename endings to exclude from processing)
+	local ocrEngineArgs="$3" 		#(transformation specific arguments)
+	local csvHack="$4" 			#(CSV transformation flag)
+
+	local fileList=()
+	local runningPids=0
+	local counter=0
+	local pids=()
+	local newPids=()
+
+	## CHECK find excludes
+	if [ "$FILENAME_SUFFIX" != "" ]; then
+		findExcludes="*$FILENAME_SUFFIX*"
+	else
+		findExcludes=""
+	fi
+
+
+	# Read filelist into array
+	while IFS= read -r -d $'\0' file; do
+		echo "the file = $file"
+		fileList+=($file)
+	#TODO: check this for spaces in filename
+	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+
+	while [ $counter -lt ${#fileList[@]} ]; do
+		while [ $counter -lt "${#fileList[@]}" ] && [ $runningPids -lt $NUMBER_OF_PROCESSES ]; do
+			cmd="OCR \"${fileList[$counter]}\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\" &"
+			Logger "cmd: $cmd" "NOTICE"
+			eval $cmd
+			pids+=($!)
+			counter=$((counter+1))
+			runningPids=$((runningPids+1))
+		done
+
+		newPids=()
+		for pid in "${pids[@]}"; do
+			if kill -0 $pid > /dev/null 2>&1; then
+				newPids+=($pid)
+			fi
+		done
+		pids=("${newPids[@]}")
+		runningPids=${#pids[@]}
+
+		sleep $SLEEP_TIME
+	done
+}
+
 function OCR_service {
 	## Function arguments
 	local directoryToProcess="$1" 	#(contains some path)
@@ -276,9 +419,9 @@ function OCR_service {
 	while true
 	do
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess" &
-		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} false true 0
+		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} true 0
 		sleep $WAIT_TIME
-		OCR "$directoryToProcess" "$fileExtension" "$ocrEngineArgs" "$csvHack"
+		OCR_Dispatch "$directoryToProcess" "$fileExtension" "$ocrEngineArgs" "$csvHack"
 	done
 }
 
@@ -454,25 +597,25 @@ elif [ $_BATCH_RUN -eq 1 ]; then
 
 	if [ $pdf == true ]; then
 		Logger "Beginning PDF OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR "$batch_path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
+		OCR_Dispatch "$batch_path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
 		Logger "Process ended." "NOTICE"
 	fi
 
 	if [ $docx == true ]; then
 		Logger "Beginning DOCX OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR "$batch_path" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" false
+		OCR_Dispatch "$batch_path" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" false
 		Logger "Batch ended." "NOTICE"
 	fi
 
 	if [ $xlsx == true ]; then
 		Logger "Beginning XLSX OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR "$batch_path" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false
+		OCR_Dispatch "$batch_path" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false
 		Logger "batch ended." "NOTICE"
 	fi
 
 	if [ $csv == true ]; then
 		Logger "Beginning CSV OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR "$batch_path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
+		OCR_Dispatch "$batch_path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
 		Logger "Batch ended." "NOTICE"
 	fi
 

@@ -1,6 +1,6 @@
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016082606
+## FUNC_BUILD=2016082607
 ## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## type -p does not work on platforms other than linux (bash). If if does not work, always assume output is not a zero exitcode
@@ -29,7 +29,7 @@ ERROR_ALERT=0
 WARN_ALERT=0
 
 # Current log
-CURRENT_LOG
+CURRENT_LOG=
 
 ## allow function call checks			#__WITH_PARANOIA_DEBUG
 if [ "$_PARANOIA_DEBUG" == "yes" ];then		#__WITH_PARANOIA_DEBUG

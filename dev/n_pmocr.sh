@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-dev
-PROGRAM_BUILD=2016082602
+PROGRAM_BUILD=2016082603
 
 ## Debug parameter for service
 _DEBUG=no
@@ -172,102 +172,6 @@ function TrapQuit {
 	exit
 }
 
-function OCR_old {
-	local directoryToProcess="$1" 	#(contains some path)
-	local fileExtension="$2" 		#(filename extension for output file)
-	local ocrEngineArgs="$3" 		#(transformation specific arguments)
-	local csvHack="${4:-false}" 		#(CSV transformation flag)
-
-	__CheckArguments 4 $# ${FUNCNAME[0]} "$@"
-
-	local findExcludes
-	local tmpFile
-	local originalFile
-	local file
-	local result
-
-	local cmd
-	local subcmd
-
-	## CHECK find excludes
-	if [ "$FILENAME_SUFFIX" != "" ]; then
-		findExcludes="*$FILENAME_SUFFIX*"
-	else
-		findExcludes=""
-	fi
-
-	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0 | while IFS= read -r -d $'\0' file; do
-
-		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$file" 2> /dev/null | wc -l) -lt 3 ])); then
-			if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
-				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
-				Logger "Executing: $cmd" "DEBUG"
-				eval "$cmd"
-				result=$?
-			elif [ "$OCR_ENGINE" == "tesseract3" ]; then
-				# Empty tmp log file first
-				echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
-				# Intermediary transformation of input pdf file to tiff
-                                if [[ $file == *.[pP][dD][fF] ]]; then
-					tmpFile="$file.tif"
-                                        subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFile\" \"$file\" >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
-					Logger "Executing: $subcmd" "DEBUG"
-                                        eval "$subcmd"
-					if [ $? != "" ]; then
-						Logger "Subcmd failed." "ERROR"
-					fi
-					originalFile="$file"
-                                       	file="$tmpFile"
-                               	fi
-				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$file\" $OCR_ENGINE_OUTPUT_ARG \"${file%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\" $ocrEngineArgs >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
-				Logger "Executing: $cmd" "DEBUG"
-				eval "$cmd"
-				result=$?
-				if [ "$originalFile" != "" ]; then
-					file="$originalFile"
-					if [ -f "$tmpFile" ]; then
-						rm -f "$tmpFile";
-					fi
-				fi
-
-			else
-				Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
-			fi
-
-			if [ $result != 0 ]; then
-				Logger "Could not process file [$file] (error code $result)." "ERROR"
-				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "ERROR"
-				if [ "$_SERVICE_RUN" -eq 1 ]; then
-					SendAlert
-				fi
-			else
-				# Convert 4 spaces or more to semi colon (hack to transform abbyyocr11 txt output to CSV)
-				if [ $csvHack == true ]; then
-					Logger "Applying CSV fix" "DEBUG"
-					find "$directoryToProcess" -type f -name "*$FILENAME_SUFFIX$fileExtension" -print0 | xargs -0 -I {} sed -i 's/   */;/g' "{}"
-				fi
-
-				if ( [ "$_BATCH_RUN" -eq 1 ] && [ "$_SILENT" -ne 1 ]); then
-					Logger "Processed file [$file]." "NOTICE"
-				fi
-
-				if [ "$DELETE_ORIGINAL" == "yes" ]; then
-					Logger "Deleting file [$file]." "DEBUG"
-					rm -f "$file"
-				else
-					Logger "Renaming file [$file] to [${file%.*}$FILENAME_SUFFIX.${file##*.}]." "DEBUG"
-					mv "$file" "${file%.*}$FILENAME_SUFFIX.${file##*.}"
-				fi
-
-				Logger "Processed file [$file]." "NOTICE"
-			fi
-
-		else
-			Logger "Skipping file [$file] already containing text." "NOTICE"
-		fi
-	done
-}
-
 function OCR {
 	local fileToProcess="$1" 	#(contains some path)
 	local fileExtension="$2" 		#(filename extension for output file)
@@ -334,7 +238,8 @@ function OCR {
 					Logger "Applying CSV fix" "DEBUG"
 					#find "$directoryToProcess" -type f -name "*$FILENAME_SUFFIX$fileExtension" -print0 | xargs -0 -I {}
 					#TODO: test this
-					sed -i 's/   */;/g' "{}" "$fileToProcess"
+					sed -i.tmp 's/   */;/g' "{}" "$fileToProcess"
+					rm "$fileToProcess.tmp"
 				fi
 
 				if ( [ "$_BATCH_RUN" -eq 1 ] && [ "$_SILENT" -ne 1 ]); then

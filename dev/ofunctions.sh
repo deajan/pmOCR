@@ -1,6 +1,6 @@
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016082701
+## FUNC_BUILD=2016082702
 ## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
@@ -724,7 +724,7 @@ function ParallelExec {
 	while [ $counter -lt "${#commandsArray[@]}" ] || [ ${#pidsArray[@]} -gt 0 ]; do
 
 		while [ $counter -lt "${#commandsArray[@]}" ] && [ ${#pidsArray[@]} -lt $numberOfProcesses ]; do
-			Logger "Running command [${commandsArray[$counter]}]." "NOTICE"
+			Logger "Running command [${commandsArray[$counter]}]." "DEBUG"
 			eval "${commandsArray[$counter]}" &
 			pid=$!
 			pidsArray+=($pid)

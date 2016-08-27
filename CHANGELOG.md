@@ -1,8 +1,16 @@
 RECENT CHANGES
 --------------
 
-15 Aug 2016: v1.4.2
+XX xxx 2016: v1.5
+- Added parallel execution for multicore systems
+- Improved tesseract 3 support
+	- Added text output format
+	- Added csv output format (with csv hack)
+	- Remove intermediary txt files produced by tesseract
+- Improved logging
 
+
+15 Aug 2016: v1.4.2
 - Removed keep logging statement from WaitForTaskCompletion function
 - Fixed rare bug where original PDF file gets deleted without succeded transformation
 - Removed NO_DELETE_SUFFIX that is not used anymore

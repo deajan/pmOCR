@@ -281,7 +281,6 @@ function OCR_Dispatch {
 		findExcludes=""
 	fi
 
-
 	# Read filelist into array
 	while IFS= read -r -d $'\0' file; do
 		echo "the file = $file"
@@ -503,7 +502,7 @@ elif [ $_BATCH_RUN -eq 1 ]; then
 	if [ $pdf == true ]; then
 		Logger "Beginning PDF OCR recognition of files in [$batch_path]." "NOTICE"
 		OCR_Dispatch "$batch_path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
-		Logger "Process ended." "NOTICE"
+		Logger "Batch ended." "NOTICE"
 	fi
 
 	if [ $docx == true ]; then

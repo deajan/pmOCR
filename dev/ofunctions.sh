@@ -1,9 +1,13 @@
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016082607
-## BEGIN Generic functions for osync & obackup written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
+## FUNC_BUILD=2016082701
+## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
-## type -p does not work on platforms other than linux (bash). If if does not work, always assume output is not a zero exitcode
+## To use in a program, define the following variables:
+## PROGRAM=program-name
+## INSTANCE_ID=program-instance-name
+## _DEBUG=yes/no
+
 if ! type "$BASH" > /dev/null; then
 	echo "Please run this script only with bash shell. Tested on bash >= 3.2"
 	exit 127
@@ -51,6 +55,10 @@ SCRIPT_PID=$$
 
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
+
+if [ "$PROGRAM" == "" ]; then
+	PROGRAM="ofunctions"
+fi
 
 ## Default log file until config file is loaded
 if [ -w /var/log ]; then
@@ -583,6 +591,8 @@ function joinString {
 # Time control function for background processes, suitable for multiple synchronous processes
 # Fills a global variable called WAIT_FOR_TASK_COMPLETION that contains list of failed pids in format pid1:result1;pid2:result2
 # Warning: Don't imbricate this function into another run if you plan to use the global variable output
+
+#TODO check missing local values used here
 function WaitForTaskCompletion {
 	local pids="${1}" # pids to wait for, separated by semi-colon
 	local soft_max_time="${2}" # If program with pid $pid takes longer than $soft_max_time seconds, will log a warning, unless $soft_max_time equals 0.
@@ -688,6 +698,65 @@ function WaitForTaskCompletion {
 	else
 		return $errorcount
 	fi
+}
+
+# Take a list of commands to run, runs them sequentially with numberOfProcesses commands simultaneously runs
+# Returns the number of non zero exit codes from commands
+function ParallelExec {
+	local numberOfProcesses="${1}" # Number of simultaneous commands to run
+	local commandsArg="${2}" # Semi-colon separated list of commands
+
+	local pid
+	local runningPids=0
+	local counter=0
+	local commandsArray
+	local pidsArray
+	local newPidsArray
+	local retval
+	local retvalAll=0
+	local pidState
+	local commandsArrayPid
+
+	IFS=';' read -r -a commandsArray <<< "$commandsArg"
+
+	Logger "Runnning ${#commandsArray[@]} commands in $numberOfProcesses simultaneous processes." "DEBUG"
+
+	while [ $counter -lt "${#commandsArray[@]}" ] || [ ${#pidsArray[@]} -gt 0 ]; do
+
+		while [ $counter -lt "${#commandsArray[@]}" ] && [ ${#pidsArray[@]} -lt $numberOfProcesses ]; do
+			Logger "Running command [${commandsArray[$counter]}]." "NOTICE"
+			eval "${commandsArray[$counter]}" &
+			pid=$!
+			pidsArray+=($pid)
+			commandsArrayPid[$pid]="${commandsArray[$counter]}"
+			counter=$((counter+1))
+		done
+
+
+		newPidsArray=()
+		for pid in "${pidsArray[@]}"; do
+			# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
+			if kill -0 $pid > /dev/null 2>&1; then
+				pidState=$(ps -p$pid -o state= 2 > /dev/null)
+				if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
+					newPidsArray+=($pid)
+				fi
+			else
+				# pid is dead, get it's exit code from wait command
+				wait $pid
+				retval=$?
+				if [ $retval -ne 0 ]; then
+					Logger "Command [${commandsArrayPid[$pid]}] failed with exit code [$retval]." "ERROR"
+					retvalAll=$((retvalAll+1))
+				fi
+			fi
+		done
+		pidsArray=("${newPidsArray[@]}")
+
+		#sleep .05
+	done
+
+	return $retvalAll
 }
 
 function CleanUp {

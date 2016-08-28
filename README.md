@@ -56,6 +56,19 @@ service pmocr-srv status
 Check service state (systemd style)
 systemctl status pmocr-srv
 
+## Multiple service instances
+
+In order to monitor multiple directories with different OCR settings, you may create multiple service instances.
+
+- Copy the main executable /usr/local/bin/pmocr.sh to /usr/local/bin/pmocr-instance.sh
+- Edit the file change INSTANCE_ID variable
+- If using InitV, copy the InitV service file /etc/init.d/pmocr-srv to /etc/init.d/pmocr-instance-srv
+   - Edit the file /etc/init.d/pmocr-instance-srv and change prog variable from "pmocr" to "pmocr-instance" and variable progexec from "pmocr.sh" to "pmocr-instance.sh"
+- If using systemd, copy the Systemd service file /lib/systemd/system/pmocr-srv.service to /lib/systemd/system/pmocr-instance-srv.service
+   - Edit the file /lib/systemd/system/pmocr-instance-srv.service and change the variable ExecStart to /usr/local/bin/pmocr-instance.sh
+
+You can now launch the new services like explained earlier. 
+
 ## Support for OCR engines
 
 Has been tested so far with:

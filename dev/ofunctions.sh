@@ -1,6 +1,6 @@
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016082702
+## FUNC_BUILD=2016082801
 ## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
@@ -687,6 +687,7 @@ function WaitForTaskCompletion {
 		done
 
 		pidsArray=("${newPidsArray[@]}")
+		# Trivial wait time for bash to not eat up all CPU
 		sleep $SLEEP_TIME
 	done
 
@@ -753,7 +754,8 @@ function ParallelExec {
 		done
 		pidsArray=("${newPidsArray[@]}")
 
-		#sleep .05
+		# Trivial wait time for bash to not eat up all CPU
+		sleep $SLEEP_TIME
 	done
 
 	return $retvalAll

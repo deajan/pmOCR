@@ -3,7 +3,7 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5-dev
+PROGRAM_VERSION=1.5-rc
 PROGRAM_BUILD=2016082705
 
 ## Instance identification (used for mails only)
@@ -105,7 +105,7 @@ KEEP_LOGGING=0
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016082702
+## FUNC_BUILD=2016082801
 ## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
@@ -773,6 +773,7 @@ function WaitForTaskCompletion {
 		done
 
 		pidsArray=("${newPidsArray[@]}")
+		# Trivial wait time for bash to not eat up all CPU
 		sleep $SLEEP_TIME
 	done
 
@@ -838,7 +839,8 @@ function ParallelExec {
 		done
 		pidsArray=("${newPidsArray[@]}")
 
-		#sleep .05
+		# Trivial wait time for bash to not eat up all CPU
+		sleep $SLEEP_TIME
 	done
 
 	return $retvalAll

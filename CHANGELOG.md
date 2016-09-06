@@ -1,14 +1,20 @@
 RECENT CHANGES
 --------------
 
-XX xxx 2016: v1.5
+DD mmm YYYY: v1.5
+! ParallelExec with big file lists
+- Improved cpu usage on idle
+- Changed the way pmocr works
+	- Splitted pmocr.sh config into separate config files so updates don't overwrite current config anymore
+	- Updated service files to run multiple instances
+	- Updated install script to handle config files
 - Added parallel execution for multicore systems
 - Improved tesseract 3 support
 	- Added text output format
 	- Added csv output format (with csv hack)
 	- Remove intermediary txt files produced by tesseract
 - Improved logging
-
+- Various minor fixes
 
 15 Aug 2016: v1.4.2
 - Removed keep logging statement from WaitForTaskCompletion function

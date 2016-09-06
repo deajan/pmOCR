@@ -4,7 +4,7 @@ PROGRAM=pmocr
 PROGRAM_VERSION=1.5-rc2
 PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
-SCRIPT_BUILD=2016090604
+SCRIPT_BUILD=2016090605
 
 ## osync / obackup / pmocr / zsnap install script
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8 & 10
@@ -209,7 +209,7 @@ function CopyServiceFiles {
 			QuickLogger "Cannot copy the systemd file to [$SERVICE_DIR_SYSTEMD_SYSTEM] or [$SERVICE_DIR_SYSTEMD_USER]."
 		else
 			QuickLogger "Created osync-srv service in [$SERVICE_DIR_SYSTEMD_SYSTEM] and [$SERVICE_DIR_SYSTEMD_USER]."
-			QuickLogger "Can be activated with [systemctl start osync-srv@instance.conf] where instance.conf is the name of the config file in /etc/osync."
+			QuickLogger "Can be activated with [systemctl start osync-srv@instance.conf] where instance.conf is the name of the config file in $CONF_DIR."
 			QuickLogger "Can be enabled on boot with [systemctl enable osync-srv@instance.conf]."
 			QuickLogger "In userland, active with [systemctl --user start osync-srv@instance.conf]."
 		fi
@@ -232,8 +232,8 @@ function CopyServiceFiles {
 			QuickLogger "Cannot copy the systemd file to [$SERVICE_DIR_SYSTEMD_SYSTEM] or [$SERVICE_DIR_SYSTEMD_USER]."
 		else
 			QuickLogger "Created pmocr-srv service in [$SERVICE_DIR_SYSTEMD_SYSTEM] and [$SERVICE_DIR_SYSTEMD_USER]."
-			QuickLogger "Can be activated with [systemctl start pmocr-srv] after configuring file options in [$BIN_DIR/$PROGRAM]."
-			QuickLogger "Can be enabled on boot with [systemctl enable pmocr-srv]."
+			QuickLogger "Can be activated with [systemctl start pmocr-srv@default.conf] where default.conf is the name of the config file in $CONF_DIR."
+			QuickLogger "Can be enabled on boot with [systemctl enable pmocr-srv@default.conf]."
 		fi
 	elif ([ "$init" == "initV" ] && [ -f "./$PMOCR_SERVICE_FILE_INIT" ]); then
 		cp "./$PMOCR_SERVICE_FILE_INIT" "$SERVICE_DIR_INIT"

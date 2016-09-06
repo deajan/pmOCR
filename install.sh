@@ -4,7 +4,7 @@ PROGRAM=pmocr
 PROGRAM_VERSION=1.5-rc
 PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
-SCRIPT_BUILD=2016090602
+SCRIPT_BUILD=2016090603
 
 ## osync / obackup / pmocr / zsnap install script
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8 & 10
@@ -26,7 +26,7 @@ OSYNC_SERVICE_FILE_SYSTEMD_USER="osync-srv@.service.user"
 
 ## pmocr specfic code
 PMOCR_SERVICE_FILE_INIT="pmocr-srv"
-PMOCR_SERVICE_FILE_SYSTEMD_SYSTEM="pmocr-srv.service"
+PMOCR_SERVICE_FILE_SYSTEMD_SYSTEM="pmocr-srv@.service"
 
 ## Generic code
 
@@ -141,27 +141,27 @@ function CreateConfDir {
 
 function CopyExampleFiles {
 	if [ -f "./sync.conf.example" ]; then
-		cp "./sync.conf.example" "$FAKEROOT/etc/$PROGRAM/sync.conf.example"
+		cp "./sync.conf.example" "$CONF_DIR/sync.conf.example"
 	fi
 
 	if [ -f "./host_backup.conf.example" ]; then
-		cp "./host_backup.conf.example" "$FAKEROOT/etc/$PROGRAM/host_backup.conf.example"
+		cp "./host_backup.conf.example" "$CONF_DIR/host_backup.conf.example"
 	fi
 
 	if [ -f "./exlude.list.example" ]; then
-		cp "./exclude.list.example" "$FAKEROOT/etc/$PROGRAM"
+		cp "./exclude.list.example" "$CONF_DIR/exclude.list.example"
 	fi
 
 	if [ -f "./snapshot.conf.example" ]; then
-		cp "./snapshot.conf.example" "$FAKEROOT/etc/$PROGRAM/snapshot.conf.example"
+		cp "./snapshot.conf.example" "$CONF_DIR/snapshot.conf.example"
 	fi
 
 	if [ -f "./default.conf" ]; then
-		if [ -f "$FAKEROOT/$CONF_DIR/default.conf" ]; then
-			cp "./default.conf" "$FAKEROOT/$CONF_DIR/default.conf.new"
-			QuickLogger "Copied default.conf to $FAKEROOT/$CONF_DIR/default.conf.new"
+		if [ -f "$CONF_DIR/default.conf" ]; then
+			cp "./default.conf" "$CONF_DIR/default.conf.new"
+			QuickLogger "Copied default.conf to $CONF_DIR/default.conf.new"
 		else
-			cp "./default.conf" "$FAKEROOT/$CONF_DIR/default.conf"
+			cp "./default.conf" "$CONF_DIR/default.conf"
 		fi
 	fi
 }

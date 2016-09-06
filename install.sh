@@ -4,7 +4,7 @@ PROGRAM=pmocr
 PROGRAM_VERSION=1.5-rc
 PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
-SCRIPT_BUILD=2016090601
+SCRIPT_BUILD=2016090602
 
 ## osync / obackup / pmocr / zsnap install script
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8 & 10
@@ -157,7 +157,12 @@ function CopyExampleFiles {
 	fi
 
 	if [ -f "./default.conf" ]; then
-		cp "./default.conf" "$FAKEROOT/etc/$PROGRAM/default.conf"
+		if [ -f "$FAKEROOT/$CONF_DIR/default.conf" ]; then
+			cp "./default.conf" "$FAKEROOT/$CONF_DIR/default.conf.new"
+			QuickLogger "Copied default.conf to $FAKEROOT/$CONF_DIR/default.conf.new"
+		else
+			cp "./default.conf" "$FAKEROOT/$CONF_DIR/default.conf"
+		fi
 	fi
 }
 

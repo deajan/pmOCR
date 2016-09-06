@@ -32,6 +32,13 @@ Example:
     $ pmocr.sh --batch --target=pdf --skip-txt-pdf --delete-input /some/path
     $ pmocr.sh --batch --target=pdf --target=csv --suffix=processed /some/path
 
+## OCR Configuration
+
+pmOCR uses a default config stored in /etc/pmocr/default.conf
+You may change it's contents or clone it and have pmOCR use an alternative configuration with:
+
+    $ pmocr.sh --config=/etc/pmocr/myConfig.conf --batch --target=csv /some/path
+
 ## Service mode
 
 Service mode monitors directories and their subdirectories and launched an OCR conversion whenever a new file is written.
@@ -41,33 +48,28 @@ pmocr is written to monitor up to 4 directories, each producing a different targ
 
 There's also an option to avoid passing PDFs to the OCR engine that already contain text.
 
-
 After installation, please configure /usr/local/bin/pmocr.sh script variables in order to monitor the directories you need, and adjust your specific options.
 
 Launch service (initV style)
 service pmocr-srv start
 
 Launch service (systemd style)
-systemctl start pmocr-srv
+systemctl start pmocr-srv@default.service
 
 Check service state (initV style)
 service pmocr-srv status
 
 Check service state (systemd style)
-systemctl status pmocr-srv
+systemctl status pmocr-srv@default.service
 
 ## Multiple service instances
 
-In order to monitor multiple directories with different OCR settings, you may create multiple service instances.
+In order to monitor multiple directories with different OCR settings, you need to clone the /etc/pmocr/default.conf.
+When launching pmOCR service with initV, each config file will create an instance.
+With systemD, you have to launch a service for each config file. Example for configs /etc/pmocr/default.conf and /etc/pmocr/other.conf
 
-- Copy the main executable /usr/local/bin/pmocr.sh to /usr/local/bin/pmocr-instance.sh
-- Edit the file change INSTANCE_ID variable
-- If using InitV, copy the InitV service file /etc/init.d/pmocr-srv to /etc/init.d/pmocr-instance-srv
-   - Edit the file /etc/init.d/pmocr-instance-srv and change prog variable from "pmocr" to "pmocr-instance" and variable progexec from "pmocr.sh" to "pmocr-instance.sh"
-- If using systemd, copy the Systemd service file /lib/systemd/system/pmocr-srv.service to /lib/systemd/system/pmocr-instance-srv.service
-   - Edit the file /lib/systemd/system/pmocr-instance-srv.service and change the variable ExecStart to /usr/local/bin/pmocr-instance.sh
-
-You can now launch the new services like explained earlier. 
+    $ systemctl start pmocr-srv@default.conf
+    $ systemctl start pmocr-srv@other.conf
 
 ## Support for OCR engines
 

@@ -5,7 +5,7 @@ Requires=local-fs.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/pmocr.sh --service
+ExecStart=/usr/local/bin/pmocr.sh --service --config=%1 --silent
 
 [Install]
 WantedBy=multi-user.target

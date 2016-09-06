@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-rc
-PROGRAM_BUILD=2016082705
+PROGRAM_BUILD=2016090601
 
 ## Instance identification (used for mails only)
 INSTANCE_ID=MyOCRServer
@@ -52,9 +52,6 @@ FILENAME_ADDITION='.$(date --utc +"%Y-%m-%dT%H-%M-%SZ")'
 
 # Number of OCR subprocesses to start simultaneously. Should not exceed the number of CPU cores for best performance.
 NUMBER_OF_PROCESSES=4
-
-# Wait a trivial number of seconds before launching OCR
-WAIT_TIME=1
 
 if [ "$OCR_ENGINE" == "tesseract3" ]; then
 # tesseract 3.x Engine Arguments
@@ -105,16 +102,13 @@ KEEP_LOGGING=0
 
 source "./ofunctions.sh"
 
-# Fix SLEEP_TIME set to low in ofunctions
-#SLEEP_TIME=$WAIT_TIME
-
 function CheckEnvironment {
 	if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
 		Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"
 		exit 1
 	fi
 
-	if [ "$_SERVICE_RUN" -eq 1 ]; then
+	if [ "$_SERVICE_RUN" == true ]; then
 		if ! type -p inotifywait > /dev/null 2>&1; then
 			Logger "inotifywait not present (see inotify-tools package ?)." "CRITICAL"
 			exit 1
@@ -161,7 +155,8 @@ function CheckEnvironment {
 		fi
 	fi
 
-	if [ "$CHECK_PDF" == "yes" ] && ( [ "$_SERVICE_RUN" -eq 1 ] || [ "$_BATCH_RUN" -eq 1 ])
+	#TODO(low): check why using this condition
+	if [ "$CHECK_PDF" == "yes" ] && ( [ "$_SERVICE_RUN"  == true ] || [ "$_BATCH_RUN" == true ])
 	then
 		if ! type pdffonts > /dev/null 2>&1; then
 			Logger "pdffonts not present (see poppler-utils package ?)." "CRITICAL"
@@ -252,7 +247,7 @@ function OCR {
 			if [ $result != 0 ]; then
 				Logger "Could not process file [$fileToProcess] (error code $result)." "ERROR"
 				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "ERROR"
-				if [ "$_SERVICE_RUN" -eq 1 ]; then
+				if [ "$_SERVICE_RUN" == true ]; then
 					SendAlert
 				fi
 			else
@@ -282,7 +277,7 @@ function OCR {
 					mv "$fileToProcess" "${fileToProcess%.*}$FILENAME_SUFFIX.${fileToProcess##*.}"
 				fi
 
-				if [ "$_SILENT" -ne 1 ]; then
+				if [ "$_SILENT" == false ]; then
 					Logger "Processed file [$fileToProcess]." "NOTICE"
 				fi
 			fi
@@ -336,8 +331,9 @@ function OCR_service {
 	while true
 	do
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess" &
-		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} true 0
-		sleep $WAIT_TIME
+		#WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} true 0
+		wait $?
+		sleep 1
 		OCR_Dispatch "$directoryToProcess" "$fileExtension" "$ocrEngineArgs" "$csvHack"
 	done
 }
@@ -377,14 +373,14 @@ function Usage {
 
 #### Program Begin
 
-_SILENT=0
+_SILENT=false
 skip_txt_pdf=false
 delete_input=false
 suffix="_OCR"
 no_suffix=false
 no_text=false
-_BATCH_RUN=0
-_SERVICE_RUN=0
+_BATCH_RUN=fase
+_SERVICE_RUN=false
 
 pdf=false
 docx=false
@@ -396,14 +392,14 @@ for i in "$@"
 do
 	case $i in
 		--batch)
-		_BATCH_RUN=1
+		_BATCH_RUN=true
 		;;
 		--service)
-		_SERVICE_RUN=1
-		_LOGGER_STDERR=1
+		_SERVICE_RUN=true
+		_LOGGER_STDERR=true
 		;;
 		--silent|-s)
-		_SILENT=1
+		_SILENT=true
 		;;
 		-p|--target=PDF|--target=pdf)
 		pdf=true
@@ -449,7 +445,7 @@ if [ $pdf == false ] && [ $docx == false ] && [ $xlsx == false ] && [ $txt == fa
 	pdf=true
 fi
 
-if [ $_BATCH_RUN -eq 1 ]; then
+if [ $_BATCH_RUN == true ]; then
 	if [ $skip_txt_pdf == true ]; then
 		CHECK_PDF="yes"
 	else
@@ -482,7 +478,7 @@ fi
 
 CheckEnvironment
 
-if [ $_SERVICE_RUN -eq 1 ]; then
+if [ $_SERVICE_RUN == true ]; then
 	trap TrapQuit SIGTERM EXIT SIGHUP SIGQUIT
 
 	if [ "$PDF_MONITOR_DIR" != "" ]; then
@@ -512,7 +508,7 @@ if [ $_SERVICE_RUN -eq 1 ]; then
 		sleep $WAIT_TIME
 	done
 
-elif [ $_BATCH_RUN -eq 1 ]; then
+elif [ $_BATCH_RUN == true ]; then
 
 	# Get last argument that should be a path
 	eval batch_path=\${$#}

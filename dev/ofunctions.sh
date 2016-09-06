@@ -542,23 +542,23 @@ function TrapError {
 }
 
 function LoadConfigFile {
-	local config_file="${1}"
+	local configFile="${1}"
 	__CheckArguments 1 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
 
-	if [ ! -f "$config_file" ]; then
-		Logger "Cannot load configuration file [$config_file]. Cannot start." "CRITICAL"
+	if [ ! -f "$configFile" ]; then
+		Logger "Cannot load configuration file [$configFfile]. Cannot start." "CRITICAL"
 		exit 1
-	elif [[ "$1" != *".conf" ]]; then
-		Logger "Wrong configuration file supplied [$config_file]. Cannot start." "CRITICAL"
+	elif [[ "$configFile" != *".conf" ]]; then
+		Logger "Wrong configuration file supplied [$configFfile]. Cannot start." "CRITICAL"
 		exit 1
 	else
-		grep '^[^ ]*=[^;&]*' "$config_file" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" # WITHOUT COMMENTS
-		# Shellcheck source=./sync.conf
+		# Remove everything that is not a variable assignation
+		grep '^[^ ]*=[^;&]*' "$configFile" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
 		source "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
 	fi
 
-	CONFIG_FILE="$config_file"
+	CONFIG_FILE="$configFile"
 }
 
 function Spinner {

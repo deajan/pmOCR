@@ -4,93 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-rc
-PROGRAM_BUILD=2016090601
-
-## Instance identification (used for mails only)
-INSTANCE_ID=MyOCRServer
-
-## OCR Engine (can be tesseract3 or abbyyocr11) - You may adjust OCR_ENGINE_ARGS below, especially for language settings.
-OCR_ENGINE=tesseract3
-
-## List of allowed extensions for input files
-FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\|bmp\|pcx\|dcx\)"
-
-#######################################################################
-### THE FOLLOWING PARAMETERS ARE USED WHEN pmOCR IS RUN AS SERVICE ####
-###     YOU MAY SET THEM IN COMMAND LINE WHEN USING BATCH MODE     ####
-#######################################################################
-
-## List of alert mails separated by spaces
-DESTINATION_MAILS="infrastructure@example.com"
-
-## Directories to monitor (Leave variables empty in order to disable specific monitoring).
-## As of today, Tesseract only handles PDF, TXT and CSV
-PDF_MONITOR_DIR="/storage/service_ocr/PDF"
-WORD_MONITOR_DIR="/storage/service_ocr/WORD"
-EXCEL_MONITOR_DIR="/storage/service_ocr/EXCEL"
-TEXT_MONITOR_DIR="/storage/service_ocr/TEXT"
-CSV_MONITOR_DIR="/storage/service_ocr/CSV"
-
-PDF_EXTENSION=".pdf"
-WORD_EXTENSION=".docx"
-EXCEL_EXTENSION=".xlsx"
-TEXT_EXTENSION=".txt"
-CSV_EXTENSION=".csv"
-
-## Adds an optional following suffix to OCRed files (ex: input.tiff becomes input_OCR.pdf). Any file containing this suffix will be ignored. Can be left empty.
-FILENAME_SUFFIX="_OCR"
-
-## Delete original file upon successful processing.
-DELETE_ORIGINAL=no
-
-# Alternative check if PDFs are already OCRed (checks if a pdf contains a font). This will prevent images integrated in already indexed PDFs to get OCRed.
-CHECK_PDF=yes
-
-## Add some extra info to the filename. Example here adds a pseudo ISO 8601 timestamp after a dot (pseudo because the colon sign would render the filename quite weird).
-## Keep variables between singlequotes if you want them to expand at runtime. Leave this variable empty if you don't want to add anything.
-FILENAME_ADDITION='.$(date --utc +"%Y-%m-%dT%H-%M-%SZ")'
-
-# Number of OCR subprocesses to start simultaneously. Should not exceed the number of CPU cores for best performance.
-NUMBER_OF_PROCESSES=4
-
-if [ "$OCR_ENGINE" == "tesseract3" ]; then
-# tesseract 3.x Engine Arguments
-################################
-## tesseract arguments settings :
-OCR_ENGINE_EXEC=/usr/bin/tesseract
-PDF_OCR_ENGINE_ARGS='pdf'
-TEXT_OCR_ENGINE_ARGS=''
-CSV_OCR_ENGINE_ARGS=''
-OCR_ENGINE_INPUT_ARG='-l eng' # Language setting
-OCR_ENGINE_OUTPUT_ARG=
-# tesseract 3 intermediary transformation of PDF to TIFF
-PDF_TO_TIFF_EXEC=/usr/bin/gs
-PDF_TO_TIFF_OPTS=' -q -dNOPAUSE -r300x300 -sDEVICE=tiff32nc -sCompression=lzw -dBATCH -sOUTPUTFILE='
-
-elif [ "$OCR_ENGINE" == "abbyyocr11" ]; then
-# AbbyyOCR11 Engine Arguments
-###############################
-## ABBYYOCR arguments settings :
-## lpp = load predefinied profil / TextExtraction_Acuraccy = name of the predefinied profile / -adb = Detect barcodes / -ido = Detect and rotate image orientation / -adtop = Detect text embedded in images
-## -rl = List of languages for the document (French,English,Spanish ) / recc = Enhanced character confidence
-##
-##### PDF related arguments : -pfs = PDF Export preset (balanced) / -pacm = PDF/A standards (pdfa-3a) / ptem = Specifies the mode of export of recognized text into PDF (PDF/A) format.
-##### DOCX related arguments :-dheb  = Highlights uncertainly recognized characters with the background color when exporting to DOCX format.(color definied by deb parameter)
-##### -deb 0xFFFF00 (yellow highlights) /
-##### XLSX related arguments :  -xlto = only export text from table / -xlrf = remove formating from text / -xllrm = This option allows setting the mode of retaining the original document tables' layout in the output XLSX file (Default, ExactDocument, ExactLines) 
-
-## Full path to OCR engine
-OCR_ENGINE_EXEC=/usr/local/bin/abbyyocr11
-PDF_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -pfs Balanced -pacm Pdfa_3a -ptem ImageOnText -f pdf'
-WORD_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -f docx'
-EXCEL_OCR_ENGINE_ARGS=' -lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -rpihp -xlrf -xllrm ExactLines -f xlsx'
-TEXT_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -trl -f TextUnicodeDefaults'
-CSV_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -trl -f TextUnicodeDefaults'
-OCR_ENGINE_INPUT_ARG='-if'
-OCR_ENGINE_OUTPUT_ARG='-of'
-fi
-
-#### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
+PROGRAM_BUILD=2016090603
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -99,6 +13,7 @@ fi
 
 _LOGGER_PREFIX="date"
 KEEP_LOGGING=0
+DEFAULT_CONFIG_FILE="/etc/pmocr/default.conf"
 
 source "./ofunctions.sh"
 
@@ -156,8 +71,8 @@ function CheckEnvironment {
 	fi
 
 	#TODO(low): check why using this condition
-	if [ "$CHECK_PDF" == "yes" ] && ( [ "$_SERVICE_RUN"  == true ] || [ "$_BATCH_RUN" == true ])
-	then
+	#if [ "$CHECK_PDF" == "yes" ] && ( [ "$_SERVICE_RUN"  == true ] || [ "$_BATCH_RUN" == true ])
+	if [ "$CHECK_PDF" == "yes" ]; then
 		if ! type pdffonts > /dev/null 2>&1; then
 			Logger "pdffonts not present (see poppler-utils package ?)." "CRITICAL"
 			exit 1
@@ -344,13 +259,14 @@ function Usage {
 	echo "$AUTHOR"
 	echo "$CONTACT"
 	echo ""
-	echo "You may adjust file $(basename $0) according to your OCR needs (language, ocr engine, etc)."
+	echo "You may adjust file default config in /etc/pmocr/default.conf according to your OCR needs (language, ocr engine, etc)."
 	echo ""
 	echo "$PROGRAM can be launched as a directory monitoring service using \"service $PROGRAM-srv start\" or \"systemctl start $PROGRAM-srv\" or in batch processing mode"
 	echo "Batch mode usage:"
 	echo "$PROGRAM.sh --batch [options] /path/to/folder"
 	echo ""
 	echo "[OPTIONS]"
+	echo "--config=/path/to/config  Use an alternative OCR config file."
 	echo "-p, --target=PDF          Creates a PDF document (default)"
 	echo "-w, --target=DOCX         Creates a WORD document"
 	echo "-e, --target=XLSX         Creates an EXCEL document"
@@ -391,6 +307,9 @@ csv=false
 for i in "$@"
 do
 	case $i in
+		--config=*)
+		CONFIG_FILE="${i##*=}"
+		;;
 		--batch)
 		_BATCH_RUN=true
 		;;
@@ -440,16 +359,21 @@ do
 	esac
 done
 
+if [ "$CONFIG_FILE" != "" ]; then
+	LoadConfigFile "$CONFIG_FILE"
+else
+	LoadConfigFile "$DEFAULT_CONFIG_FILE"
+fi
+
 # Set default conversion format
 if [ $pdf == false ] && [ $docx == false ] && [ $xlsx == false ] && [ $txt == false ] && [ $csv == false ]; then
 	pdf=true
 fi
 
+# Commandline arguments override default config
 if [ $_BATCH_RUN == true ]; then
 	if [ $skip_txt_pdf == true ]; then
 		CHECK_PDF="yes"
-	else
-		CHECK_PDF="no"
 	fi
 
 	if [ $no_suffix == true ]; then
@@ -460,20 +384,15 @@ if [ $_BATCH_RUN == true ]; then
 
 	if [ $no_text == true ]; then
 		FILENAME_ADDITION=""
-	elif [ "$text" != "" ]; then
+	fi
+
+	if [ "$text" != "" ]; then
 		FILENAME_ADDITION="$text"
 	fi
 
 	if [ $delete_input == true ]; then
 		DELETE_ORIGINAL=yes
-	else
-		DELETE_ORIGINAL=no
 	fi
-fi
-
-if [ "$OCR_ENGINE" != "tesseract3" ] && [ "$OCR_ENGINE" != "abbyyocr11" ]; then
-	Logger "No valid OCR engine selected. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "CRITICAL"
-	exit 1
 fi
 
 CheckEnvironment
@@ -503,9 +422,10 @@ if [ $_SERVICE_RUN == true ]; then
 
 	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST]." "NOTICE"
 
+	# Keep running until trap function quits
 	while true
 	do
-		sleep $WAIT_TIME
+		sleep 65535
 	done
 
 elif [ $_BATCH_RUN == true ]; then

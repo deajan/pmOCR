@@ -48,10 +48,10 @@ start() {
 	do
 		if [ -f $progpath/$progexec ]
 		then
-			$progpath/$progexec $cfgfile --service > /dev/null 2>&1 &
+			$progpath/$progexec --config=$cfgfile --service > /dev/null 2>&1 &
 		elif [ -f ./$progexec ]
 		then
-			./$progexec $cfgfile --service > /dev/null 2>&1 &
+			./$progexec --config=$cfgfile --service > /dev/null 2>&1 &
 		else
 			echo "Cannot find $prog executable in $progpath"
 			exit 1

@@ -44,7 +44,7 @@ You may change it's contents or clone it and have pmOCR use an alternative confi
 Service mode monitors directories and their subdirectories and launched an OCR conversion whenever a new file is written.
 Keep in mind that only file creations are monitored. File moves aren't.
 
-pmocr is written to monitor up to 4 directories, each producing a different target format (PDF, DOCX, XLSX & CSV). Comment out a folder to disable it's monitoring.
+pmocr is written to monitor up to 5 directories, each producing a different target format (PDF, DOCX, XLSX, TXT & CSV). Comment out a folder to disable it's monitoring.
 
 There's also an option to avoid passing PDFs to the OCR engine that already contain text.
 

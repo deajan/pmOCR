@@ -1,6 +1,6 @@
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016090401
+## FUNC_BUILD=2016090601
 ## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
@@ -547,10 +547,10 @@ function LoadConfigFile {
 
 
 	if [ ! -f "$configFile" ]; then
-		Logger "Cannot load configuration file [$configFfile]. Cannot start." "CRITICAL"
+		Logger "Cannot load configuration file [$configFile]. Cannot start." "CRITICAL"
 		exit 1
 	elif [[ "$configFile" != *".conf" ]]; then
-		Logger "Wrong configuration file supplied [$configFfile]. Cannot start." "CRITICAL"
+		Logger "Wrong configuration file supplied [$configFile]. Cannot start." "CRITICAL"
 		exit 1
 	else
 		# Remove everything that is not a variable assignation

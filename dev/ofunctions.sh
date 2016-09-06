@@ -1,12 +1,14 @@
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016082801
+## FUNC_BUILD=2016090401
 ## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
 ## PROGRAM=program-name
 ## INSTANCE_ID=program-instance-name
 ## _DEBUG=yes/no
+
+#TODO: Windows checks, check sendmail & mailsend
 
 if ! type "$BASH" > /dev/null; then
 	echo "Please run this script only with bash shell. Tested on bash >= 3.2"
@@ -20,20 +22,21 @@ export LC_ALL=C
 MAIL_ALERT_MSG="Execution of $PROGRAM instance $INSTANCE_ID on $(date) has warnings/errors."
 
 # Environment variables that can be overriden by programs
-_DRYRUN=0
-_SILENT=0
+_DRYRUN=false
+_SILENT=false
+_VERBOSE=false
 _LOGGER_PREFIX="date"
-_LOGGER_STDERR=0
+_LOGGER_STDERR=false
 if [ "$KEEP_LOGGING" == "" ]; then
         KEEP_LOGGING=1801
 fi
 
 # Initial error status, logging 'WARN', 'ERROR' or 'CRITICAL' will enable alerts flags
-ERROR_ALERT=0
-WARN_ALERT=0
+ERROR_ALERT=false
+WARN_ALERT=false
 
-# Current log
-CURRENT_LOG=
+# Log from current run
+CURRENT_LOG=""
 
 ## allow function call checks			#__WITH_PARANOIA_DEBUG
 if [ "$_PARANOIA_DEBUG" == "yes" ];then		#__WITH_PARANOIA_DEBUG
@@ -44,11 +47,11 @@ fi						#__WITH_PARANOIA_DEBUG
 if [ ! "$_DEBUG" == "yes" ]; then
 	_DEBUG=no
 	SLEEP_TIME=.05 # Tested under linux and FreeBSD bash, #TODO tests on cygwin / msys
-	_VERBOSE=0
+	_VERBOSE=false
 else
 	SLEEP_TIME=1
 	trap 'TrapError ${LINENO} $?' ERR
-	_VERBOSE=1
+	_VERBOSE=true
 fi
 
 SCRIPT_PID=$$
@@ -102,17 +105,21 @@ function _Logger {
 	echo -e "$lvalue" >> "$LOG_FILE"
 	CURRENT_LOG="$CURRENT_LOG"$'\n'"$lvalue"
 
-	if [ "$_LOGGER_STDERR" -eq 1 ]; then
+	if [ $_LOGGER_STDERR == true ]; then
 		cat <<< "$evalue" 1>&2
-	elif [ "$_SILENT" -eq 0 ]; then
+	elif [ "$_SILENT" == false ]; then
 		echo -e "$svalue"
 	fi
 }
 
-# General log function with log levels
+# General log function with log levels:
+# CRITICAL, ERROR, WARN are colored in stdout, prefixed in stderr
+# NOTICE is standard level
+# VERBOSE is only sent to stdout / stderr if _VERBOSE=true
+# DEBUG & PARANOIA_DEBUG are only sent if _DEBUG=yes
 function Logger {
 	local value="${1}" # Sentence to log (in double quotes)
-	local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, NOTICE, WARN, ERROR, CRITIAL
+	local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, VERBOSE, NOTICE, WARN, ERROR, CRITIAL
 
 	if [ "$_LOGGER_PREFIX" == "time" ]; then
 		prefix="TIME: $SECONDS - "
@@ -124,18 +131,23 @@ function Logger {
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "$prefix\e[41m$value\e[0m" "$prefix$level:$value" "$level:$value"
-		ERROR_ALERT=1
+		ERROR_ALERT=true
 		return
 	elif [ "$level" == "ERROR" ]; then
 		_Logger "$prefix\e[91m$value\e[0m" "$prefix$level:$value" "$level:$value"
-		ERROR_ALERT=1
+		ERROR_ALERT=true
 		return
 	elif [ "$level" == "WARN" ]; then
 		_Logger "$prefix\e[93m$value\e[0m" "$prefix$level:$value" "$level:$value"
-		WARN_ALERT=1
+		WARN_ALERT=true
 		return
 	elif [ "$level" == "NOTICE" ]; then
 		_Logger "$prefix$value"
+		return
+	elif [ "$level" == "VERBOSE" ]; then
+		if [ $_VERBOSE == true ]; then
+			_Logger "$prefix$value"
+		fi
 		return
 	elif [ "$level" == "DEBUG" ]; then
 		if [ "$_DEBUG" == "yes" ]; then
@@ -148,8 +160,8 @@ function Logger {
 			return					#__WITH_PARANOIA_DEBUG
 		fi						#__WITH_PARANOIA_DEBUG
 	else
-		_Logger "\e[41mLogger function called without proper loglevel.\e[0m"
-		_Logger "$prefix$value"
+		_Logger "\e[41mLogger function called without proper loglevel [$level].\e[0m"
+		_Logger "Value was: $prefix$value"
 	fi
 }
 
@@ -173,7 +185,7 @@ function QuickLogger {
 
 	__CheckArguments 1 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
-	if [ "$_SILENT" -eq 1 ]; then
+	if [ $_SILENT == true ]; then
 		_QuickLogger "$value" "log"
 	else
 		_QuickLogger "$value" "stdout"
@@ -270,9 +282,9 @@ function SendAlert {
 	fi
 	body="$MAIL_ALERT_MSG"$'\n\n'"$CURRENT_LOG"
 
-	if [ $ERROR_ALERT -eq 1 ]; then
+	if [ $ERROR_ALERT == true ]; then
 		subject="Error alert for $INSTANCE_ID"
-	elif [ $WARN_ALERT -eq 1 ]; then
+	elif [ $WARN_ALERT == true ]; then
 		subject="Warning alert for $INSTANCE_ID"
 	else
 		subject="Alert for $INSTANCE_ID"
@@ -524,7 +536,7 @@ function TrapError {
 	local job="$0"
 	local line="$1"
 	local code="${2:-1}"
-	if [ $_SILENT -eq 0 ]; then
+	if [ $_SILENT == false ]; then
 		echo -e " /!\ ERROR in ${job}: Near line ${line}, exit code ${code}"
 	fi
 }
@@ -550,7 +562,7 @@ function LoadConfigFile {
 }
 
 function Spinner {
-	if [ $_SILENT -eq 1 ]; then
+	if [ $_SILENT == true ]; then
 		return 0
 	fi
 
@@ -592,7 +604,6 @@ function joinString {
 # Fills a global variable called WAIT_FOR_TASK_COMPLETION that contains list of failed pids in format pid1:result1;pid2:result2
 # Warning: Don't imbricate this function into another run if you plan to use the global variable output
 
-#TODO check missing local values used here
 function WaitForTaskCompletion {
 	local pids="${1}" # pids to wait for, separated by semi-colon
 	local soft_max_time="${2}" # If program with pid $pid takes longer than $soft_max_time seconds, will log a warning, unless $soft_max_time equals 0.
@@ -604,7 +615,7 @@ function WaitForTaskCompletion {
 	Logger "${FUNCNAME[0]} called by [$caller_name]." "PARANOIA_DEBUG"	#__WITH_PARANOIA_DEBUG
 	__CheckArguments 6 $# ${FUNCNAME[0]} "$@"				#__WITH_PARANOIA_DEBUG
 
-	local soft_alert=0 # Does a soft alert need to be triggered, if yes, send an alert once
+	local soft_alert=false # Does a soft alert need to be triggered, if yes, send an alert once
 	local log_ttime=0 # local time instance for comparaison
 
 	local seconds_begin=$SECONDS # Seconds since the beginning of the script
@@ -613,8 +624,14 @@ function WaitForTaskCompletion {
 	local retval=0 # return value of monitored pid process
 	local errorcount=0 # Number of pids that finished with errors
 
+	local pid	# Current pid working on
 	local pidCount # number of given pids
 	local pidState # State of the process
+
+	local pidsArray # Array of currently running pids
+	local newPidsArray # New array of currently running pids
+
+	local hasPids=false # Are any valable pids given to function ?		#__WITH_PARANOIA_DEBUG
 
 	IFS=';' read -a pidsArray <<< "$pids"
 	pidCount=${#pidsArray[@]}
@@ -641,9 +658,9 @@ function WaitForTaskCompletion {
 		fi
 
 		if [ $exec_time -gt $soft_max_time ]; then
-			if [ $soft_alert -eq 0 ] && [ $soft_max_time -ne 0 ]; then
+			if [ $soft_alert == true ] && [ $soft_max_time -ne 0 ]; then
 				Logger "Max soft execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]." "WARN"
-				soft_alert=1
+				soft_alert=true
 				SendAlert true
 
 			fi
@@ -658,33 +675,39 @@ function WaitForTaskCompletion {
 					fi
 				done
 				SendAlert true
-				errrorcount=$((errorcount+1))
 			fi
 		fi
 
 		for pid in "${pidsArray[@]}"; do
-			if kill -0 $pid > /dev/null 2>&1; then
-				# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
-				#TODO(high): have this tested on *BSD, Mac & Win
-				pidState=$(ps -p$pid -o state= 2 > /dev/null)
-				if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
-					newPidsArray+=($pid)
-				fi
-			else
-				# pid is dead, get it's exit code from wait command
-				wait $pid
-				retval=$?
-				if [ $retval -ne 0 ]; then
-					errorcount=$((errorcount+1))
-					Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$retval]." "DEBUG"
-					if [ "$WAIT_FOR_TASK_COMPLETION" == "" ]; then
-						WAIT_FOR_TASK_COMPLETION="$pid:$retval"
-					else
-						WAIT_FOR_TASK_COMPLETION=";$pid:$retval"
+			if [ $(IsInteger $pid) -eq 1 ]; then
+				if kill -0 $pid > /dev/null 2>&1; then
+					# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
+					#TODO(high): have this tested on *BSD, Mac & Win
+					pidState=$(ps -p$pid -o state= 2 > /dev/null)
+					if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
+						newPidsArray+=($pid)
+					fi
+				else
+					# pid is dead, get it's exit code from wait command
+					wait $pid
+					retval=$?
+					if [ $retval -ne 0 ]; then
+						errorcount=$((errorcount+1))
+						Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$retval]." "DEBUG"
+						if [ "$WAIT_FOR_TASK_COMPLETION" == "" ]; then
+							WAIT_FOR_TASK_COMPLETION="$pid:$retval"
+						else
+							WAIT_FOR_TASK_COMPLETION=";$pid:$retval"
+						fi
 					fi
 				fi
+				hasPids=true					##__WITH_PARANOIA_DEBUG
 			fi
 		done
+
+		if [ $hasPids == false ]; then					##__WITH_PARANOIA_DEBUG
+			Logger "No valable pids given." "ERROR" 		##__WITH_PARANOIA_DEBUG
+		fi								##__WITH_PARANOIA_DEBUG
 
 		pidsArray=("${newPidsArray[@]}")
 		# Trivial wait time for bash to not eat up all CPU
@@ -708,15 +731,16 @@ function ParallelExec {
 	local commandsArg="${2}" # Semi-colon separated list of commands
 
 	local pid
-	local runningPids=0
 	local counter=0
 	local commandsArray
 	local pidsArray
 	local newPidsArray
 	local retval
-	local retvalAll=0
+	local errorCount=0
 	local pidState
 	local commandsArrayPid
+
+	local hasPids=false # Are any valable pids given to function ?		#__WITH_PARANOIA_DEBUG
 
 	IFS=';' read -r -a commandsArray <<< "$commandsArg"
 
@@ -736,29 +760,36 @@ function ParallelExec {
 
 		newPidsArray=()
 		for pid in "${pidsArray[@]}"; do
-			# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
-			if kill -0 $pid > /dev/null 2>&1; then
-				pidState=$(ps -p$pid -o state= 2 > /dev/null)
-				if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
-					newPidsArray+=($pid)
+			if [ $(IsInteger $pid) -eq 1 ]; then
+				# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
+				if kill -0 $pid > /dev/null 2>&1; then
+					pidState=$(ps -p$pid -o state= 2 > /dev/null)
+					if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
+						newPidsArray+=($pid)
+					fi
+				else
+					# pid is dead, get it's exit code from wait command
+					wait $pid
+					retval=$?
+					if [ $retval -ne 0 ]; then
+						Logger "Command [${commandsArrayPid[$pid]}] failed with exit code [$retval]." "ERROR"
+						errorCount=$((errorCount+1))
+					fi
 				fi
-			else
-				# pid is dead, get it's exit code from wait command
-				wait $pid
-				retval=$?
-				if [ $retval -ne 0 ]; then
-					Logger "Command [${commandsArrayPid[$pid]}] failed with exit code [$retval]." "ERROR"
-					retvalAll=$((retvalAll+1))
-				fi
+				hasPids=true					##__WITH_PARANOIA_DEBUG
 			fi
 		done
+
+		if [ $hasPids == false ]; then					##__WITH_PARANOIA_DEBUG
+			Logger "No valable pids given." "ERROR"			##__WITH_PARANOIA_DEBUG
+		fi								##__WITH_PARANOIA_DEBUG
 		pidsArray=("${newPidsArray[@]}")
 
 		# Trivial wait time for bash to not eat up all CPU
 		sleep $SLEEP_TIME
 	done
 
-	return $retvalAll
+	return $errorCount
 }
 
 function CleanUp {
@@ -799,16 +830,37 @@ function StripQuotes {
 	echo "$(StripSingleQuotes $(StripDoubleQuotes $string))"
 }
 
+# Usage var=$(EscapeSpaces "$var") or var="$(EscapeSpaces "$var")"
 function EscapeSpaces {
 	local string="${1}" # String on which spaces will be escaped
-	echo "${string// /\ }"
+	echo "${string// /\\ }"
 }
 
-function IsNumeric {
+function IsNumericExpand {
 	eval "local value=\"${1}\"" # Needed eval so variable variables can be processed
 
 	local re="^-?[0-9]+([.][0-9]+)?$"
 	if [[ $value =~ $re ]]; then
+		echo 1
+	else
+		echo 0
+	fi
+}
+
+function IsNumeric {
+	local value="${1}"
+
+	if [[ $value =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+		echo 1
+	else
+		echo 0
+	fi
+}
+
+function IsInteger {
+	local value="${1}"
+
+	if [[ $value =~ ^[0-9]+$ ]]; then
 		echo 1
 	else
 		echo 0
@@ -948,7 +1000,7 @@ function RunLocalCommand {
 	local hard_max_time="${2}" # Max time to wait for command to compleet
 	__CheckArguments 2 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
-	if [ $_DRYRUN -ne 0 ]; then
+	if [ $_DRYRUN == true ]; then
 		Logger "Dryrun: Local command [$command] not run." "NOTICE"
 		return 0
 	fi
@@ -963,7 +1015,7 @@ function RunLocalCommand {
 		Logger "Command failed." "ERROR"
 	fi
 
-	if [ $_VERBOSE -eq 1 ] || [ $retval -ne 0 ]; then
+	if [ $_VERBOSE == true ] || [ $retval -ne 0 ]; then
 		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "NOTICE"
 	fi
 
@@ -981,7 +1033,7 @@ function RunRemoteCommand {
 
 	CheckConnectivity3rdPartyHosts
 	CheckConnectivityRemoteHost
-	if [ $_DRYRUN -ne 0 ]; then
+	if [ $_DRYRUN == true ]; then
 		Logger "Dryrun: Local command [$command] not run." "NOTICE"
 		return 0
 	fi
@@ -998,7 +1050,7 @@ function RunRemoteCommand {
 		Logger "Command failed." "ERROR"
 	fi
 
-	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" ] && ([ $_VERBOSE -eq 1 ] || [ $retval -ne 0 ])
+	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" ] && ([ $_VERBOSE == true ] || [ $retval -ne 0 ])
 	then
 		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "NOTICE"
 	fi
@@ -1050,14 +1102,17 @@ function RunAfterHook {
 function CheckConnectivityRemoteHost {
 	__CheckArguments 0 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
+	local retval
+
 	if [ "$_PARANOIA_DEBUG" != "yes" ]; then # Do not loose time in paranoia debug
 
 		if [ "$REMOTE_HOST_PING" != "no" ] && [ "$REMOTE_OPERATION" != "no" ]; then
 			eval "$PING_CMD $REMOTE_HOST > /dev/null 2>&1" &
 			WaitForTaskCompletion $! 60 180 ${FUNCNAME[0]} true $KEEP_LOGGING
-			if [ $? != 0 ]; then
-				Logger "Cannot ping $REMOTE_HOST" "ERROR"
-				return 1
+			retval=$?
+			if [ $retval != 0 ]; then
+				Logger "Cannot ping [$REMOTE_HOST]. Return code [$retval]." "ERROR"
+				return $retval
 			fi
 		fi
 	fi
@@ -1067,24 +1122,25 @@ function CheckConnectivity3rdPartyHosts {
 	__CheckArguments 0 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
 	local remote_3rd_party_success
-	local pids
+	local retval
 
 	if [ "$_PARANOIA_DEBUG" != "yes" ]; then # Do not loose time in paranoia debug
 
 		if [ "$REMOTE_3RD_PARTY_HOSTS" != "" ]; then
-			remote_3rd_party_success=0
+			remote_3rd_party_success=false
 			for i in $REMOTE_3RD_PARTY_HOSTS
 			do
 				eval "$PING_CMD $i > /dev/null 2>&1" &
 				WaitForTaskCompletion $! 180 360 ${FUNCNAME[0]} true $KEEP_LOGGING
-				if [ $? != 0 ]; then
-					Logger "Cannot ping 3rd party host $i" "NOTICE"
+				retval=$?
+				if [ $retval != 0 ]; then
+					Logger "Cannot ping 3rd party host [$i]. Return code [$retval]." "NOTICE"
 				else
-					remote_3rd_party_success=1
+					remote_3rd_party_success=true
 				fi
 			done
 
-			if [ $remote_3rd_party_success -ne 1 ]; then
+			if [ $remote_3rd_party_success == false ]; then
 				Logger "No remote 3rd party host responded to ping. No internet ?" "ERROR"
 				return 1
 			else
@@ -1115,14 +1171,14 @@ function __CheckArguments {
 		# In order to avoid this, we need to iterate over ${4} and count
 
 		local iterate=4
-		local fetchArguments=1
+		local fetchArguments=true
 		local argList=""
 		local countedArguments
-		while [ $fetchArguments -eq 1 ]; do
+		while [ $fetchArguments == true ]; do
 			cmd='argument=${'$iterate'}'
 			eval $cmd
 			if [ "$argument" = "" ]; then
-				fetchArguments=0
+				fetchArguments=false
 			else
 				argList="$arg_list [Argument $(($iterate-3)): $argument]"
 				iterate=$(($iterate+1))
@@ -1264,7 +1320,7 @@ function PreInit {
 
 	 ## Set rsync default arguments
 	RSYNC_ARGS="-rltD"
-	if [ "$_DRYRUN" -eq 1 ]; then
+	if [ "$_DRYRUN" == true ]; then
 		RSYNC_DRY_ARG="-n"
 		DRY_WARNING="/!\ DRY RUN"
 	else

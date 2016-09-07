@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-rc2
-PROGRAM_BUILD=2016090604
+PROGRAM_BUILD=2016090605
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -221,15 +221,24 @@ function OCR_Dispatch {
 	fi
 
 	# Read find result into command list
-	while IFS= read -r -d $'\0' file; do
-		if [ "$cmd" == "" ]; then
-			cmd="OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
-		else
-			cmd="$cmd;OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
-		fi
-	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+	#while IFS= read -r -d $'\0' file; do
+	#	if [ "$cmd" == "" ]; then
+	#		cmd="OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
+	#	else
+	#		cmd="$cmd;OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
+	#	fi
+	#done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+	#ParallelExec $NUMBER_OF_PROCESSES "$cmd" false
 
-	ParallelExec $NUMBER_OF_PROCESSES "$cmd"
+	# Replaced command array with file to support large fileset
+	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" ]; then
+		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	fi
+	while IFS= read -r -d $'\0' file; do
+		echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true
+
 	return $?
 }
 
@@ -292,7 +301,6 @@ function Usage {
 _SILENT=false
 skip_txt_pdf=false
 delete_input=false
-suffix="_OCR"
 no_suffix=false
 no_text=false
 _BATCH_RUN=fase
@@ -378,8 +386,6 @@ if [ $_BATCH_RUN == true ]; then
 
 	if [ $no_suffix == true ]; then
 		FILENAME_SUFFIX=""
-	else
-		FILENAME_SUFFIX="$suffix"
 	fi
 
 	if [ $no_text == true ]; then

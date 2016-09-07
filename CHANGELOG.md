@@ -2,7 +2,7 @@ RECENT CHANGES
 --------------
 
 DD mmm YYYY: v1.5
-! ParallelExec with big file lists
+- Enhanced parallel execution for huge file sets
 - Improved cpu usage on idle
 - Changed the way pmocr works
 	- Splitted pmocr.sh config into separate config files so updates don't overwrite current config anymore

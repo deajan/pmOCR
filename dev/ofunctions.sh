@@ -765,7 +765,7 @@ function ParallelExec {
 
 		while [ $counter -lt "$commandCount" ] && [ ${#pidsArray[@]} -lt $numberOfProcesses ]; do
 			if [ $readFromFile == true ]; then
-				#TODO: check if awk works on FreeBSD & Mac & Win
+				#TODO: Checked on FreeBSD 10, also check on Win
 				command=$(awk 'NR == num_line {print; exit}' num_line=$((counter+1)) "$commandsArg")
 			else
 				command="${commandsArray[$counter]}"

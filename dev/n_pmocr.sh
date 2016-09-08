@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-rc2
-PROGRAM_BUILD=2016090605
+PROGRAM_BUILD=2016090801
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -150,7 +150,6 @@ function OCR {
 					fi
 				fi
 
-				Logger "$outputFileName$TEXT_EXTENSION" "NOTICE"
 				# Fix for tesseract pdf output also outputs txt format
                                 if [ "$fileExtension" == ".pdf" ] && [ -f "$outputFileName$TEXT_EXTENSION" ]; then
 					rm -f "$outputFileName$TEXT_EXTENSION"

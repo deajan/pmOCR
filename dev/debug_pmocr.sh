@@ -3,97 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5-rc
-PROGRAM_BUILD=2016082705
-
-## Instance identification (used for mails only)
-INSTANCE_ID=MyOCRServer
-
-## OCR Engine (can be tesseract3 or abbyyocr11) - You may adjust OCR_ENGINE_ARGS below, especially for language settings.
-OCR_ENGINE=tesseract3
-
-## List of allowed extensions for input files
-FILES_TO_PROCES="\(pdf\|tif\|tiff\|png\|jpg\|jpeg\|bmp\|pcx\|dcx\)"
-
-#######################################################################
-### THE FOLLOWING PARAMETERS ARE USED WHEN pmOCR IS RUN AS SERVICE ####
-###     YOU MAY SET THEM IN COMMAND LINE WHEN USING BATCH MODE     ####
-#######################################################################
-
-## List of alert mails separated by spaces
-DESTINATION_MAILS="infrastructure@example.com"
-
-## Directories to monitor (Leave variables empty in order to disable specific monitoring).
-## As of today, Tesseract only handles PDF, TXT and CSV
-PDF_MONITOR_DIR="/storage/service_ocr/PDF"
-WORD_MONITOR_DIR="/storage/service_ocr/WORD"
-EXCEL_MONITOR_DIR="/storage/service_ocr/EXCEL"
-TEXT_MONITOR_DIR="/storage/service_ocr/TEXT"
-CSV_MONITOR_DIR="/storage/service_ocr/CSV"
-
-PDF_EXTENSION=".pdf"
-WORD_EXTENSION=".docx"
-EXCEL_EXTENSION=".xlsx"
-TEXT_EXTENSION=".txt"
-CSV_EXTENSION=".csv"
-
-## Adds an optional following suffix to OCRed files (ex: input.tiff becomes input_OCR.pdf). Any file containing this suffix will be ignored. Can be left empty.
-FILENAME_SUFFIX="_OCR"
-
-## Delete original file upon successful processing.
-DELETE_ORIGINAL=no
-
-# Alternative check if PDFs are already OCRed (checks if a pdf contains a font). This will prevent images integrated in already indexed PDFs to get OCRed.
-CHECK_PDF=yes
-
-## Add some extra info to the filename. Example here adds a pseudo ISO 8601 timestamp after a dot (pseudo because the colon sign would render the filename quite weird).
-## Keep variables between singlequotes if you want them to expand at runtime. Leave this variable empty if you don't want to add anything.
-FILENAME_ADDITION='.$(date --utc +"%Y-%m-%dT%H-%M-%SZ")'
-
-# Number of OCR subprocesses to start simultaneously. Should not exceed the number of CPU cores for best performance.
-NUMBER_OF_PROCESSES=4
-
-# Wait a trivial number of seconds before launching OCR
-WAIT_TIME=1
-
-if [ "$OCR_ENGINE" == "tesseract3" ]; then
-# tesseract 3.x Engine Arguments
-################################
-## tesseract arguments settings :
-OCR_ENGINE_EXEC=/usr/bin/tesseract
-PDF_OCR_ENGINE_ARGS='pdf'
-TEXT_OCR_ENGINE_ARGS=''
-CSV_OCR_ENGINE_ARGS=''
-OCR_ENGINE_INPUT_ARG='-l eng' # Language setting
-OCR_ENGINE_OUTPUT_ARG=
-# tesseract 3 intermediary transformation of PDF to TIFF
-PDF_TO_TIFF_EXEC=/usr/bin/gs
-PDF_TO_TIFF_OPTS=' -q -dNOPAUSE -r300x300 -sDEVICE=tiff32nc -sCompression=lzw -dBATCH -sOUTPUTFILE='
-
-elif [ "$OCR_ENGINE" == "abbyyocr11" ]; then
-# AbbyyOCR11 Engine Arguments
-###############################
-## ABBYYOCR arguments settings :
-## lpp = load predefinied profil / TextExtraction_Acuraccy = name of the predefinied profile / -adb = Detect barcodes / -ido = Detect and rotate image orientation / -adtop = Detect text embedded in images
-## -rl = List of languages for the document (French,English,Spanish ) / recc = Enhanced character confidence
-##
-##### PDF related arguments : -pfs = PDF Export preset (balanced) / -pacm = PDF/A standards (pdfa-3a) / ptem = Specifies the mode of export of recognized text into PDF (PDF/A) format.
-##### DOCX related arguments :-dheb  = Highlights uncertainly recognized characters with the background color when exporting to DOCX format.(color definied by deb parameter)
-##### -deb 0xFFFF00 (yellow highlights) /
-##### XLSX related arguments :  -xlto = only export text from table / -xlrf = remove formating from text / -xllrm = This option allows setting the mode of retaining the original document tables' layout in the output XLSX file (Default, ExactDocument, ExactLines) 
-
-## Full path to OCR engine
-OCR_ENGINE_EXEC=/usr/local/bin/abbyyocr11
-PDF_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -pfs Balanced -pacm Pdfa_3a -ptem ImageOnText -f pdf'
-WORD_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -f docx'
-EXCEL_OCR_ENGINE_ARGS=' -lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -rpihp -xlrf -xllrm ExactLines -f xlsx'
-TEXT_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -trl -f TextUnicodeDefaults'
-CSV_OCR_ENGINE_ARGS='-lpp TextExtraction_Accuracy -adb -ido -adtop -rl French,English,Spanish -recc -trl -f TextUnicodeDefaults'
-OCR_ENGINE_INPUT_ARG='-if'
-OCR_ENGINE_OUTPUT_ARG='-of'
-fi
-
-#### DO NOT EDIT UNDER THIS LINE ##########################################################################################################################
+PROGRAM_VERSION=1.5-rc2
+PROGRAM_BUILD=2016090801
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -102,16 +13,19 @@ fi
 
 _LOGGER_PREFIX="date"
 KEEP_LOGGING=0
+DEFAULT_CONFIG_FILE="/etc/pmocr/default.conf"
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016082801
+## FUNC_BUILD=2016090701
 ## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
 ## PROGRAM=program-name
 ## INSTANCE_ID=program-instance-name
 ## _DEBUG=yes/no
+
+#TODO: Windows checks, check sendmail & mailsend
 
 if ! type "$BASH" > /dev/null; then
 	echo "Please run this script only with bash shell. Tested on bash >= 3.2"
@@ -125,31 +39,32 @@ export LC_ALL=C
 MAIL_ALERT_MSG="Execution of $PROGRAM instance $INSTANCE_ID on $(date) has warnings/errors."
 
 # Environment variables that can be overriden by programs
-_DRYRUN=0
-_SILENT=0
+_DRYRUN=false
+_SILENT=false
+_VERBOSE=false
 _LOGGER_PREFIX="date"
-_LOGGER_STDERR=0
+_LOGGER_STDERR=false
 if [ "$KEEP_LOGGING" == "" ]; then
         KEEP_LOGGING=1801
 fi
 
 # Initial error status, logging 'WARN', 'ERROR' or 'CRITICAL' will enable alerts flags
-ERROR_ALERT=0
-WARN_ALERT=0
+ERROR_ALERT=false
+WARN_ALERT=false
 
-# Current log
-CURRENT_LOG=
+# Log from current run
+CURRENT_LOG=""
 
 
 ## allow debugging from command line with _DEBUG=yes
 if [ ! "$_DEBUG" == "yes" ]; then
 	_DEBUG=no
 	SLEEP_TIME=.05 # Tested under linux and FreeBSD bash, #TODO tests on cygwin / msys
-	_VERBOSE=0
+	_VERBOSE=false
 else
 	SLEEP_TIME=1
 	trap 'TrapError ${LINENO} $?' ERR
-	_VERBOSE=1
+	_VERBOSE=true
 fi
 
 SCRIPT_PID=$$
@@ -202,17 +117,21 @@ function _Logger {
 	echo -e "$lvalue" >> "$LOG_FILE"
 	CURRENT_LOG="$CURRENT_LOG"$'\n'"$lvalue"
 
-	if [ "$_LOGGER_STDERR" -eq 1 ]; then
+	if [ $_LOGGER_STDERR == true ]; then
 		cat <<< "$evalue" 1>&2
-	elif [ "$_SILENT" -eq 0 ]; then
+	elif [ "$_SILENT" == false ]; then
 		echo -e "$svalue"
 	fi
 }
 
-# General log function with log levels
+# General log function with log levels:
+# CRITICAL, ERROR, WARN are colored in stdout, prefixed in stderr
+# NOTICE is standard level
+# VERBOSE is only sent to stdout / stderr if _VERBOSE=true
+# DEBUG & PARANOIA_DEBUG are only sent if _DEBUG=yes
 function Logger {
 	local value="${1}" # Sentence to log (in double quotes)
-	local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, NOTICE, WARN, ERROR, CRITIAL
+	local level="${2}" # Log level: PARANOIA_DEBUG, DEBUG, VERBOSE, NOTICE, WARN, ERROR, CRITIAL
 
 	if [ "$_LOGGER_PREFIX" == "time" ]; then
 		prefix="TIME: $SECONDS - "
@@ -224,18 +143,23 @@ function Logger {
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "$prefix\e[41m$value\e[0m" "$prefix$level:$value" "$level:$value"
-		ERROR_ALERT=1
+		ERROR_ALERT=true
 		return
 	elif [ "$level" == "ERROR" ]; then
 		_Logger "$prefix\e[91m$value\e[0m" "$prefix$level:$value" "$level:$value"
-		ERROR_ALERT=1
+		ERROR_ALERT=true
 		return
 	elif [ "$level" == "WARN" ]; then
 		_Logger "$prefix\e[93m$value\e[0m" "$prefix$level:$value" "$level:$value"
-		WARN_ALERT=1
+		WARN_ALERT=true
 		return
 	elif [ "$level" == "NOTICE" ]; then
 		_Logger "$prefix$value"
+		return
+	elif [ "$level" == "VERBOSE" ]; then
+		if [ $_VERBOSE == true ]; then
+			_Logger "$prefix$value"
+		fi
 		return
 	elif [ "$level" == "DEBUG" ]; then
 		if [ "$_DEBUG" == "yes" ]; then
@@ -243,8 +167,8 @@ function Logger {
 			return
 		fi
 	else
-		_Logger "\e[41mLogger function called without proper loglevel.\e[0m"
-		_Logger "$prefix$value"
+		_Logger "\e[41mLogger function called without proper loglevel [$level].\e[0m"
+		_Logger "Value was: $prefix$value"
 	fi
 }
 
@@ -266,7 +190,7 @@ function QuickLogger {
 	local value="${1}"
 
 
-	if [ "$_SILENT" -eq 1 ]; then
+	if [ $_SILENT == true ]; then
 		_QuickLogger "$value" "log"
 	else
 		_QuickLogger "$value" "stdout"
@@ -360,9 +284,9 @@ function SendAlert {
 	fi
 	body="$MAIL_ALERT_MSG"$'\n\n'"$CURRENT_LOG"
 
-	if [ $ERROR_ALERT -eq 1 ]; then
+	if [ $ERROR_ALERT == true ]; then
 		subject="Error alert for $INSTANCE_ID"
-	elif [ $WARN_ALERT -eq 1 ]; then
+	elif [ $WARN_ALERT == true ]; then
 		subject="Warning alert for $INSTANCE_ID"
 	else
 		subject="Alert for $INSTANCE_ID"
@@ -613,32 +537,32 @@ function TrapError {
 	local job="$0"
 	local line="$1"
 	local code="${2:-1}"
-	if [ $_SILENT -eq 0 ]; then
+	if [ $_SILENT == false ]; then
 		echo -e " /!\ ERROR in ${job}: Near line ${line}, exit code ${code}"
 	fi
 }
 
 function LoadConfigFile {
-	local config_file="${1}"
+	local configFile="${1}"
 
 
-	if [ ! -f "$config_file" ]; then
-		Logger "Cannot load configuration file [$config_file]. Cannot start." "CRITICAL"
+	if [ ! -f "$configFile" ]; then
+		Logger "Cannot load configuration file [$configFile]. Cannot start." "CRITICAL"
 		exit 1
-	elif [[ "$1" != *".conf" ]]; then
-		Logger "Wrong configuration file supplied [$config_file]. Cannot start." "CRITICAL"
+	elif [[ "$configFile" != *".conf" ]]; then
+		Logger "Wrong configuration file supplied [$configFile]. Cannot start." "CRITICAL"
 		exit 1
 	else
-		grep '^[^ ]*=[^;&]*' "$config_file" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" # WITHOUT COMMENTS
-		# Shellcheck source=./sync.conf
+		# Remove everything that is not a variable assignation
+		grep '^[^ ]*=[^;&]*' "$configFile" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
 		source "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
 	fi
 
-	CONFIG_FILE="$config_file"
+	CONFIG_FILE="$configFile"
 }
 
 function Spinner {
-	if [ $_SILENT -eq 1 ]; then
+	if [ $_SILENT == true ]; then
 		return 0
 	fi
 
@@ -680,7 +604,6 @@ function joinString {
 # Fills a global variable called WAIT_FOR_TASK_COMPLETION that contains list of failed pids in format pid1:result1;pid2:result2
 # Warning: Don't imbricate this function into another run if you plan to use the global variable output
 
-#TODO check missing local values used here
 function WaitForTaskCompletion {
 	local pids="${1}" # pids to wait for, separated by semi-colon
 	local soft_max_time="${2}" # If program with pid $pid takes longer than $soft_max_time seconds, will log a warning, unless $soft_max_time equals 0.
@@ -690,7 +613,7 @@ function WaitForTaskCompletion {
 	local keep_logging="${6:-0}" # Log a standby message every X seconds. Set to zero to disable logging
 
 
-	local soft_alert=0 # Does a soft alert need to be triggered, if yes, send an alert once
+	local soft_alert=false # Does a soft alert need to be triggered, if yes, send an alert once
 	local log_ttime=0 # local time instance for comparaison
 
 	local seconds_begin=$SECONDS # Seconds since the beginning of the script
@@ -699,8 +622,13 @@ function WaitForTaskCompletion {
 	local retval=0 # return value of monitored pid process
 	local errorcount=0 # Number of pids that finished with errors
 
+	local pid	# Current pid working on
 	local pidCount # number of given pids
 	local pidState # State of the process
+
+	local pidsArray # Array of currently running pids
+	local newPidsArray # New array of currently running pids
+
 
 	IFS=';' read -a pidsArray <<< "$pids"
 	pidCount=${#pidsArray[@]}
@@ -727,9 +655,9 @@ function WaitForTaskCompletion {
 		fi
 
 		if [ $exec_time -gt $soft_max_time ]; then
-			if [ $soft_alert -eq 0 ] && [ $soft_max_time -ne 0 ]; then
+			if [ $soft_alert == true ] && [ $soft_max_time -ne 0 ]; then
 				Logger "Max soft execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]." "WARN"
-				soft_alert=1
+				soft_alert=true
 				SendAlert true
 
 			fi
@@ -744,33 +672,35 @@ function WaitForTaskCompletion {
 					fi
 				done
 				SendAlert true
-				errrorcount=$((errorcount+1))
 			fi
 		fi
 
 		for pid in "${pidsArray[@]}"; do
-			if kill -0 $pid > /dev/null 2>&1; then
-				# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
-				#TODO(high): have this tested on *BSD, Mac & Win
-				pidState=$(ps -p$pid -o state= 2 > /dev/null)
-				if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
-					newPidsArray+=($pid)
-				fi
-			else
-				# pid is dead, get it's exit code from wait command
-				wait $pid
-				retval=$?
-				if [ $retval -ne 0 ]; then
-					errorcount=$((errorcount+1))
-					Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$retval]." "DEBUG"
-					if [ "$WAIT_FOR_TASK_COMPLETION" == "" ]; then
-						WAIT_FOR_TASK_COMPLETION="$pid:$retval"
-					else
-						WAIT_FOR_TASK_COMPLETION=";$pid:$retval"
+			if [ $(IsInteger $pid) -eq 1 ]; then
+				if kill -0 $pid > /dev/null 2>&1; then
+					# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
+					#TODO(high): have this tested on *BSD, Mac & Win
+					pidState=$(ps -p$pid -o state= 2 > /dev/null)
+					if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
+						newPidsArray+=($pid)
+					fi
+				else
+					# pid is dead, get it's exit code from wait command
+					wait $pid
+					retval=$?
+					if [ $retval -ne 0 ]; then
+						errorcount=$((errorcount+1))
+						Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$retval]." "DEBUG"
+						if [ "$WAIT_FOR_TASK_COMPLETION" == "" ]; then
+							WAIT_FOR_TASK_COMPLETION="$pid:$retval"
+						else
+							WAIT_FOR_TASK_COMPLETION=";$pid:$retval"
+						fi
 					fi
 				fi
 			fi
 		done
+
 
 		pidsArray=("${newPidsArray[@]}")
 		# Trivial wait time for bash to not eat up all CPU
@@ -788,62 +718,85 @@ function WaitForTaskCompletion {
 
 # Take a list of commands to run, runs them sequentially with numberOfProcesses commands simultaneously runs
 # Returns the number of non zero exit codes from commands
+# Use cmd1;cmd2;cmd3 syntax for small sets, use file for large command sets
 function ParallelExec {
 	local numberOfProcesses="${1}" # Number of simultaneous commands to run
-	local commandsArg="${2}" # Semi-colon separated list of commands
+	local commandsArg="${2}" # Semi-colon separated list of commands, or file containing one command per line
+	local readFromFile="${3:-false}" # Is commandsArg a file or a string ?
 
+
+	local commandCount
+	local command
 	local pid
-	local runningPids=0
 	local counter=0
 	local commandsArray
 	local pidsArray
 	local newPidsArray
 	local retval
-	local retvalAll=0
+	local errorCount=0
 	local pidState
 	local commandsArrayPid
 
-	IFS=';' read -r -a commandsArray <<< "$commandsArg"
 
-	Logger "Runnning ${#commandsArray[@]} commands in $numberOfProcesses simultaneous processes." "DEBUG"
+	if [ $readFromFile == true ];then
+		if [ -f "$commandsArg" ]; then
+			commandCount=$(wc -l < "$commandsArg")
+		else
+			commandCount=0
+		fi
+	else
+		IFS=';' read -r -a commandsArray <<< "$commandsArg"
+		commandCount=${#commandsArray[@]}
+	fi
 
-	while [ $counter -lt "${#commandsArray[@]}" ] || [ ${#pidsArray[@]} -gt 0 ]; do
+	Logger "Runnning $commandCount commands in $numberOfProcesses simultaneous processes." "DEBUG"
 
-		while [ $counter -lt "${#commandsArray[@]}" ] && [ ${#pidsArray[@]} -lt $numberOfProcesses ]; do
-			Logger "Running command [${commandsArray[$counter]}]." "DEBUG"
-			eval "${commandsArray[$counter]}" &
+	while [ $counter -lt "$commandCount" ] || [ ${#pidsArray[@]} -gt 0 ]; do
+
+		while [ $counter -lt "$commandCount" ] && [ ${#pidsArray[@]} -lt $numberOfProcesses ]; do
+			if [ $readFromFile == true ]; then
+				#TODO: Checked on FreeBSD 10, also check on Win
+				command=$(awk 'NR == num_line {print; exit}' num_line=$((counter+1)) "$commandsArg")
+			else
+				command="${commandsArray[$counter]}"
+			fi
+			Logger "Running command [$command]." "DEBUG"
+			eval "$command" &
 			pid=$!
 			pidsArray+=($pid)
-			commandsArrayPid[$pid]="${commandsArray[$counter]}"
+			commandsArrayPid[$pid]="$command"
 			counter=$((counter+1))
 		done
 
 
 		newPidsArray=()
 		for pid in "${pidsArray[@]}"; do
-			# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
-			if kill -0 $pid > /dev/null 2>&1; then
-				pidState=$(ps -p$pid -o state= 2 > /dev/null)
-				if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
-					newPidsArray+=($pid)
-				fi
-			else
-				# pid is dead, get it's exit code from wait command
-				wait $pid
-				retval=$?
-				if [ $retval -ne 0 ]; then
-					Logger "Command [${commandsArrayPid[$pid]}] failed with exit code [$retval]." "ERROR"
-					retvalAll=$((retvalAll+1))
+			if [ $(IsInteger $pid) -eq 1 ]; then
+				# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
+				if kill -0 $pid > /dev/null 2>&1; then
+					pidState=$(ps -p$pid -o state= 2 > /dev/null)
+					if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
+						newPidsArray+=($pid)
+					fi
+				else
+					# pid is dead, get it's exit code from wait command
+					wait $pid
+					retval=$?
+					if [ $retval -ne 0 ]; then
+						Logger "Command [${commandsArrayPid[$pid]}] failed with exit code [$retval]." "ERROR"
+						errorCount=$((errorCount+1))
+					fi
 				fi
 			fi
 		done
+
 		pidsArray=("${newPidsArray[@]}")
 
 		# Trivial wait time for bash to not eat up all CPU
 		sleep $SLEEP_TIME
 	done
 
-	return $retvalAll
+	return $errorCount
 }
 
 function CleanUp {
@@ -857,16 +810,13 @@ function CleanUp {
 
 #### MINIMAL-FUNCTION-SET END ####
 
-# Fix SLEEP_TIME set to low in ofunctions
-#SLEEP_TIME=$WAIT_TIME
-
 function CheckEnvironment {
 	if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
 		Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"
 		exit 1
 	fi
 
-	if [ "$_SERVICE_RUN" -eq 1 ]; then
+	if [ "$_SERVICE_RUN" == true ]; then
 		if ! type -p inotifywait > /dev/null 2>&1; then
 			Logger "inotifywait not present (see inotify-tools package ?)." "CRITICAL"
 			exit 1
@@ -913,8 +863,9 @@ function CheckEnvironment {
 		fi
 	fi
 
-	if [ "$CHECK_PDF" == "yes" ] && ( [ "$_SERVICE_RUN" -eq 1 ] || [ "$_BATCH_RUN" -eq 1 ])
-	then
+	#TODO(low): check why using this condition
+	#if [ "$CHECK_PDF" == "yes" ] && ( [ "$_SERVICE_RUN"  == true ] || [ "$_BATCH_RUN" == true ])
+	if [ "$CHECK_PDF" == "yes" ]; then
 		if ! type pdffonts > /dev/null 2>&1; then
 			Logger "pdffonts not present (see poppler-utils package ?)." "CRITICAL"
 			exit 1
@@ -991,7 +942,6 @@ function OCR {
 					fi
 				fi
 
-				Logger "$outputFileName$TEXT_EXTENSION" "NOTICE"
 				# Fix for tesseract pdf output also outputs txt format
 				if [ "$fileExtension" == ".pdf" ] && [ -f "$outputFileName$TEXT_EXTENSION" ]; then
 					rm -f "$outputFileName$TEXT_EXTENSION"
@@ -1003,7 +953,7 @@ function OCR {
 			if [ $result != 0 ]; then
 				Logger "Could not process file [$fileToProcess] (error code $result)." "ERROR"
 				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "ERROR"
-				if [ "$_SERVICE_RUN" -eq 1 ]; then
+				if [ "$_SERVICE_RUN" == true ]; then
 					SendAlert
 				fi
 			else
@@ -1033,7 +983,7 @@ function OCR {
 					mv "$fileToProcess" "${fileToProcess%.*}$FILENAME_SUFFIX.${fileToProcess##*.}"
 				fi
 
-				if [ "$_SILENT" -ne 1 ]; then
+				if [ "$_SILENT" == false ]; then
 					Logger "Processed file [$fileToProcess]." "NOTICE"
 				fi
 			fi
@@ -1061,15 +1011,24 @@ function OCR_Dispatch {
 	fi
 
 	# Read find result into command list
-	while IFS= read -r -d $'\0' file; do
-		if [ "$cmd" == "" ]; then
-			cmd="OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
-		else
-			cmd="$cmd;OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
-		fi
-	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+	#while IFS= read -r -d $'\0' file; do
+	#	if [ "$cmd" == "" ]; then
+	#		cmd="OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
+	#	else
+	#		cmd="$cmd;OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
+	#	fi
+	#done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+	#ParallelExec $NUMBER_OF_PROCESSES "$cmd" false
 
-	ParallelExec $NUMBER_OF_PROCESSES "$cmd"
+	# Replaced command array with file to support large fileset
+	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" ]; then
+		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	fi
+	while IFS= read -r -d $'\0' file; do
+		echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true
+
 	return $?
 }
 
@@ -1085,8 +1044,9 @@ function OCR_service {
 	while true
 	do
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess" &
-		WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} true 0
-		sleep $WAIT_TIME
+		#WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} true 0
+		wait $!
+		sleep 1
 		OCR_Dispatch "$directoryToProcess" "$fileExtension" "$ocrEngineArgs" "$csvHack"
 	done
 }
@@ -1097,13 +1057,14 @@ function Usage {
 	echo "$AUTHOR"
 	echo "$CONTACT"
 	echo ""
-	echo "You may adjust file $(basename $0) according to your OCR needs (language, ocr engine, etc)."
+	echo "You may adjust file default config in /etc/pmocr/default.conf according to your OCR needs (language, ocr engine, etc)."
 	echo ""
 	echo "$PROGRAM can be launched as a directory monitoring service using \"service $PROGRAM-srv start\" or \"systemctl start $PROGRAM-srv\" or in batch processing mode"
 	echo "Batch mode usage:"
 	echo "$PROGRAM.sh --batch [options] /path/to/folder"
 	echo ""
 	echo "[OPTIONS]"
+	echo "--config=/path/to/config  Use an alternative OCR config file."
 	echo "-p, --target=PDF          Creates a PDF document (default)"
 	echo "-w, --target=DOCX         Creates a WORD document"
 	echo "-e, --target=XLSX         Creates an EXCEL document"
@@ -1126,14 +1087,13 @@ function Usage {
 
 #### Program Begin
 
-_SILENT=0
+_SILENT=false
 skip_txt_pdf=false
 delete_input=false
-suffix="_OCR"
 no_suffix=false
 no_text=false
-_BATCH_RUN=0
-_SERVICE_RUN=0
+_BATCH_RUN=fase
+_SERVICE_RUN=false
 
 pdf=false
 docx=false
@@ -1144,15 +1104,18 @@ csv=false
 for i in "$@"
 do
 	case $i in
+		--config=*)
+		CONFIG_FILE="${i##*=}"
+		;;
 		--batch)
-		_BATCH_RUN=1
+		_BATCH_RUN=true
 		;;
 		--service)
-		_SERVICE_RUN=1
-		_LOGGER_STDERR=1
+		_SERVICE_RUN=true
+		_LOGGER_STDERR=true
 		;;
 		--silent|-s)
-		_SILENT=1
+		_SILENT=true
 		;;
 		-p|--target=PDF|--target=pdf)
 		pdf=true
@@ -1193,45 +1156,43 @@ do
 	esac
 done
 
+if [ "$CONFIG_FILE" != "" ]; then
+	LoadConfigFile "$CONFIG_FILE"
+else
+	LoadConfigFile "$DEFAULT_CONFIG_FILE"
+fi
+
 # Set default conversion format
 if [ $pdf == false ] && [ $docx == false ] && [ $xlsx == false ] && [ $txt == false ] && [ $csv == false ]; then
 	pdf=true
 fi
 
-if [ $_BATCH_RUN -eq 1 ]; then
+# Commandline arguments override default config
+if [ $_BATCH_RUN == true ]; then
 	if [ $skip_txt_pdf == true ]; then
 		CHECK_PDF="yes"
-	else
-		CHECK_PDF="no"
 	fi
 
 	if [ $no_suffix == true ]; then
 		FILENAME_SUFFIX=""
-	else
-		FILENAME_SUFFIX="$suffix"
 	fi
 
 	if [ $no_text == true ]; then
 		FILENAME_ADDITION=""
-	elif [ "$text" != "" ]; then
+	fi
+
+	if [ "$text" != "" ]; then
 		FILENAME_ADDITION="$text"
 	fi
 
 	if [ $delete_input == true ]; then
 		DELETE_ORIGINAL=yes
-	else
-		DELETE_ORIGINAL=no
 	fi
-fi
-
-if [ "$OCR_ENGINE" != "tesseract3" ] && [ "$OCR_ENGINE" != "abbyyocr11" ]; then
-	Logger "No valid OCR engine selected. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "CRITICAL"
-	exit 1
 fi
 
 CheckEnvironment
 
-if [ $_SERVICE_RUN -eq 1 ]; then
+if [ $_SERVICE_RUN == true ]; then
 	trap TrapQuit SIGTERM EXIT SIGHUP SIGQUIT
 
 	if [ "$PDF_MONITOR_DIR" != "" ]; then
@@ -1256,12 +1217,13 @@ if [ $_SERVICE_RUN -eq 1 ]; then
 
 	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST]." "NOTICE"
 
+	# Keep running until trap function quits
 	while true
 	do
-		sleep $WAIT_TIME
+		sleep 65535
 	done
 
-elif [ $_BATCH_RUN -eq 1 ]; then
+elif [ $_BATCH_RUN == true ]; then
 
 	# Get last argument that should be a path
 	eval batch_path=\${$#}

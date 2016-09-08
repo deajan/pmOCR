@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-rc2
-PROGRAM_BUILD=2016090604
+PROGRAM_BUILD=2016090801
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -17,7 +17,7 @@ DEFAULT_CONFIG_FILE="/etc/pmocr/default.conf"
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016090601
+## FUNC_BUILD=2016090701
 ## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
@@ -718,10 +718,15 @@ function WaitForTaskCompletion {
 
 # Take a list of commands to run, runs them sequentially with numberOfProcesses commands simultaneously runs
 # Returns the number of non zero exit codes from commands
+# Use cmd1;cmd2;cmd3 syntax for small sets, use file for large command sets
 function ParallelExec {
 	local numberOfProcesses="${1}" # Number of simultaneous commands to run
-	local commandsArg="${2}" # Semi-colon separated list of commands
+	local commandsArg="${2}" # Semi-colon separated list of commands, or file containing one command per line
+	local readFromFile="${3:-false}" # Is commandsArg a file or a string ?
 
+
+	local commandCount
+	local command
 	local pid
 	local counter=0
 	local commandsArray
@@ -733,18 +738,33 @@ function ParallelExec {
 	local commandsArrayPid
 
 
-	IFS=';' read -r -a commandsArray <<< "$commandsArg"
+	if [ $readFromFile == true ];then
+		if [ -f "$commandsArg" ]; then
+			commandCount=$(wc -l < "$commandsArg")
+		else
+			commandCount=0
+		fi
+	else
+		IFS=';' read -r -a commandsArray <<< "$commandsArg"
+		commandCount=${#commandsArray[@]}
+	fi
 
-	Logger "Runnning ${#commandsArray[@]} commands in $numberOfProcesses simultaneous processes." "DEBUG"
+	Logger "Runnning $commandCount commands in $numberOfProcesses simultaneous processes." "DEBUG"
 
-	while [ $counter -lt "${#commandsArray[@]}" ] || [ ${#pidsArray[@]} -gt 0 ]; do
+	while [ $counter -lt "$commandCount" ] || [ ${#pidsArray[@]} -gt 0 ]; do
 
-		while [ $counter -lt "${#commandsArray[@]}" ] && [ ${#pidsArray[@]} -lt $numberOfProcesses ]; do
-			Logger "Running command [${commandsArray[$counter]}]." "DEBUG"
-			eval "${commandsArray[$counter]}" &
+		while [ $counter -lt "$commandCount" ] && [ ${#pidsArray[@]} -lt $numberOfProcesses ]; do
+			if [ $readFromFile == true ]; then
+				#TODO: Checked on FreeBSD 10, also check on Win
+				command=$(awk 'NR == num_line {print; exit}' num_line=$((counter+1)) "$commandsArg")
+			else
+				command="${commandsArray[$counter]}"
+			fi
+			Logger "Running command [$command]." "DEBUG"
+			eval "$command" &
 			pid=$!
 			pidsArray+=($pid)
-			commandsArrayPid[$pid]="${commandsArray[$counter]}"
+			commandsArrayPid[$pid]="$command"
 			counter=$((counter+1))
 		done
 
@@ -922,7 +942,6 @@ function OCR {
 					fi
 				fi
 
-				Logger "$outputFileName$TEXT_EXTENSION" "NOTICE"
 				# Fix for tesseract pdf output also outputs txt format
 				if [ "$fileExtension" == ".pdf" ] && [ -f "$outputFileName$TEXT_EXTENSION" ]; then
 					rm -f "$outputFileName$TEXT_EXTENSION"
@@ -992,15 +1011,24 @@ function OCR_Dispatch {
 	fi
 
 	# Read find result into command list
-	while IFS= read -r -d $'\0' file; do
-		if [ "$cmd" == "" ]; then
-			cmd="OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
-		else
-			cmd="$cmd;OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
-		fi
-	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+	#while IFS= read -r -d $'\0' file; do
+	#	if [ "$cmd" == "" ]; then
+	#		cmd="OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
+	#	else
+	#		cmd="$cmd;OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
+	#	fi
+	#done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+	#ParallelExec $NUMBER_OF_PROCESSES "$cmd" false
 
-	ParallelExec $NUMBER_OF_PROCESSES "$cmd"
+	# Replaced command array with file to support large fileset
+	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" ]; then
+		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	fi
+	while IFS= read -r -d $'\0' file; do
+		echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true
+
 	return $?
 }
 
@@ -1062,7 +1090,6 @@ function Usage {
 _SILENT=false
 skip_txt_pdf=false
 delete_input=false
-suffix="_OCR"
 no_suffix=false
 no_text=false
 _BATCH_RUN=fase
@@ -1148,8 +1175,6 @@ if [ $_BATCH_RUN == true ]; then
 
 	if [ $no_suffix == true ]; then
 		FILENAME_SUFFIX=""
-	else
-		FILENAME_SUFFIX="$suffix"
 	fi
 
 	if [ $no_text == true ]; then

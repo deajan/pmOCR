@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-rc2
-PROGRAM_BUILD=2016090801
+PROGRAM_BUILD=2016090901
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -811,8 +811,13 @@ function CleanUp {
 #### MINIMAL-FUNCTION-SET END ####
 
 function CheckEnvironment {
-	if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
-		Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"
+	if [ "$OCR_ENGINE_EXEC" != "" ]; then
+		if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
+			Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"
+			exit 1
+		fi
+	else
+		Logger "No OCR engine selected. Please configure it in [$CONFIG_FILE]." "CRITICAL"
 		exit 1
 	fi
 
@@ -872,7 +877,7 @@ function CheckEnvironment {
 		fi
 	fi
 
-	if [ "$OCR_ENGINE" == "tesseract3" ]; then
+	if [ "$OCR_ENGINE" == "tesseract" ]; then
 		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
 			Logger "$PDF_TO_TIFF_EXEC not present." "CRITICAL"
 			exit 1

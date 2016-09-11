@@ -3,7 +3,7 @@
 # Automatic OCR Service
 #
 # chkconfig: 35 55 25
-# description: monitors a local directory and gives any new file to an OCR engine, then deletes or renames the source file
+# description: monitors a local directory and gives any new file to your favorite OCR engine
 # processname: /usr/local/bin/pmocr.sh
 # pidfile: /var/run/pmocr
 

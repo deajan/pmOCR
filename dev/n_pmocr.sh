@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 
+#TODO: exit leaves inotifywait
+#TODO: LOGERR_STDERR=true makes empty lines
+#TODO: adding a TXT / CSV / XLSX / DOCX file retriggers a run (except for PDF to PDF which should still trigger)
+
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5-rc2
-PROGRAM_BUILD=2016090901
+PROGRAM_VERSION=1.5-RC
+PROGRAM_BUILD=2016091102
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -93,10 +97,17 @@ function CheckEnvironment {
 }
 
 function TrapQuit {
+	local result
+
 	CleanUp
 	KillChilds $$ > /dev/null 2>&1
-	Logger "Service $PROGRAM stopped instance [$INSTANCE_ID] with pid [$$]." "NOTICE"
-	exit
+	result=$?
+	if [ $result -eq 0 ]; then
+		Logger "Service $PROGRAM stopped instance [$INSTANCE_ID] with pid [$$]." "NOTICE"
+	else
+		Logger "Service $PROGRAM couldn't properly stop instance [$INSTANCE_ID] with pid [$$]." "ERROR"
+	fi
+	exit $?
 }
 
 function OCR {
@@ -212,14 +223,14 @@ function OCR_Dispatch {
 	local ocrEngineArgs="$3" 		#(transformation specific arguments)
 	local csvHack="$4" 			#(CSV transformation flag)
 
-	__CheckArguments 4 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
+	__CheckArguments 2-4 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
 	local findExcludes
 	local cmd
 
 	## CHECK find excludes
 	if [ "$FILENAME_SUFFIX" != "" ]; then
-		findExcludes="*$FILENAME_SUFFIX*"
+		findExcludes="*$FILENAME_SUFFIX.*"
 	else
 		findExcludes=""
 	fi
@@ -238,31 +249,64 @@ function OCR_Dispatch {
 	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" ]; then
 		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
 	fi
-	while IFS= read -r -d $'\0' file; do
-		echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
-	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+	#while IFS= read -r -d $'\0' file; do
+	#	echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	#done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
+
+	# Replaced the while loop because find process subsitition creates a segfault when OCR_Dispatch is called by DispatchRunner with SIGUSR1
+
+	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
 	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true
 
 	return $?
 }
 
+# Run OCR_Dispatch once, if a new request comes when a run is active, run it again once
+function DispatchRunner {
+	if [ $DISPATCH_NEEDED -lt 2 ]; then
+		DISPATCH_NEEDED=$((DISPATCH_NEEDED+1))
+	fi
+
+	while [ $DISPATCH_NEEDED -gt 0 ] && [ $DISPATCH_RUNS == false ]; do
+		DISPATCH_RUNS=true
+		if [ "$PDF_MONITOR_DIR" != "" ]; then
+			OCR_Dispatch "$PDF_MONITOR_DIR" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
+		fi
+
+		if [ "$WORD_MONITOR_DIR" != "" ]; then
+			OCR_Dispatch "$WORD_MONITOR_DIR" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" false
+		fi
+
+		if [ "$EXCEL_MONITOR_DIR" != "" ]; then
+			OCR_Dispatch "$EXCEL_MONITOR_DIR" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false
+		fi
+
+		if [ "$TEXT_MONITOR_DIR" != "" ]; then
+			OCR_Dispatch "$TEXT_MONITOR_DIR" "$TEXT_EXTENSION" "$TEXT_OCR_ENGINE_ARGS" false
+		fi
+
+		if [ "$CSV_MONITOR_DIR" != "" ]; then
+			OCR_Dispatch "$CSV_MONITOR_DIR" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
+		fi
+		DISPATCH_NEEDED=$((DISPATCH_NEEDED-1))
+	done
+	DISPATCH_RUNS=false
+}
+
 function OCR_service {
 	## Function arguments
-	local directoryToProcess="$1" 	#(contains some path)
-	local fileExtension="$2" 		#(filename endings to exclude from processing)
-	local ocrEngineArgs="$3" 		#(transformation specific arguments)
-	local csvHack="$4" 			#(CSV transformation flag)
+	local directoryToProcess="${1}" 	#(contains some path)
+	local fileExtension="${2}" 		#(filename endings to exclude from processing)
 
-	__CheckArguments 4 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
+	__CheckArguments 2 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
 	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "NOTICE"
-	while true
-	do
-		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess" &
-		#WaitForTaskCompletion $! 0 0 ${FUNCNAME[0]} true 0
-		wait $!
-		sleep 1
-		OCR_Dispatch "$directoryToProcess" "$fileExtension" "$ocrEngineArgs" "$csvHack"
+	while true;do
+		# If file modifications occur, send a signal so DispatchRunner is run
+		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess"
+		kill -USR1 $SCRIPT_PID
+		# Trivial sleep value so no new inotifywait is spawned while killChilds is executed
+		sleep 2
 	done
 }
 
@@ -327,10 +371,12 @@ do
 		;;
 		--service)
 		_SERVICE_RUN=true
-		_LOGGER_STDERR=true
 		;;
 		--silent|-s)
 		_SILENT=true
+		;;
+		--verbose|-v)
+		_VERBOSE=true
 		;;
 		-p|--target=PDF|--target=pdf)
 		pdf=true
@@ -408,34 +454,45 @@ fi
 CheckEnvironment
 
 if [ $_SERVICE_RUN == true ]; then
-	trap TrapQuit SIGTERM EXIT SIGHUP SIGQUIT
+	#trap DispatchRunner USR1
+	trap DispatchRunner USR1
+	trap TrapQuit TERM EXIT HUP QUIT
+
+	if [ $_VERBOSE == false ]; then
+		_LOGGER_STDERR=true
+	fi
+
+	# Global variable for DispatchRunner function
+	DISPATCH_NEEDED=0
+	DISPATCH_RUNS=false
+
+	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST]." "NOTICE"
 
 	if [ "$PDF_MONITOR_DIR" != "" ]; then
-		OCR_service "$PDF_MONITOR_DIR" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false &
+		OCR_service "$PDF_MONITOR_DIR" "$PDF_EXTENSION" &
 	fi
 
 	if [ "$WORD_MONITOR_DIR" != "" ]; then
-		OCR_service "$WORD_MONITOR_DIR" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" false &
+		OCR_service "$WORD_MONITOR_DIR" "$WORD_EXTENSION" &
 	fi
 
 	if [ "$EXCEL_MONITOR_DIR" != "" ]; then
-		OCR_service "$EXCEL_MONITOR_DIR" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false &
+		OCR_service "$EXCEL_MONITOR_DIR" "$EXCEL_EXTENSION" &
 	fi
 
 	if [ "$TEXT_MONITOR_DIR" != "" ]; then
-		OCR_service "$TEXT_MONITOR_DIR" "$TEXT_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false &
+		OCR_service "$TEXT_MONITOR_DIR" "$TEXT_EXTENSION" &
 	fi
 
 	if [ "$CSV_MONITOR_DIR" != "" ]; then
-		OCR_service "$CSV_MONITOR_DIR" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true &
+		OCR_service "$CSV_MONITOR_DIR" "$CSV_EXTENSION" &
 	fi
-
-	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST]." "NOTICE"
 
 	# Keep running until trap function quits
 	while true
 	do
-		sleep 65535
+		# Keep low value so main script will execute USR1 trapped function
+		sleep 1
 	done
 
 elif [ $_BATCH_RUN == true ]; then

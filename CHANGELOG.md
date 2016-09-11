@@ -1,7 +1,16 @@
+KNOWN ISSUES
+------------
+
+When a file is created while the OCR process is already running for a previous file, the file won't be processed until next run.
+
 RECENT CHANGES
 --------------
 
 DD mmm YYYY: v1.5
+- Recoded service execution asynchronously
+	- Fixed a bug when a file is added while the OCR process is already runnning, the file won't be processed until another file is added
+- Chaned unix process signals to be posix compliant
+- Fixed file suffix exclusion also excluded files that contained the suffix anywhere in the filename
 - Enhanced parallel execution for huge file sets
 - Improved cpu usage on idle
 - Changed the way pmocr works
@@ -14,7 +23,7 @@ DD mmm YYYY: v1.5
 	- Added csv output format (with csv hack)
 	- Remove intermediary txt files produced by tesseract
 - Improved logging
-- Various minor fixes
+- Various minor fixes from ofunctions updates
 
 15 Aug 2016: v1.4.2
 - Removed keep logging statement from WaitForTaskCompletion function

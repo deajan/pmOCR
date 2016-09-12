@@ -1080,7 +1080,7 @@ function OCR {
 				# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
 				if grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"; then
 					Logger "Tesseract transformed the document with errors" "WARN"
-					Logger "Command output\n$($RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "NOTICE"
+					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "NOTICE"
 				fi
 
 				# Remove temporary file if final output file exists

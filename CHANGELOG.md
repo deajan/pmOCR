@@ -1,12 +1,10 @@
-KNOWN ISSUES
-------------
-
-When a file is created while the OCR process is already running for a previous file, the file won't be processed until next run.
-
 RECENT CHANGES
 --------------
 
 DD mmm YYYY: v1.5
+- Made a workaround for Tesseract not throwing an error when OSD data is missing
+- Fixed intermediary PDF2TIFF transformation used with Tesseract
+- Fixed --suffix option was ignored
 - Recoded service execution asynchronously
 	- Fixed a bug when a file is added while the OCR process is already runnning, the file won't be processed until another file is added
 - Chaned unix process signals to be posix compliant

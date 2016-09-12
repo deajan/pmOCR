@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 
-#TODO: exit leaves inotifywait
-#TODO: LOGERR_STDERR=true makes empty lines
-#TODO: adding a TXT / CSV / XLSX / DOCX file retriggers a run (except for PDF to PDF which should still trigger)
-
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-RC
-PROGRAM_BUILD=2016091201
+PROGRAM_BUILD=2016091203
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -1060,29 +1056,37 @@ function OCR {
 				Logger "Executing: $cmd" "DEBUG"
 				eval "$cmd"
 				result=$?
+
 			elif [ "$OCR_ENGINE" == "tesseract3" ]; then
 				# Empty tmp log file first
 				echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
 				# Intermediary transformation of input pdf file to tiff
 				if [[ "$fileToProcess" == *.[pP][dD][fF] ]]; then
 					tmpFile="$fileToProcess.tif"
-					subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFile\" \"$fileToProcess\" >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+					subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFile\" \"$fileToProcess\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
 					Logger "Executing: $subcmd" "DEBUG"
 					eval "$subcmd"
-					if [ $? != "" ]; then
-						Logger "Subcmd failed." "ERROR"
+					if [ $? -ne 0 ]; then
+						Logger "$PDF_TO_TIFF_EXEC intermediary transformation failed." "ERROR"
+						Logger "Command output:\n$($RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "DEBUG"
 					fi
 					originalFile="$fileToProcess"
-					file="$tmpFile"
+					fileToProcess="$tmpFile"
 				fi
-				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
 				Logger "Executing: $cmd" "DEBUG"
 				eval "$cmd"
 				result=$?
 
+				# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
+				if grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"; then
+					Logger "Tesseract transformed the document with errors" "WARN"
+					result=999
+				fi
+
 				# Remove temporary file if final output file exists
 				if [ -f "$originalFile" ]; then
-					file="$originalFile"
+					fileToProcess="$originalFile"
 					if [ -f "$tmpFile" ]; then
 						rm -f "$tmpFile";
 					fi
@@ -1318,13 +1322,13 @@ do
 		delete_input=true
 		;;
 		--suffix=*)
-		suffix=${i##*=}
+		suffix="${i##*=}"
 		;;
 		--no-suffix)
 		no_suffix=true
 		;;
 		--text=*)
-		text=${i##*=}
+		text="${i##*=}"
 		;;
 		--no-text)
 		no_text=true
@@ -1354,6 +1358,10 @@ if [ $_BATCH_RUN == true ]; then
 
 	if [ $no_suffix == true ]; then
 		FILENAME_SUFFIX=""
+	fi
+
+	if  [ "$suffix" != "" ]; then
+		FILENAME_SUFFIX="$suffix"
 	fi
 
 	if [ $no_text == true ]; then

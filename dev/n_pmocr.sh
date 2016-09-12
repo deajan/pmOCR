@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 
-#TODO: exit leaves inotifywait
-#TODO: LOGERR_STDERR=true makes empty lines
-#TODO: adding a TXT / CSV / XLSX / DOCX file retriggers a run (except for PDF to PDF which should still trigger)
-
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"

@@ -150,10 +150,10 @@ function OCR {
 				# Intermediary transformation of input pdf file to tiff
                                 if [[ "$fileToProcess" == *.[pP][dD][fF] ]]; then
 					tmpFile="$fileToProcess.tif"
-                                        subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFile\" \"$fileToProcess\" >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+                                        subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFile\" \"$fileToProcess\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
 					Logger "Executing: $subcmd" "DEBUG"
                                         eval "$subcmd"
-					if [ $? != "" ]; then
+					if [ $? -ne 0 ]; then
 						Logger "Subcmd failed." "ERROR"
 					fi
 					originalFile="$fileToProcess"

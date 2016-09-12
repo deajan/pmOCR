@@ -8,7 +8,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-RC
-PROGRAM_BUILD=2016091102
+PROGRAM_BUILD=2016091201
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -938,6 +938,8 @@ function GetLocalOS {
 
 #### MINIMAL-FUNCTION-SET END ####
 
+SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID"
+
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
 		if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
@@ -1015,6 +1017,10 @@ function CheckEnvironment {
 
 function TrapQuit {
 	local result
+
+	if [ -f "$SERVICE_MONITOR_FILE" ]; then
+		rm -f "$SERVICE_MONITOR_FILE"
+	fi
 
 	CleanUp
 	KillChilds $$ > /dev/null 2>&1
@@ -1215,12 +1221,10 @@ function OCR_service {
 
 
 	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "NOTICE"
-	while true;do
+	while [ -f "$SERVICE_MONITOR_FILE" ];do
 		# If file modifications occur, send a signal so DispatchRunner is run
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess"
 		kill -USR1 $SCRIPT_PID
-		# Trivial sleep value so no new inotifywait is spawned while killChilds is executed
-		sleep 2
 	done
 }
 
@@ -1368,7 +1372,6 @@ fi
 CheckEnvironment
 
 if [ $_SERVICE_RUN == true ]; then
-	#trap DispatchRunner USR1
 	trap DispatchRunner USR1
 	trap TrapQuit TERM EXIT HUP QUIT
 

@@ -404,13 +404,13 @@ do
 		delete_input=true
 		;;
 		--suffix=*)
-		suffix=${i##*=}
+		suffix="${i##*=}"
 		;;
 		--no-suffix)
 		no_suffix=true
 		;;
 		--text=*)
-		text=${i##*=}
+		text="${i##*=}"
 		;;
 		--no-text)
 		no_text=true
@@ -440,6 +440,10 @@ if [ $_BATCH_RUN == true ]; then
 
 	if [ $no_suffix == true ]; then
 		FILENAME_SUFFIX=""
+	fi
+
+	if  [ "$suffix" != "" ]; then
+		FILENAME_SUFFIX="$suffix"
 	fi
 
 	if [ $no_text == true ]; then

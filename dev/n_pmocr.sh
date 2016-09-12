@@ -144,6 +144,7 @@ function OCR {
 				Logger "Executing: $cmd" "DEBUG"
 				eval "$cmd"
 				result=$?
+
 			elif [ "$OCR_ENGINE" == "tesseract3" ]; then
 				# Empty tmp log file first
 				echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
@@ -154,7 +155,8 @@ function OCR {
 					Logger "Executing: $subcmd" "DEBUG"
                                         eval "$subcmd"
 					if [ $? -ne 0 ]; then
-						Logger "Subcmd failed." "ERROR"
+						Logger "$PDF_TO_TIFF_EXEC intermediary transformation failed." "ERROR"
+						Logger "Command output:\n$($RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "DEBUG"
 					fi
 					originalFile="$fileToProcess"
                                        	fileToProcess="$tmpFile"

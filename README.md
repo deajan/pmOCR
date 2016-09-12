@@ -89,3 +89,10 @@ Parameters include any arguments to pass to the OCR program depending on the tar
 Please check /var/log/pmocr.log or ./pmocr.log file for errors.
 
 Filenames containing special characters should work, nevertheless, if your file doesn't get converted, try to rename it and copy it again to the monitored directory or batch process it again.
+
+## Tesseract caveats
+
+When no OSD / language data is installed, tesseract will still process documents, but the quality may suffer.
+While pmocr will warn you about this, the conversion still happens.
+Please make sure to install all necessary addons for tesseract.
+

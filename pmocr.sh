@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-RC
-PROGRAM_BUILD=2016091204
+PROGRAM_BUILD=2016091205
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -1080,7 +1080,7 @@ function OCR {
 				# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
 				if grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"; then
 					Logger "Tesseract transformed the document with errors" "WARN"
-					result=999
+					Logger "Command output\n$($RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "NOTICE"
 				fi
 
 				# Remove temporary file if final output file exists

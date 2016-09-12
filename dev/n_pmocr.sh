@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-RC
-PROGRAM_BUILD=2016091203
+PROGRAM_BUILD=2016091204
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -123,7 +123,6 @@ function OCR {
 	local findExcludes
 	local tmpFile
 	local originalFile
-	local file
 	local result
 
 	local outputFileName
@@ -468,6 +467,12 @@ CheckEnvironment
 if [ $_SERVICE_RUN == true ]; then
 	trap DispatchRunner USR1
 	trap TrapQuit TERM EXIT HUP QUIT
+
+	echo "$SCRIPT_PID" > "$SERVICE_MONITOR_FILE"
+	if [ $? != 0 ]; then
+		Logger "Cannot write service file [$SERVICE_MONITOR_FILE]." "CRITICAL"
+		exit 1
+	fi
 
 	if [ $_VERBOSE == false ]; then
 		_LOGGER_STDERR=true

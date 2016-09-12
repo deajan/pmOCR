@@ -8,7 +8,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-RC
-PROGRAM_BUILD=2016091202
+PROGRAM_BUILD=2016091203
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -161,10 +161,16 @@ function OCR {
 					originalFile="$fileToProcess"
                                        	fileToProcess="$tmpFile"
                                	fi
-				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
 				Logger "Executing: $cmd" "DEBUG"
 				eval "$cmd"
 				result=$?
+
+				# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
+				if grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"; then
+					Logger "Tesseract transformed the document with errors" "WARN"
+					result=999
+				fi
 
 				# Remove temporary file if final output file exists
 				if [ -f "$originalFile" ]; then

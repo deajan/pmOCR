@@ -8,7 +8,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-RC
-PROGRAM_BUILD=2016091201
+PROGRAM_BUILD=2016091202
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -157,7 +157,7 @@ function OCR {
 						Logger "Subcmd failed." "ERROR"
 					fi
 					originalFile="$fileToProcess"
-                                       	file="$tmpFile"
+                                       	fileToProcess="$tmpFile"
                                	fi
 				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs >> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
 				Logger "Executing: $cmd" "DEBUG"
@@ -166,7 +166,7 @@ function OCR {
 
 				# Remove temporary file if final output file exists
 				if [ -f "$originalFile" ]; then
-					file="$originalFile"
+					fileToProcess="$originalFile"
 					if [ -f "$tmpFile" ]; then
 						rm -f "$tmpFile";
 					fi

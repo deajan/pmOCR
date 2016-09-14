@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-dev-again
-PROGRAM_BUILD=2016091401
+PROGRAM_BUILD=2016091402
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -557,39 +557,39 @@ if [ $_SERVICE_RUN == true ]; then
 elif [ $_BATCH_RUN == true ]; then
 
 	# Get last argument that should be a path
-	eval batch_path=\${$#} #WIP
-	if [ ! -d "$batch_path" ]; then
+	batchPath="${@: -1}"
+	if [ ! -d "$batchPath" ]; then
 		Logger "Missing path." "ERROR"
 		Usage
 	fi
 
 	if [ $pdf == true ]; then
-		Logger "Beginning PDF OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR_Dispatch "$batch_path" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
+		Logger "Beginning PDF OCR recognition of files in [$batchPath]." "NOTICE"
+		OCR_Dispatch "$batchPath" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
 		Logger "Batch ended." "NOTICE"
 	fi
 
 	if [ $docx == true ]; then
-		Logger "Beginning DOCX OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR_Dispatch "$batch_path" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" false
+		Logger "Beginning DOCX OCR recognition of files in [$batchPath]." "NOTICE"
+		OCR_Dispatch "$batchPath" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" false
 		Logger "Batch ended." "NOTICE"
 	fi
 
 	if [ $xlsx == true ]; then
-		Logger "Beginning XLSX OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR_Dispatch "$batch_path" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false
+		Logger "Beginning XLSX OCR recognition of files in [$batchPath]." "NOTICE"
+		OCR_Dispatch "$batchPath" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false
 		Logger "batch ended." "NOTICE"
 	fi
 
 	if [ $txt == true ]; then
-		Logger "Beginning TEXT OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR_Dispatch "$batch_path" "$TEXT_EXTENSION" "$TEXT_OCR_ENGINE_ARGS" false
+		Logger "Beginning TEXT OCR recognition of files in [$batchPath]." "NOTICE"
+		OCR_Dispatch "$batchPath" "$TEXT_EXTENSION" "$TEXT_OCR_ENGINE_ARGS" false
 		Logger "batch ended." "NOTICE"
 	fi
 
 	if [ $csv == true ]; then
-		Logger "Beginning CSV OCR recognition of files in [$batch_path]." "NOTICE"
-		OCR_Dispatch "$batch_path" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
+		Logger "Beginning CSV OCR recognition of files in [$batchPath]." "NOTICE"
+		OCR_Dispatch "$batchPath" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
 		Logger "Batch ended." "NOTICE"
 	fi
 

@@ -2,7 +2,10 @@ RECENT CHANGES
 --------------
 
 DD mmm YYYY: v1.5
-- Made a workaround for Tesseract not throwing an error when OSD data is missing
+
+- Added the possibility to use an image preprocesser (Imagemagick is preconfigured but not enabled by default)
+- Corrected an issue where a failed service run may end up in an infinite loop by adding a failed OCR file suffix
+- Made a workaround for Tesseract throwing an error when OSD data is missing but not exiting with a failure code
 - Fixed intermediary PDF2TIFF transformation used with Tesseract
 - Fixed --suffix option was ignored
 - Recoded service execution asynchronously
@@ -21,6 +24,7 @@ DD mmm YYYY: v1.5
 	- Added csv output format (with csv hack)
 	- Remove intermediary txt files produced by tesseract
 - Improved logging
+- Improved code compliance
 - Various minor fixes from ofunctions updates
 
 15 Aug 2016: v1.4.2
@@ -77,4 +81,3 @@ DD mmm YYYY: v1.5
 - Fixed multiple problems with spaces in filenames and exclusion patterns
 - Minor fixes for logging
 - Renamed all pmOCR instances to pmocr
-

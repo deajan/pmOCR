@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5-RC
-PROGRAM_BUILD=2016091207
+PROGRAM_VERSION=1.5-dev-again
+PROGRAM_BUILD=2016091401
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -113,97 +113,112 @@ function TrapQuit {
 }
 
 function OCR {
-	local fileToProcess="$1" 	#(contains some path)
-	local fileExtension="$2" 		#(filename extension for output file)
-	local ocrEngineArgs="$3" 		#(transformation specific arguments)
-	local csvHack="${4:-false}" 		#(CSV transformation flag)
+	local inputFileName="$1" 		# Contains full path of file to OCR
+	local fileExtension="$2" 		# Filename extension of output file
+	local ocrEngineArgs="$3" 		# OCR engine specific arguments
+	local csvHack="${4:-false}" 		# CSV Hack boolean
 
 	__CheckArguments 2-4 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
 	local findExcludes
-	local tmpFile
-	local originalFile
-	local result
-
+	local tmpFilePreprocessor
+	local tmpFileIntermediary
+	local renamedFileName
 	local outputFileName
 
 	local cmd
 	local subcmd
+	local result
 
-		# Expand $FILENAME_ADDITION
-		eval "outputFileName=\"${fileToProcess%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\""
+		# Expand $FILENAME_ADDITION #TODO remove eval
+		eval "outputFileName=\"${inputFileName%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\""
 
-		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$fileToProcess" 2> /dev/null | wc -l) -lt 3 ])); then
+		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$inputFileName" 2> /dev/null | wc -l) -lt 3 ])); then
 
-#			if [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
-#				tmpFile="$fileToProcess.tmp"
-#				subcmd="$OCR_PREPROCESSOR_EXEC $OCR_PREPROCESSOR_ARGS $fileToProcess $tmpFile"
-#				Logger "Executing $subcmd" "DEBUG"
-#				eval "$subcmd"
-#				if [ $? -ne 0 ]; thrn
-#					Logger "$OCR_PREPROCESSOR_EXEC preprocesser failed." "ERROR"
-#					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "DEBUG"
-#				else
-#					originalFile="$fileToProcess"
-#					fileToProcess="$tmpFile"
-#				fi
-#			fi
-
-			if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
-				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"$outputFileName$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
-				Logger "Executing: $cmd" "DEBUG"
-				eval "$cmd"
+			# Perform intermediary transformation of input pdf file to tiff if OCR_ENGINE is tesseract
+			if [ "$OCR_ENGINE" == "tesseract3" ] && [[ "$inputFileName" == *.[pP][dD][fF] ]]; then
+				tmpFileIntermediary="${inputFileName%.*}.tif"
+				subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFileIntermediary\" \"$inputFileName\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\""
+				Logger "Executing: $subcmd" "DEBUG"
+				eval "$subcmd"
 				result=$?
-
-			elif [ "$OCR_ENGINE" == "tesseract3" ]; then
-				# Empty tmp log file first
-				echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
-				# Intermediary transformation of input pdf file to tiff
-                                if [[ "$fileToProcess" == *.[pP][dD][fF] ]]; then
-					tmpFile="$fileToProcess.tif"
-                                        subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFile\" \"$fileToProcess\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
-					Logger "Executing: $subcmd" "DEBUG"
-                                        eval "$subcmd"
-					if [ $? -ne 0 ]; then
-						Logger "$PDF_TO_TIFF_EXEC intermediary transformation failed." "ERROR"
-						Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "DEBUG"
-					fi
-					originalFile="$fileToProcess"
-                                       	fileToProcess="$tmpFile"
-                               	fi
-				cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
-				Logger "Executing: $cmd" "DEBUG"
-				eval "$cmd"
-				result=$?
-
-				# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
-				if grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"; then
-					Logger "Tesseract transformed the document with errors" "WARN"
-					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "NOTICE"
-				fi
-
-				# Remove temporary file if final output file exists
-				if [ -f "$originalFile" ]; then
-					fileToProcess="$originalFile"
-					if [ -f "$tmpFile" ]; then
-						rm -f "$tmpFile";
-					fi
-				fi
-
-				# Fix for tesseract pdf output also outputs txt format
-                                if [ "$fileExtension" == ".pdf" ] && [ -f "$outputFileName$TEXT_EXTENSION" ]; then
-					rm -f "$outputFileName$TEXT_EXTENSION"
+				if [ $result -ne 0 ]; then
+					Logger "$PDF_TO_TIFF_EXEC intermediary transformation failed." "ERROR"
+					Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "DEBUG"
+				else
+					fileToProcess="$tmpFileIntermediary"
 				fi
 			else
-				Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
+				fileToProcess="$inputFileName"
+			fi
+
+			# Run OCR Preprocessor
+			if [ -f "$fileToProcess" ] && [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
+				tmpFilePreprocessor="${fileToProcess%.*}.preprocessed.${fileToProcess##*.}"
+				subcmd="$OCR_PREPROCESSOR_EXEC $OCR_PREPROCESSOR_ARGS $OCR_PREPROCESSOR_INPUT_ARGS\"$inputFileName\" $OCR_PREPROCESSOR_OUTPUT_ARG\"$tmpFilePreprocessor\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\""
+				Logger "Executing $subcmd" "DEBUG"
+				eval "$subcmd"
+				result=$?
+				if [ $result -ne 0 ]; then
+					Logger "$OCR_PREPROCESSOR_EXEC preprocesser failed." "ERROR"
+					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "DEBUG"
+				else
+					fileToProcess="$tmpFilePreprocessor"
+				fi
+			fi
+
+			# Run Abbyy OCR
+			if [ -f "$fileToProcess" ]; then
+				if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
+					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"$outputFileName$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+					Logger "Executing: $cmd" "DEBUG"
+					eval "$cmd"
+					result=$?
+
+				# Run Tesseract OCR + Intermediary transformation
+				elif [ "$OCR_ENGINE" == "tesseract3" ]; then
+					# Empty tmp log file first
+					echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+					Logger "Executing: $cmd" "DEBUG"
+					eval "$cmd"
+					result=$?
+
+					# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
+					if [ $result -eq 0 ] && grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"; then
+						Logger "Tesseract transformed the document with errors" "WARN"
+						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "NOTICE"
+					fi
+
+					# Fix for tesseract pdf output also outputs txt format
+					if [ "$fileExtension" == ".pdf" ] && [ -f "$outputFileName$TEXT_EXTENSION" ]; then
+						rm -f "$outputFileName$TEXT_EXTENSION"
+					fi
+				else
+					Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
+				fi
+			fi
+
+			# Remove temporary files
+			if [ -f "$tmpFileIntermediary" ]; then
+				rm -f "$tmpFileIntermediary";
+			fi
+			if [ -f "$tmpFilePreprocessor" ]; then
+				rm -f "$tmpFilePreprocessor";
 			fi
 
 			if [ $result != 0 ]; then
-				Logger "Could not process file [$fileToProcess] (error code $result)." "ERROR"
+				Logger "Could not process file [$inputFileName] (error code $result)." "ERROR"
 				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "ERROR"
 				if [ "$_SERVICE_RUN" == true ]; then
 					SendAlert
 				fi
+
+				# Add error suffix so failed files won't be run again and create a loop
+				renamedFileName="${inputFileName%.*}$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
+				Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
+				mv "$inputFileName" "$renamedFileName"
+
 			else
 				# Convert 4 spaces or more to semi colon (hack to transform txt output to CSV)
 				if [ $csvHack == true ]; then
@@ -224,21 +239,23 @@ function OCR {
 				fi
 
 				if [ "$DELETE_ORIGINAL" == "yes" ]; then
-					Logger "Deleting file [$fileToProcess]." "DEBUG"
-					rm -f "$fileToProcess"
+					Logger "Deleting file [$inputFileName]." "DEBUG"
+					rm -f "$inputFileName"
 				else
-					Logger "Renaming file [$fileToProcess] to [${fileToProcess%.*}$FILENAME_SUFFIX.${fileToProcess##*.}]." "DEBUG"
-					mv "$fileToProcess" "${fileToProcess%.*}$FILENAME_SUFFIX.${fileToProcess##*.}"
+					renamedFileName="${inputFileName%.*}$FILENAME_SUFFIX.${inputFileName##*.}"
+					Logger "Renaming file [$inputFileName] to [$renamedFileName]." "DEBUG"
+					mv "$inputFileName" "$renamedFileName"
 				fi
 
 				if [ "$_SILENT" == false ]; then
-					Logger "Processed file [$fileToProcess]." "NOTICE"
+					Logger "Processed file [$inputFileName]." "NOTICE"
 				fi
 			fi
 
 		else
-			Logger "Skipping file [$fileToProcess] already containing text." "NOTICE"
+			Logger "Skipping file [$inputFileName] already containing text." "NOTICE"
 		fi
+		exit 0
 }
 
 function OCR_Dispatch {
@@ -250,6 +267,7 @@ function OCR_Dispatch {
 	__CheckArguments 2-4 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
 
 	local findExcludes
+	local failedFindExcludes
 	local cmd
 
 	## CHECK find excludes
@@ -257,6 +275,11 @@ function OCR_Dispatch {
 		findExcludes="*$FILENAME_SUFFIX.*"
 	else
 		findExcludes=""
+	fi
+	if [ "$FAILED_FILENAME_SUFFIX" != "" ]; then
+		failedFindExcludes="*$FAILED_FILENAME_SUFFIX.*"
+	else
+		failedFindExcludes=""
 	fi
 
 	# Read find result into command list
@@ -279,7 +302,7 @@ function OCR_Dispatch {
 
 	# Replaced the while loop because find process subsitition creates a segfault when OCR_Dispatch is called by DispatchRunner with SIGUSR1
 
-	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
 	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true
 
 	return $?
@@ -313,8 +336,8 @@ function DispatchRunner {
 			OCR_Dispatch "$CSV_MONITOR_DIR" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
 		fi
 		DISPATCH_NEEDED=$((DISPATCH_NEEDED-1))
+		DISPATCH_RUNS=false
 	done
-	DISPATCH_RUNS=false
 }
 
 function OCR_service {
@@ -327,7 +350,7 @@ function OCR_service {
 	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "NOTICE"
 	while [ -f "$SERVICE_MONITOR_FILE" ];do
 		# If file modifications occur, send a signal so DispatchRunner is run
-		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess"
+		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess"
 		kill -USR1 $SCRIPT_PID
 	done
 }
@@ -450,6 +473,11 @@ if [ $pdf == false ] && [ $docx == false ] && [ $xlsx == false ] && [ $txt == fa
 	pdf=true
 fi
 
+# Add FAILED_FILENAME_SUFFIX if missing
+if [ "$FAILED_FILENAME_SUFFIX" == "" ]; then
+	FAILED_FILENAME_SUFFIX="_OCR_ERR"
+fi
+
 # Commandline arguments override default config
 if [ $_BATCH_RUN == true ]; then
 	if [ $skip_txt_pdf == true ]; then
@@ -529,7 +557,7 @@ if [ $_SERVICE_RUN == true ]; then
 elif [ $_BATCH_RUN == true ]; then
 
 	# Get last argument that should be a path
-	eval batch_path=\${$#}
+	eval batch_path=\${$#} #WIP
 	if [ ! -d "$batch_path" ]; then
 		Logger "Missing path." "ERROR"
 		Usage

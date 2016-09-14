@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-dev-again
-PROGRAM_BUILD=2016091402
+PROGRAM_BUILD=2016091403
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -21,7 +21,7 @@ SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID"
 
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
-		if ! type -p "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
+		if ! type "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
 			Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"
 			exit 1
 		fi
@@ -30,13 +30,20 @@ function CheckEnvironment {
 		exit 1
 	fi
 
+	if [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
+		if ! type "$OCR_PREPROCESSOR_EXEC" > /dev/null 2>&1; then
+			Logger "$OCR_PREPROCESSOR_EXEC not present." "CRITICAL"
+			exit 1
+		fi
+	fi
+
 	if [ "$_SERVICE_RUN" == true ]; then
-		if ! type -p inotifywait > /dev/null 2>&1; then
+		if ! type inotifywait > /dev/null 2>&1; then
 			Logger "inotifywait not present (see inotify-tools package ?)." "CRITICAL"
 			exit 1
 		fi
 
-		if ! type -p pgrep > /dev/null 2>&1; then
+		if ! type pgrep > /dev/null 2>&1; then
 			Logger "pgrep not present." "CRITICAL"
 			exit 1
 		fi

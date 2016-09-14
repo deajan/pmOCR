@@ -74,9 +74,8 @@ With systemD, you have to launch a service for each config file. Example for con
 ## Support for OCR engines
 
 Has been tested so far with:
-- ABBYY FineReader OCR Engine 11 CLI for Linux releases R2 (v 11.1.6.562411)
-- ABBYY OCR Engline 11 CLI R3 (v 11.1.9.622165)
-- tesseract-ocr 3.0.4
+- ABBYY FineReader OCR Engine 11 CLI for Linux releases R2 (v 11.1.6.562411) and R3 (v 11.1.9.622165)
+- Tesseract-ocr 3.0.4
 
 Tesseract mode also uses ghostscript to convert PDF files to an intermediary TIFF format in order to process them.
 
@@ -84,11 +83,12 @@ It should virtually work with any engine as long as you adjust the parameters.
 
 Parameters include any arguments to pass to the OCR program depending on the target format.
 
-## Troubleshooting
+## Support for OCR Preprocessors
 
-Please check /var/log/pmocr.log or ./pmocr.log file for errors.
-
-Filenames containing special characters should work, nevertheless, if your file doesn't get converted, try to rename it and copy it again to the monitored directory or batch process it again.
+ABBYY has in integrated preprocessor in order to enhance recognition qualitiy whereas Tesseract relies on external tools.
+pmOCR can use a preprocessor like ImageMagick to deskew / clear noise / render white background and remove black borders. 
+ImageMagick preprocessor is configured, but disabled by default.
+In order to use it with Tesseract, you have to uncomment it in your configuration file.
 
 ## Tesseract caveats
 
@@ -96,3 +96,8 @@ When no OSD / language data is installed, tesseract will still process documents
 While pmocr will warn you about this, the conversion still happens.
 Please make sure to install all necessary addons for tesseract.
 
+## Troubleshooting
+
+Please check /var/log/pmocr.log or ./pmocr.log file for errors.
+
+Filenames containing special characters should work, nevertheless, if your file doesn't get converted, try to rename it and copy it again to the monitored directory or batch process it again.

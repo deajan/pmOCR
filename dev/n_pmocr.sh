@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5-dev-again
-PROGRAM_BUILD=2016091403
+PROGRAM_BUILD=2016091601
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -242,7 +242,17 @@ function OCR {
 						if [ $? == 0 ]; then
 							rm -f "$outputFileName$TEXT_EXTENSION"
 						fi
+						outputFileName="$outputFileName$CSV_EXTENSION"
 					fi
+				fi
+
+				# Apply permissions and ownership
+				if [ "$PRESERVE_OWNERSHIP" == "yes" ]; then
+					chown --reference "$inputFileName" "$outputFileName"
+					if [ $(IsInteger "$FILE_PERMISSIONS") -eq 1 ]; then
+						chmod $FILE_PERMISSIONS "$outputFileName"
+					else
+					chmod --reference "$inputFileName" "$outputFileName"
 				fi
 
 				if [ "$DELETE_ORIGINAL" == "yes" ]; then

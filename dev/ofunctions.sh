@@ -1,6 +1,6 @@
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016091101
+## FUNC_BUILD=2016091601
 ## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
@@ -267,7 +267,7 @@ function SendAlert {
 	fi
 
 	# <OSYNC SPECIFIC>
-	if [ "$_QUICK_SYNC" == "2" ]; then
+	if [ "$_QUICK_SYNC" -eq 2 ]; then
 		Logger "Current task is a quicksync task. Will not send any alert." "NOTICE"
 		return 0
 	fi
@@ -1284,7 +1284,8 @@ function RsyncPatterns {
 		if [ "$RSYNC_INCLUDE_FROM" != "" ]; then
 			RsyncPatternsFromAdd "include" "$RSYNC_INCLUDE_FROM"
 		fi
-	elif [ "$RSYNC_PATTERN_FIRST" == "include" ]; then
+	# Use default include first for quicksync runs
+	elif [ "$RSYNC_PATTERN_FIRST" == "include" ] || [ $_QUICK_SYNC -eq 2 ]; then
 		if [ "$RSYNC_INCLUDE_PATTERN" != "" ]; then
 			RsyncPatternsAdd "include" "$RSYNC_INCLUDE_PATTERN"
 		fi

@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5-dev-again
-PROGRAM_BUILD=2016091603
+PROGRAM_VERSION=1.5-RC
+PROGRAM_BUILD=2016101101
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -270,7 +270,7 @@ function OCR {
 			fi
 
 		else
-			Logger "Skipping file [$inputFileName] already containing text." "NOTICE"
+			Logger "Skipping file [$inputFileName] already containing text." "VERBOSE"
 		fi
 		exit 0
 }
@@ -402,6 +402,7 @@ function Usage {
 	echo "                          By default, the text is the conversion date in pseudo ISO format."
 	echo "--no-text                 Won't add any text to the output filename"
 	echo "-s, --silent              Will not output anything to stdout"
+	echo "-v, --verbose             Verbose output"
 	echo ""
 	exit 128
 }

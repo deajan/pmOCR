@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5-dev-again
-PROGRAM_BUILD=2016091603
+PROGRAM_VERSION=1.5-RC
+PROGRAM_BUILD=2016101101
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -17,7 +17,7 @@ DEFAULT_CONFIG_FILE="/etc/pmocr/default.conf"
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016091601
+## FUNC_BUILD=2016091901
 ## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
@@ -537,6 +537,7 @@ function TrapError {
 	local job="$0"
 	local line="$1"
 	local code="${2:-1}"
+
 	if [ $_SILENT == false ]; then
 		echo -e " /!\ ERROR in ${job}: Near line ${line}, exit code ${code}"
 	fi
@@ -544,6 +545,7 @@ function TrapError {
 
 function LoadConfigFile {
 	local configFile="${1}"
+
 
 
 	if [ ! -f "$configFile" ]; then
@@ -606,11 +608,11 @@ function joinString {
 
 function WaitForTaskCompletion {
 	local pids="${1}" # pids to wait for, separated by semi-colon
-	local soft_max_time="${2}" # If program with pid $pid takes longer than $soft_max_time seconds, will log a warning, unless $soft_max_time equals 0.
-	local hard_max_time="${3}" # If program with pid $pid takes longer than $hard_max_time seconds, will stop execution, unless $hard_max_time equals 0.
-	local caller_name="${4}" # Who called this function
+	local softMaxTime="${2}" # If program with pid $pid takes longer than $softMaxTime seconds, will log a warning, unless $softMaxTime equals 0.
+	local hardMaxTime="${3}" # If program with pid $pid takes longer than $hardMaxTime seconds, will stop execution, unless $hardMaxTime equals 0.
+	local callerName="${4}" # Who called this function
 	local counting="${5:-true}" # Count time since function has been launched if true, since script has been launched if false
-	local keep_logging="${6:-0}" # Log a standby message every X seconds. Set to zero to disable logging
+	local keepLogging="${6:-0}" # Log a standby message every X seconds. Set to zero to disable logging
 
 
 	local soft_alert=false # Does a soft alert need to be triggered, if yes, send an alert once
@@ -645,8 +647,8 @@ function WaitForTaskCompletion {
 			exec_time=$SECONDS
 		fi
 
-		if [ $keep_logging -ne 0 ]; then
-			if [ $((($exec_time + 1) % $keep_logging)) -eq 0 ]; then
+		if [ $keepLogging -ne 0 ]; then
+			if [ $((($exec_time + 1) % $keepLogging)) -eq 0 ]; then
 				if [ $log_ttime -ne $exec_time ]; then # Fix when sleep time lower than 1s
 					log_ttime=$exec_time
 					Logger "Current tasks still running with pids [$(joinString , ${pidsArray[@]})]." "NOTICE"
@@ -654,15 +656,15 @@ function WaitForTaskCompletion {
 			fi
 		fi
 
-		if [ $exec_time -gt $soft_max_time ]; then
-			if [ $soft_alert == true ] && [ $soft_max_time -ne 0 ]; then
-				Logger "Max soft execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]." "WARN"
+		if [ $exec_time -gt $softMaxTime ]; then
+			if [ $soft_alert == true ] && [ $softMaxTime -ne 0 ]; then
+				Logger "Max soft execution time exceeded for task [$callerName] with pids [$(joinString , ${pidsArray[@]})]." "WARN"
 				soft_alert=true
 				SendAlert true
 
 			fi
-			if [ $exec_time -gt $hard_max_time ] && [ $hard_max_time -ne 0 ]; then
-				Logger "Max hard execution time exceeded for task [$caller_name] with pids [$(joinString , ${pidsArray[@]})]. Stopping task execution." "ERROR"
+			if [ $exec_time -gt $hardMaxTime ] && [ $hardMaxTime -ne 0 ]; then
+				Logger "Max hard execution time exceeded for task [$callerName] with pids [$(joinString , ${pidsArray[@]})]. Stopping task execution." "ERROR"
 				for pid in "${pidsArray[@]}"; do
 					KillChilds $pid true
 					if [ $? == 0 ]; then
@@ -690,7 +692,7 @@ function WaitForTaskCompletion {
 					retval=$?
 					if [ $retval -ne 0 ]; then
 						errorcount=$((errorcount+1))
-						Logger "${FUNCNAME[0]} called by [$caller_name] finished monitoring [$pid] with exitcode [$retval]." "DEBUG"
+						Logger "${FUNCNAME[0]} called by [$callerName] finished monitoring [$pid] with exitcode [$retval]." "DEBUG"
 						if [ "$WAIT_FOR_TASK_COMPLETION" == "" ]; then
 							WAIT_FOR_TASK_COMPLETION="$pid:$retval"
 						else
@@ -723,6 +725,11 @@ function ParallelExec {
 	local numberOfProcesses="${1}" # Number of simultaneous commands to run
 	local commandsArg="${2}" # Semi-colon separated list of commands, or file containing one command per line
 	local readFromFile="${3:-false}" # Is commandsArg a file or a string ?
+	local softMaxTime="${4:-0}"
+	local hardMaxTime="${5:-0}"
+	local callerName="${6}" # Who called this function
+	local counting="${7:-true}" # Count time since function has been launched if true, since script has been launched if false
+	local keepLogging="${8:-0}" # Log a standby message every X seconds. Set to zero to disable logging
 
 
 	local commandCount
@@ -761,7 +768,7 @@ function ParallelExec {
 				command="${commandsArray[$counter]}"
 			fi
 			Logger "Running command [$command]." "DEBUG"
-			eval "$command" &
+			eval "$command" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" 2>&1 &
 			pid=$!
 			pidsArray+=($pid)
 			commandsArrayPid[$pid]="$command"
@@ -816,6 +823,7 @@ function SedStripQuotes {
 # Usage: var=$(StripSingleQuotes "$var")
 function StripSingleQuotes {
 	local string="${1}"
+
 	string="${string/#\'/}" # Remove singlequote if it begins string
 	string="${string/%\'/}" # Remove singlequote if it ends string
 	echo "$string"
@@ -824,6 +832,7 @@ function StripSingleQuotes {
 # Usage: var=$(StripDoubleQuotes "$var")
 function StripDoubleQuotes {
 	local string="${1}"
+
 	string="${string/#\"/}"
 	string="${string/%\"/}"
 	echo "$string"
@@ -831,12 +840,14 @@ function StripDoubleQuotes {
 
 function StripQuotes {
 	local string="${1}"
+
 	echo "$(StripSingleQuotes $(StripDoubleQuotes $string))"
 }
 
 # Usage var=$(EscapeSpaces "$var") or var="$(EscapeSpaces "$var")"
 function EscapeSpaces {
 	local string="${1}" # String on which spaces will be escaped
+
 	echo "${string// /\\ }"
 }
 
@@ -844,6 +855,7 @@ function IsNumericExpand {
 	eval "local value=\"${1}\"" # Needed eval so variable variables can be processed
 
 	local re="^-?[0-9]+([.][0-9]+)?$"
+
 	if [[ $value =~ $re ]]; then
 		echo 1
 	else
@@ -890,24 +902,24 @@ function urlEncode {
 }
 
 function urlDecode {
-	local url_encoded="${1//+/ }"
+	local urlEncoded="${1//+/ }"
 
-	printf '%b' "${url_encoded//%/\\x}"
+	printf '%b' "${urlEncoded//%/\\x}"
 }
 
 function GetLocalOS {
 
-	local local_os_var=
+	local localOsVar
 
-	local_os_var="$(uname -spio 2>&1)"
+	localOsVar="$(uname -spio 2>&1)"
 	if [ $? != 0 ]; then
-		local_os_var="$(uname -v 2>&1)"
+		localOsVar="$(uname -v 2>&1)"
 		if [ $? != 0 ]; then
-			local_os_var="$(uname)"
+			localOsVar="$(uname)"
 		fi
 	fi
 
-	case $local_os_var in
+	case $localOsVar in
 		*"Linux"*)
 		LOCAL_OS="Linux"
 		;;
@@ -922,14 +934,14 @@ function GetLocalOS {
 		;;
 		*)
 		if [ "$IGNORE_OS_TYPE" == "yes" ]; then		#DOC: Undocumented option
-			Logger "Running on unknown local OS [$local_os_var]." "WARN"
+			Logger "Running on unknown local OS [$localOsVar]." "WARN"
 			return
 		fi
-		Logger "Running on >> $local_os_var << not supported. Please report to the author." "ERROR"
+		Logger "Running on >> $localOsVar << not supported. Please report to the author." "ERROR"
 		exit 1
 		;;
 	esac
-	Logger "Local OS: [$local_os_var]." "DEBUG"
+	Logger "Local OS: [$localOsVar]." "DEBUG"
 }
 
 #### MINIMAL-FUNCTION-SET END ####
@@ -1186,7 +1198,7 @@ function OCR {
 			fi
 
 		else
-			Logger "Skipping file [$inputFileName] already containing text." "NOTICE"
+			Logger "Skipping file [$inputFileName] already containing text." "VERBOSE"
 		fi
 		exit 0
 }
@@ -1316,6 +1328,7 @@ function Usage {
 	echo "                          By default, the text is the conversion date in pseudo ISO format."
 	echo "--no-text                 Won't add any text to the output filename"
 	echo "-s, --silent              Will not output anything to stdout"
+	echo "-v, --verbose             Verbose output"
 	echo ""
 	exit 128
 }

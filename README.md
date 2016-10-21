@@ -17,7 +17,7 @@ pmOCR has the following options:
 
 ## Install it
 
-    $ git clone -b "v1.4.2" https://github.com/deajan/pmOCR
+    $ git clone -b "v1.5" https://github.com/deajan/pmOCR
     $ cd pmOCR
     $ ./install.sh
 
@@ -48,7 +48,7 @@ pmocr is written to monitor up to 5 directories, each producing a different targ
 
 There's also an option to avoid passing PDFs to the OCR engine that already contain text.
 
-After installation, please configure /usr/local/bin/pmocr.sh script variables in order to monitor the directories you need, and adjust your specific options.
+After installation, please configure /etc/pmocr/default.conf in order to monitor the directories you need, and adjust your specific options.
 
 Launch service (initV style)
 service pmocr-srv start
@@ -64,7 +64,7 @@ systemctl status pmocr-srv@default.service
 
 ## Multiple service instances
 
-In order to monitor multiple directories with different OCR settings, you need to clone the /etc/pmocr/default.conf.
+In order to monitor multiple directories with different OCR settings, you need to duplicate /etc/pmocr/default.conf configuration file.
 When launching pmOCR service with initV, each config file will create an instance.
 With systemD, you have to launch a service for each config file. Example for configs /etc/pmocr/default.conf and /etc/pmocr/other.conf
 

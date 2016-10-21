@@ -3,7 +3,7 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5-RC
+PROGRAM_VERSION=1.5
 PROGRAM_BUILD=2016101101
 
 ## Debug parameter for service
@@ -17,7 +17,7 @@ DEFAULT_CONFIG_FILE="/etc/pmocr/default.conf"
 
 #### MINIMAL-FUNCTION-SET BEGIN ####
 
-## FUNC_BUILD=2016091901
+## FUNC_BUILD=2016102102
 ## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
@@ -115,7 +115,7 @@ function _Logger {
 	local evalue="${3}" # What to log to stderr
 
 	echo -e "$lvalue" >> "$LOG_FILE"
-	CURRENT_LOG="$CURRENT_LOG"$'\n'"$lvalue" #WIP
+	CURRENT_LOG="$CURRENT_LOG"$'\n'"$lvalue"
 
 	if [ $_LOGGER_STDERR == true ] && [ "$evalue" != "" ]; then
 		cat <<< "$evalue" 1>&2
@@ -857,19 +857,20 @@ function IsNumericExpand {
 	local re="^-?[0-9]+([.][0-9]+)?$"
 
 	if [[ $value =~ $re ]]; then
-		echo 1
+		echo 1 && return 1
 	else
-		echo 0
+		echo 0 && return 0
 	fi
 }
 
+# Usage [ $(IsNumeric $var) -eq 1 ]
 function IsNumeric {
 	local value="${1}"
 
 	if [[ $value =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-		echo 1
+		echo 1 && return 1
 	else
-		echo 0
+		echo 0 && return 0
 	fi
 }
 
@@ -877,9 +878,9 @@ function IsInteger {
 	local value="${1}"
 
 	if [[ $value =~ ^[0-9]+$ ]]; then
-		echo 1
+		echo 1 && return 1
 	else
-		echo 0
+		echo 0 && return 0
 	fi
 }
 
@@ -905,6 +906,21 @@ function urlDecode {
 	local urlEncoded="${1//+/ }"
 
 	printf '%b' "${urlEncoded//%/\\x}"
+}
+
+## Modified version of http://stackoverflow.com/a/8574392
+## Usage: arrayContains "needle" "${haystack[@]}"
+arrayContains () {
+	local e
+
+	if [ "$2" == "" ]; then
+		echo 0 && return 0
+	fi
+
+	for e in "${@:2}"; do
+		[[ "$e" == "$1" ]] && echo 1 && return 1
+	done
+	echo 0 && return 0
 }
 
 function GetLocalOS {

@@ -1,8 +1,10 @@
 RECENT CHANGES
 --------------
 
-DD mmm YYYY: v1.5
+21 Oct 2016: v1.5
 
+- Added ownership preservation option
+- Added optional file permission mask to replace default new file permissions
 - Added the possibility to use an image preprocesser (Imagemagick is preconfigured but not enabled by default)
 - Corrected an issue where a failed service run may end up in an infinite loop by adding a failed OCR file suffix
 - Made a workaround for Tesseract throwing an error when OSD data is missing but not exiting with a failure code

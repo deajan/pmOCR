@@ -74,7 +74,7 @@ With systemD, you have to launch a service for each config file. Example for con
 ## Support for OCR engines
 
 Has been tested so far with:
-- ABBYY FineReader OCR Engine 11 CLI for Linux releases R2 (v 11.1.6.562411) and R3 (v 11.1.9.622165)
+- ABBYY FineReader OCR Engine 11 CLI for Linux releases R2 (v 11.1.6.562411), R3 (v 11.1.9.622165) and R6 (v 11.1.14.707470)
 - Tesseract-ocr 3.0.4
 
 Tesseract mode also uses ghostscript to convert PDF files to an intermediary TIFF format in order to process them.

@@ -4,13 +4,16 @@ PROGRAM=[prgname]
 PROGRAM_VERSION=[version]
 PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
-SCRIPT_BUILD=2016090605
+SCRIPT_BUILD=2016112401
 
 ## osync / obackup / pmocr / zsnap install script
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8 & 10
 ## Please adapt this to fit your distro needs
 
 #TODO: silent mode and no stats mode
+
+# Get current install.sh path from http://stackoverflow.com/a/246128/2635443
+SCRIPT_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 CONF_DIR=$FAKEROOT/etc/$PROGRAM
 BIN_DIR="$FAKEROOT/usr/local/bin"
@@ -70,25 +73,35 @@ function urlencode() {
         local c="${1:i:1}"
         case $c in
             [a-zA-Z0-9.~_-]) printf "$c" ;;
-            *) printf '%%%02X' "'$c" ;; 
+            *) printf '%%%02X' "'$c" ;;
         esac
     done
 }
 
 function SetOSSettings {
+	local localOsVar
+
 	USER=root
 
-	local local_os_var
+        # There's no good way to tell if currently running in BusyBox shell. Using sluggish way.
+        if ls --help 2>&1 | grep -i "BusyBox" > /dev/null; then
+                localOsVar="BusyBox"
+        else
+                # Detecting the special ubuntu userland in Windows 10 bash
+                if grep -i Microsoft /proc/sys/kernel/osrelease > /dev/null 2>&1; then
+                        localOsVar="Microsoft"
+                else
+                        localOsVar="$(uname -spio 2>&1)"
+                        if [ $? != 0 ]; then
+                                localOsVar="$(uname -v 2>&1)"
+                                if [ $? != 0 ]; then
+                                        localOsVar="$(uname)"
+                                fi
+                        fi
+                fi
+        fi
 
-	local_os_var="$(uname -spio 2>&1)"
-	if [ $? != 0 ]; then
-		local_os_var="$(uname -v 2>&1)"
-		if [ $? != 0 ]; then
-			local_os_var="$(uname)"
-		fi
-	fi
-
-	case $local_os_var in
+	case $localOsVar in
 		*"BSD"*)
 		GROUP=wheel
 		;;
@@ -109,7 +122,7 @@ function SetOSSettings {
 		exit 1
 	fi
 
-	OS=$(urlencode "$local_os_var")
+	OS=$(urlencode "$localOsVar")
 }
 
 function GetInit {
@@ -140,34 +153,34 @@ function CreateConfDir {
 }
 
 function CopyExampleFiles {
-	if [ -f "./sync.conf.example" ]; then
-		cp "./sync.conf.example" "$CONF_DIR/sync.conf.example"
+	if [ -f "$SCRIPT_PATH/sync.conf.example" ]; then
+		cp "$SCRIPT_PATH/sync.conf.example" "$CONF_DIR/sync.conf.example"
 	fi
 
-	if [ -f "./host_backup.conf.example" ]; then
-		cp "./host_backup.conf.example" "$CONF_DIR/host_backup.conf.example"
+	if [ -f "$SCRIPT_PATH/host_backup.conf.example" ]; then
+		cp "$SCRIPT_PATH/host_backup.conf.example" "$CONF_DIR/host_backup.conf.example"
 	fi
 
-	if [ -f "./exlude.list.example" ]; then
-		cp "./exclude.list.example" "$CONF_DIR/exclude.list.example"
+	if [ -f "$SCRIPT_PATH/exlude.list.example" ]; then
+		cp "$SCRIPT_PATH/exclude.list.example" "$CONF_DIR/exclude.list.example"
 	fi
 
-	if [ -f "./snapshot.conf.example" ]; then
-		cp "./snapshot.conf.example" "$CONF_DIR/snapshot.conf.example"
+	if [ -f "$SCRIPT_PATH/snapshot.conf.example" ]; then
+		cp "$SCRIPT_PATH/snapshot.conf.example" "$CONF_DIR/snapshot.conf.example"
 	fi
 
-	if [ -f "./default.conf" ]; then
+	if [ -f "$SCRIPT_PATH/default.conf" ]; then
 		if [ -f "$CONF_DIR/default.conf" ]; then
-			cp "./default.conf" "$CONF_DIR/default.conf.new"
+			cp "$SCRIPT_PATH/default.conf" "$CONF_DIR/default.conf.new"
 			QuickLogger "Copied default.conf to [$CONF_DIR/default.conf.new]."
 		else
-			cp "./default.conf" "$CONF_DIR/default.conf"
+			cp "$SCRIPT_PATH/default.conf" "$CONF_DIR/default.conf"
 		fi
 	fi
 }
 
 function CopyProgram {
-	cp "./$PROGRAM_BINARY" "$BIN_DIR"
+	cp "$SCRIPT_PATH/$PROGRAM_BINARY" "$BIN_DIR"
 	if [ $? != 0 ]; then
 		QuickLogger "Cannot copy $PROGRAM_BINARY to [$BIN_DIR]. Make sure to run install script in the directory containing all other files."
 		QuickLogger "Also make sure you have permissions to write to [$BIN_DIR]."
@@ -177,8 +190,8 @@ function CopyProgram {
 		QuickLogger "Copied $PROGRAM_BINARY to [$BIN_DIR]."
 	fi
 
-	if [ -f "./$PROGRAM_BATCH" ]; then
-		cp "./$PROGRAM_BATCH" "$BIN_DIR"
+	if [ -f "$SCRIPT_PATH/$PROGRAM_BATCH" ]; then
+		cp "$SCRIPT_PATH/$PROGRAM_BATCH" "$BIN_DIR"
 		if [ $? != 0 ]; then
 			QuickLogger "Cannot copy $PROGRAM_BATCH to [$BIN_DIR]."
 		else
@@ -187,8 +200,8 @@ function CopyProgram {
 		fi
 	fi
 
-	if [  -f "./ssh_filter.sh" ]; then
-		cp "./ssh_filter.sh" "$BIN_DIR"
+	if [  -f "$SCRIPT_PATH/ssh_filter.sh" ]; then
+		cp "$SCRIPT_PATH/ssh_filter.sh" "$BIN_DIR"
 		if [ $? != 0 ]; then
 			QuickLogger "Cannot copy ssh_filter.sh to [$BIN_DIR]."
 		else
@@ -203,8 +216,8 @@ function CopyProgram {
 
 function CopyServiceFiles {
 	# OSYNC SPECIFIC
-	if ([ "$init" == "systemd" ] && [ -f "./$OSYNC_SERVICE_FILE_SYSTEMD_SYSTEM" ]); then
-		cp "./$OSYNC_SERVICE_FILE_SYSTEMD_SYSTEM" "$SERVICE_DIR_SYSTEMD_SYSTEM" && cp "./$OSYNC_SERVICE_FILE_SYSTEMD_USER" "$SERVICE_DIR_SYSTEMD_USER/$SERVICE_FILE_SYSTEMD_SYSTEM"
+	if ([ "$init" == "systemd" ] && [ -f "$SCRIPT_PATH/$OSYNC_SERVICE_FILE_SYSTEMD_SYSTEM" ]); then
+		cp "$SCRIPT_PATH/$OSYNC_SERVICE_FILE_SYSTEMD_SYSTEM" "$SERVICE_DIR_SYSTEMD_SYSTEM" && cp "$SCRIPT_PATH/$OSYNC_SERVICE_FILE_SYSTEMD_USER" "$SERVICE_DIR_SYSTEMD_USER/$SERVICE_FILE_SYSTEMD_SYSTEM"
 		if [ $? != 0 ]; then
 			QuickLogger "Cannot copy the systemd file to [$SERVICE_DIR_SYSTEMD_SYSTEM] or [$SERVICE_DIR_SYSTEMD_USER]."
 		else
@@ -213,8 +226,8 @@ function CopyServiceFiles {
 			QuickLogger "Can be enabled on boot with [systemctl enable osync-srv@instance.conf]."
 			QuickLogger "In userland, active with [systemctl --user start osync-srv@instance.conf]."
 		fi
-	elif ([ "$init" == "initV" ] && [ -f "./$OSYNC_SERVICE_FILE_INIT" ]); then
-		cp "./$OSYNC_SERVICE_FILE_INIT" "$SERVICE_DIR_INIT"
+	elif ([ "$init" == "initV" ] && [ -f "$SCRIPT_PATH/$OSYNC_SERVICE_FILE_INIT" ]); then
+		cp "$SCRIPT_PATH/$OSYNC_SERVICE_FILE_INIT" "$SERVICE_DIR_INIT"
 		if [ $? != 0 ]; then
 			QuickLogger "Cannot copy osync-srv to [$SERVICE_DIR_INIT]."
 		else
@@ -226,8 +239,8 @@ function CopyServiceFiles {
 	fi
 
 	# PMOCR SPECIFIC
-	if ([ "$init" == "systemd" ] && [ -f "./$PMOCR_SERVICE_FILE_SYSTEMD_SYSTEM" ]); then
-		cp "./$PMOCR_SERVICE_FILE_SYSTEMD_SYSTEM" "$SERVICE_DIR_SYSTEMD_SYSTEM"
+	if ([ "$init" == "systemd" ] && [ -f "$SCRIPT_PATH/$PMOCR_SERVICE_FILE_SYSTEMD_SYSTEM" ]); then
+		cp "$SCRIPT_PATH/$PMOCR_SERVICE_FILE_SYSTEMD_SYSTEM" "$SERVICE_DIR_SYSTEMD_SYSTEM"
 		if [ $? != 0 ]; then
 			QuickLogger "Cannot copy the systemd file to [$SERVICE_DIR_SYSTEMD_SYSTEM] or [$SERVICE_DIR_SYSTEMD_USER]."
 		else
@@ -235,8 +248,8 @@ function CopyServiceFiles {
 			QuickLogger "Can be activated with [systemctl start pmocr-srv@default.conf] where default.conf is the name of the config file in $CONF_DIR."
 			QuickLogger "Can be enabled on boot with [systemctl enable pmocr-srv@default.conf]."
 		fi
-	elif ([ "$init" == "initV" ] && [ -f "./$PMOCR_SERVICE_FILE_INIT" ]); then
-		cp "./$PMOCR_SERVICE_FILE_INIT" "$SERVICE_DIR_INIT"
+	elif ([ "$init" == "initV" ] && [ -f "$SCRIPT_PATH/$PMOCR_SERVICE_FILE_INIT" ]); then
+		cp "$SCRIPT_PATH/$PMOCR_SERVICE_FILE_INIT" "$SERVICE_DIR_INIT"
 		if [ $? != 0 ]; then
 			QuickLogger "Cannot copy pmoct-srv to [$SERVICE_DIR_INIT]."
 		else

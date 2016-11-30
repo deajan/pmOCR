@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5
-PROGRAM_BUILD=2016101101
+PROGRAM_VERSION=1.51-dev
+PROGRAM_BUILD=2016113001
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -276,7 +276,7 @@ function OCR {
 }
 
 function OCR_Dispatch {
-	local directoryToProcess="$1" 	#(contains some path)
+	local directoryToProcess="$1" 		#(contains some path)
 	local fileExtension="$2" 		#(filename endings to exclude from processing)
 	local ocrEngineArgs="$3" 		#(transformation specific arguments)
 	local csvHack="$4" 			#(CSV transformation flag)
@@ -320,7 +320,8 @@ function OCR_Dispatch {
 	# Replaced the while loop because find process subsitition creates a segfault when OCR_Dispatch is called by DispatchRunner with SIGUSR1
 
 	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
-	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true
+	#ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true
+	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true 3600 0 .05 $KEEP_LOGGING true false false ${FUNCNAME[0]}
 
 	return $?
 }

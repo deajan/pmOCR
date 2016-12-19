@@ -15,7 +15,7 @@ _LOGGER_PREFIX="date"
 KEEP_LOGGING=0
 DEFAULT_CONFIG_FILE="/etc/pmocr/default.conf"
 
-source "./ofunctions.sh"
+include #### OFUNCTIONS MINI SUBSET ####
 
 SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID"
 

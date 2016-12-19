@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.51-dev
-PROGRAM_BUILD=2016113001
+PROGRAM_BUILD=2016121901
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -125,7 +125,7 @@ function OCR {
 	local ocrEngineArgs="$3" 		# OCR engine specific arguments
 	local csvHack="${4:-false}" 		# CSV Hack boolean
 
-	__CheckArguments 2-4 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
+	__CheckArguments 2-4 $# "$@"		#__WITH_PARANOIA_DEBUG
 
 	local findExcludes
 	local tmpFilePreprocessor
@@ -281,7 +281,7 @@ function OCR_Dispatch {
 	local ocrEngineArgs="$3" 		#(transformation specific arguments)
 	local csvHack="$4" 			#(CSV transformation flag)
 
-	__CheckArguments 2-4 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
+	__CheckArguments 2-4 $# "$@"		#__WITH_PARANOIA_DEBUG
 
 	local findExcludes
 	local failedFindExcludes
@@ -321,7 +321,7 @@ function OCR_Dispatch {
 
 	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
 	#ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true
-	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true 3600 0 .05 $KEEP_LOGGING true false false ${FUNCNAME[0]}
+	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true 3600 0 .05 $KEEP_LOGGING true false false
 
 	return $?
 }
@@ -363,9 +363,9 @@ function OCR_service {
 	local directoryToProcess="${1}" 	#(contains some path)
 	local fileExtension="${2}" 		#(filename endings to exclude from processing)
 
-	__CheckArguments 2 $# ${FUNCNAME[0]} "$@"	#__WITH_PARANOIA_DEBUG
+	__CheckArguments 2 $# "$@"		#__WITH_PARANOIA_DEBUG
 
-	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "NOTICE"
+	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "ALWAYS"
 	while [ -f "$SERVICE_MONITOR_FILE" ];do
 		# If file modifications occur, send a signal so DispatchRunner is run
 		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess"
@@ -402,7 +402,7 @@ function Usage {
 	echo "--text=...                Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)')."
 	echo "                          By default, the text is the conversion date in pseudo ISO format."
 	echo "--no-text                 Won't add any text to the output filename"
-	echo "-s, --silent              Will not output anything to stdout"
+	echo "-s, --silent              Will not output anything to stdout except errors"
 	echo "-v, --verbose             Verbose output"
 	echo ""
 	exit 128
@@ -537,14 +537,14 @@ if [ $_SERVICE_RUN == true ]; then
 	fi
 
 	if [ $_VERBOSE == false ]; then
-		_LOGGER_STDERR=true
+		_LOGGER_ERR_ONLY=true
 	fi
 
 	# Global variable for DispatchRunner function
 	DISPATCH_NEEDED=0
 	DISPATCH_RUNS=false
 
-	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST]." "NOTICE"
+	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST]." "ALWAYS"
 
 	if [ "$PDF_MONITOR_DIR" != "" ]; then
 		OCR_service "$PDF_MONITOR_DIR" "$PDF_EXTENSION" &

@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.51-dev
-PROGRAM_BUILD=2017010201
+PROGRAM_BUILD=2017010401
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -326,7 +326,7 @@ function OCR_Dispatch {
 	retval=$?
 	if [ $retval -ne 0 ]; then
 		Logger "Failed ParallelExec run." "ERROR"
-		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.ParallelExec.OCR_Dispatch.$SCRIPT_PID.$TSTAMP.$TSTAMP)" "NOTICE"
+		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.ParallelExec.OCR_Dispatch.$SCRIPT_PID.$TSTAMP)" "NOTICE"
 	fi
 	return $retval
 }

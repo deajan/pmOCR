@@ -2,6 +2,11 @@ RECENT CHANGES
 --------------
 
 DD Mmm YYYY: v1.51
+
+- Service improvements
+	- A forced run is done every MAX_WAIT seconds
+	- OCR is run on service start
+	- Moved files now also trigger an OCR run
 - Prevent overwriting multiple failed files with same source filename
 - Updated ofunctions from osync & obackup projects allowing to address multiple issues
 	- Improved mail function

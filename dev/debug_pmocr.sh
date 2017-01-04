@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.51-dev
-PROGRAM_BUILD=2017010402
+PROGRAM_VERSION=1.5.1-dev
+PROGRAM_BUILD=2017010405
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -14,6 +14,13 @@ fi
 _LOGGER_PREFIX="date"
 KEEP_LOGGING=0
 DEFAULT_CONFIG_FILE="/etc/pmocr/default.conf"
+
+# Set default wait time before forced run
+if [ "$MAX_WAIT" == "" ]; then
+	MAX_WAIT=86400 # One day in seconds
+fi
+
+SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
 
 
 _OFUNCTIONS_VERSION=2.1-RC1+dev
@@ -1144,8 +1151,6 @@ function GetLocalOS {
 }
 
 
-SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
-
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
 		if ! type "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
@@ -1498,10 +1503,17 @@ function OCR_service {
 
 	__CheckArguments 2 $# "$@"		#__WITH_PARANOIA_DEBUG
 
+	local justStarted=true
+
 	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "ALWAYS"
 	while [ -f "$SERVICE_MONITOR_FILE" ];do
+		# Have a first run on start
+		if [ $justStarted == true ]; then
+			kill -USR1 $SCRIPT_PID
+			justStarted=false
+		fi
 		# If file modifications occur, send a signal so DispatchRunner is run
-		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess"
+		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" -qq -r -e create,move "$directoryToProcess" --timeout $MAX_WAIT
 		kill -USR1 $SCRIPT_PID
 	done
 }

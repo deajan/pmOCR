@@ -1,6 +1,16 @@
 RECENT CHANGES
 --------------
 
+DD Mmm YYYY: v1.51
+- Updated ofunctions from osync & obackup projects
+	- Improved mail function
+	- Improved ParallelExec function
+	- Improved logging functionality
+
+TODO:
+- Added basic unit tests
+	- Added batch tests
+
 21 Oct 2016: v1.5
 
 - Added ownership preservation option

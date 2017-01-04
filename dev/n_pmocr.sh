@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.51-dev
-PROGRAM_BUILD=2017010402
+PROGRAM_BUILD=2017010403
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -374,7 +374,7 @@ function OCR_service {
 	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "ALWAYS"
 	while [ -f "$SERVICE_MONITOR_FILE" ];do
 		# If file modifications occur, send a signal so DispatchRunner is run
-		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" -qq -r -e create "$directoryToProcess"
+		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" -qq -r -e create,move "$directoryToProcess"
 		kill -USR1 $SCRIPT_PID
 	done
 }

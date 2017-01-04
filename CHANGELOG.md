@@ -2,7 +2,8 @@ RECENT CHANGES
 --------------
 
 DD Mmm YYYY: v1.51
-- Updated ofunctions from osync & obackup projects
+- Prevent overwriting multiple failed files with same source filename
+- Updated ofunctions from osync & obackup projects allowing to address multiple issues
 	- Improved mail function
 	- Improved ParallelExec function
 	- Improved logging functionality

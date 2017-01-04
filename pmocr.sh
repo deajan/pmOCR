@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2016 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.51-dev
-PROGRAM_BUILD=2016121901
+PROGRAM_BUILD=2017010401
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -17,9 +17,10 @@ DEFAULT_CONFIG_FILE="/etc/pmocr/default.conf"
 
 
 _OFUNCTIONS_VERSION=2.1-RC1+dev
-_OFUNCTIONS_BUILD=2016121902
+_OFUNCTIONS_BUILD=2017010401
 _OFUNCTIONS_BOOTSTRAP=true
-## BEGIN Generic bash functions written in 2013-2016 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
+
+## BEGIN Generic bash functions written in 2013-2017 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 ## To use in a program, define the following variables:
 ## PROGRAM=program-name
@@ -117,6 +118,13 @@ function Dummy {
 }
 
 #### Logger SUBSET ####
+
+# Array to string converter, see http://stackoverflow.com/questions/1527049/bash-join-elements-of-an-array
+# usage: joinString separaratorChar Array
+function joinString {
+	local IFS="$1"; shift; echo "$*";
+}
+
 # Sub function of Logger
 function _Logger {
 	local logValue="${1}"		# Log to file
@@ -147,7 +155,7 @@ function RemoteLogger {
 	local retval="${3:-undef}"	# optional return value of command
 
 	if [ "$_LOGGER_PREFIX" == "time" ]; then
-		prefix="RTIME: $SECONDS - "
+		prefix="TIME: $SECONDS - "
 	elif [ "$_LOGGER_PREFIX" == "date" ]; then
 		prefix="R $(date) - "
 	else
@@ -191,8 +199,8 @@ function RemoteLogger {
 			return
 		fi
 	else
-		_Logger "\e[41mLogger function called without proper loglevel [$level].\e[0m"
-		_Logger "Value was: $prefix$value"
+		_Logger "" "\e[41mLogger function called without proper loglevel [$level].\e[0m" true
+		_Logger "" "Value was: $prefix$value" true
 	fi
 }
 
@@ -251,7 +259,7 @@ function Logger {
 		fi
 		return
 	elif [ "$level" == "ALWAYS" ]; then
-		_Logger  "$prefix$value" "$prefix$value"
+		_Logger "$prefix$value" "$prefix$value"
 		return
 	elif [ "$level" == "DEBUG" ]; then
 		if [ "$_DEBUG" == "yes" ]; then
@@ -259,8 +267,8 @@ function Logger {
 			return
 		fi
 	else
-		_Logger "\e[41mLogger function called without proper loglevel [$level].\e[0m"
-		_Logger "Value was: $prefix$value"
+		_Logger "\e[41mLogger function called without proper loglevel [$level].\e[0m" "\e[41mLogger function called without proper loglevel [$level].\e[0m" true
+		_Logger "Value was: $prefix$value" "Value was: $prefix$value" true
 	fi
 }
 #### Logger SUBSET END ####
@@ -565,7 +573,7 @@ function TrapError {
 	local code="${2:-1}"
 
 	if [ $_LOGGER_SILENT == false ]; then
-		echo -e "\e[45m/!\ ERROR in ${job}: Near line ${line}, exit code ${code}\e[0m"
+		(>&2 echo -e "\e[45m/!\ ERROR in ${job}: Near line ${line}, exit code ${code}\e[0m")
 	fi
 }
 
@@ -601,11 +609,6 @@ function Spinner {
 	fi
 }
 
-# Array to string converter, see http://stackoverflow.com/questions/1527049/bash-join-elements-of-an-array
-# usage: joinString separaratorChar Array
-function joinString {
-	local IFS="$1"; shift; echo "$*";
-}
 
 # Time control function for background processes, suitable for multiple synchronous processes
 # Fills a global variable called WAIT_FOR_TASK_COMPLETION_$callerName that contains list of failed pids in format pid1:result1;pid2:result2
@@ -659,7 +662,7 @@ function WaitForTaskCompletion {
 			Spinner
 		fi
 		if [ $counting == true ]; then
-			exec_time=$(($SECONDS - $seconds_begin))
+			exec_time=$((SECONDS - seconds_begin))
 		else
 			exec_time=$SECONDS
 		fi
@@ -808,7 +811,7 @@ function ParallelExec {
 		fi
 
 		if [ $counting == true ]; then
-			exec_time=$(($SECONDS - $seconds_begin))
+			exec_time=$((SECONDS - seconds_begin))
 		else
 			exec_time=$SECONDS
 		fi
@@ -846,7 +849,7 @@ function ParallelExec {
 			fi
 			eval "HARD_MAX_EXEC_TIME_REACHED_$callerName=true"
 			# Return the number of commands that haven't run / finished run
-			return $(($commandCount - $counter + ${#pidsArray[@]}))
+			return $((commandCount - counter + ${#pidsArray[@]}))
 		fi
 
 		while [ $counter -lt "$commandCount" ] && [ ${#pidsArray[@]} -lt $numberOfProcesses ]; do
@@ -869,7 +872,6 @@ function ParallelExec {
 			if [ $(IsInteger $pid) -eq 1 ]; then
 				# Handle uninterruptible sleep state or zombies by ommiting them from running process array (How to kill that is already dead ? :)
 				if kill -0 $pid > /dev/null 2>&1; then
-					#pidState=$(ps -p$pid -o state= 2 > /dev/null)
 					pidState="$(eval $PROCESS_STATE_CMD)"
 					if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
 						newPidsArray+=($pid)
@@ -889,7 +891,7 @@ function ParallelExec {
 		pidsArray=("${newPidsArray[@]}")
 
 		# Trivial wait time for bash to not eat up all CPU
-		sleep $SLEEP_TIME
+		sleep $sleepTime
 	done
 
 	return $errorCount
@@ -902,11 +904,6 @@ function CleanUp {
 		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
 		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP.tmp"
 	fi
-}
-
-# obsolete, use StripQuotes
-function SedStripQuotes {
-	echo $(echo $1 | sed "s/^\([\"']\)\(.*\)\1\$/\2/g")
 }
 
 # Usage: var=$(StripSingleQuotes "$var")
@@ -1056,7 +1053,7 @@ function GetLocalOS {
 		if grep -i Microsoft /proc/sys/kernel/osrelease > /dev/null 2>&1; then
 			localOsVar="Microsoft"
 		else
-			localOsVar="$(uname -spio 2>&1)"
+			localOsVar="$(uname -spior 2>&1)"
 			if [ $? != 0 ]; then
 				localOsVar="$(uname -v 2>&1)"
 				if [ $? != 0 ]; then
@@ -1106,10 +1103,13 @@ function GetLocalOS {
 	if [ "$_OFUNCTIONS_VERSION" != "" ]; then
 		Logger "Local OS: [$localOsVar]." "DEBUG"
 	fi
+
+	# Add a global variable for statistics in installer
+	LOCAL_OS_FULL="$localOsVar"
 }
 
 
-SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID"
+SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
 
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
@@ -1236,13 +1236,13 @@ function OCR {
 			# Perform intermediary transformation of input pdf file to tiff if OCR_ENGINE is tesseract
 			if [ "$OCR_ENGINE" == "tesseract3" ] && [[ "$inputFileName" == *.[pP][dD][fF] ]]; then
 				tmpFileIntermediary="${inputFileName%.*}.tif"
-				subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFileIntermediary\" \"$inputFileName\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\""
+				subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFileIntermediary\" \"$inputFileName\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
 				Logger "Executing: $subcmd" "DEBUG"
 				eval "$subcmd"
 				result=$?
 				if [ $result -ne 0 ]; then
 					Logger "$PDF_TO_TIFF_EXEC intermediary transformation failed." "ERROR"
-					Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "DEBUG"
+					Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
 				else
 					fileToProcess="$tmpFileIntermediary"
 				fi
@@ -1253,13 +1253,13 @@ function OCR {
 			# Run OCR Preprocessor
 			if [ -f "$fileToProcess" ] && [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
 				tmpFilePreprocessor="${fileToProcess%.*}.preprocessed.${fileToProcess##*.}"
-				subcmd="$OCR_PREPROCESSOR_EXEC $OCR_PREPROCESSOR_ARGS $OCR_PREPROCESSOR_INPUT_ARGS\"$inputFileName\" $OCR_PREPROCESSOR_OUTPUT_ARG\"$tmpFilePreprocessor\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\""
+				subcmd="$OCR_PREPROCESSOR_EXEC $OCR_PREPROCESSOR_ARGS $OCR_PREPROCESSOR_INPUT_ARGS\"$inputFileName\" $OCR_PREPROCESSOR_OUTPUT_ARG\"$tmpFilePreprocessor\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
 				Logger "Executing $subcmd" "DEBUG"
 				eval "$subcmd"
 				result=$?
 				if [ $result -ne 0 ]; then
 					Logger "$OCR_PREPROCESSOR_EXEC preprocesser failed." "ERROR"
-					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "DEBUG"
+					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
 				else
 					fileToProcess="$tmpFilePreprocessor"
 				fi
@@ -1268,7 +1268,7 @@ function OCR {
 			# Run Abbyy OCR
 			if [ -f "$fileToProcess" ]; then
 				if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
-					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"$outputFileName$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"$outputFileName$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2>&1"
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
 					result=$?
@@ -1276,16 +1276,16 @@ function OCR {
 				# Run Tesseract OCR + Intermediary transformation
 				elif [ "$OCR_ENGINE" == "tesseract3" ]; then
 					# Empty tmp log file first
-					echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
-					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+					echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2>&1"
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
 					result=$?
 
 					# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
-					if [ $result -eq 0 ] && grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"; then
+					if [ $result -eq 0 ] && grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"; then
 						Logger "Tesseract transformed the document with errors" "WARN"
-						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "NOTICE"
+						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
 					fi
 
 					# Fix for tesseract pdf output also outputs txt format
@@ -1307,7 +1307,7 @@ function OCR {
 
 			if [ $result != 0 ]; then
 				Logger "Could not process file [$inputFileName] (error code $result)." "ERROR"
-				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "ERROR"
+				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "ERROR"
 				if [ "$_SERVICE_RUN" == true ]; then
 					SendAlert
 				fi
@@ -1376,6 +1376,7 @@ function OCR_Dispatch {
 	local findExcludes
 	local failedFindExcludes
 	local cmd
+	local retval
 
 	## CHECK find excludes
 	if [ "$FILENAME_SUFFIX" != "" ]; then
@@ -1400,20 +1401,24 @@ function OCR_Dispatch {
 	#ParallelExec $NUMBER_OF_PROCESSES "$cmd" false
 
 	# Replaced command array with file to support large fileset
-	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" ]; then
-		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ]; then
+		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	fi
 	#while IFS= read -r -d $'\0' file; do
-	#	echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	#	echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	#done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
 
 	# Replaced the while loop because find process subsitition creates a segfault when OCR_Dispatch is called by DispatchRunner with SIGUSR1
 
-	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
-	#ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true
-	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true 3600 0 .05 $KEEP_LOGGING true false false
-
-	return $?
+	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+	#ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" true
+	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" true 3600 0 .05 $KEEP_LOGGING true false false
+	retval=$?
+	if [ $retval -ne 0 ]; then
+		Logger "Failed ParallelExec run." "ERROR"
+		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.ParallelExec.OCR_Dispatch.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+	fi
+	return $retval
 }
 
 # Run OCR_Dispatch once, if a new request comes when a run is active, run it again once

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
-AUTHOR="(C) 2015-2016 by Orsiris de Jong"
+AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.51-dev
-PROGRAM_BUILD=2017010401
+PROGRAM_BUILD=2017010402
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -1313,7 +1313,8 @@ function OCR {
 				fi
 
 				# Add error suffix so failed files won't be run again and create a loop
-				renamedFileName="${inputFileName%.*}$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
+				# Add $TSAMP in order to avoid overwriting older files
+				renamedFileName="${inputFileName%.*}-$TSTAMP$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
 				Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
 				mv "$inputFileName" "$renamedFileName"
 

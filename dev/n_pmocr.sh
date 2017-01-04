@@ -17,7 +17,7 @@ DEFAULT_CONFIG_FILE="/etc/pmocr/default.conf"
 
 include #### OFUNCTIONS MINI SUBSET ####
 
-SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID"
+SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
 
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
@@ -145,13 +145,13 @@ function OCR {
 			# Perform intermediary transformation of input pdf file to tiff if OCR_ENGINE is tesseract
 			if [ "$OCR_ENGINE" == "tesseract3" ] && [[ "$inputFileName" == *.[pP][dD][fF] ]]; then
 				tmpFileIntermediary="${inputFileName%.*}.tif"
-				subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFileIntermediary\" \"$inputFileName\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\""
+				subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFileIntermediary\" \"$inputFileName\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
 				Logger "Executing: $subcmd" "DEBUG"
 				eval "$subcmd"
 				result=$?
 				if [ $result -ne 0 ]; then
 					Logger "$PDF_TO_TIFF_EXEC intermediary transformation failed." "ERROR"
-					Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "DEBUG"
+					Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
 				else
 					fileToProcess="$tmpFileIntermediary"
 				fi
@@ -162,13 +162,13 @@ function OCR {
 			# Run OCR Preprocessor
 			if [ -f "$fileToProcess" ] && [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
 				tmpFilePreprocessor="${fileToProcess%.*}.preprocessed.${fileToProcess##*.}"
-				subcmd="$OCR_PREPROCESSOR_EXEC $OCR_PREPROCESSOR_ARGS $OCR_PREPROCESSOR_INPUT_ARGS\"$inputFileName\" $OCR_PREPROCESSOR_OUTPUT_ARG\"$tmpFilePreprocessor\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\""
+				subcmd="$OCR_PREPROCESSOR_EXEC $OCR_PREPROCESSOR_ARGS $OCR_PREPROCESSOR_INPUT_ARGS\"$inputFileName\" $OCR_PREPROCESSOR_OUTPUT_ARG\"$tmpFilePreprocessor\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
 				Logger "Executing $subcmd" "DEBUG"
 				eval "$subcmd"
 				result=$?
 				if [ $result -ne 0 ]; then
 					Logger "$OCR_PREPROCESSOR_EXEC preprocesser failed." "ERROR"
-					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "DEBUG"
+					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
 				else
 					fileToProcess="$tmpFilePreprocessor"
 				fi
@@ -177,7 +177,7 @@ function OCR {
 			# Run Abbyy OCR
 			if [ -f "$fileToProcess" ]; then
 				if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
-					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"$outputFileName$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"$outputFileName$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2>&1"
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
 					result=$?
@@ -185,16 +185,16 @@ function OCR {
 				# Run Tesseract OCR + Intermediary transformation
 				elif [ "$OCR_ENGINE" == "tesseract3" ]; then
 					# Empty tmp log file first
-					echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
-					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID\" 2>&1"
+					echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2>&1"
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
 					result=$?
 
 					# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
-					if [ $result -eq 0 ] && grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"; then
+					if [ $result -eq 0 ] && grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"; then
 						Logger "Tesseract transformed the document with errors" "WARN"
-						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "NOTICE"
+						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
 					fi
 
 					# Fix for tesseract pdf output also outputs txt format
@@ -216,7 +216,7 @@ function OCR {
 
 			if [ $result != 0 ]; then
 				Logger "Could not process file [$inputFileName] (error code $result)." "ERROR"
-				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID)" "ERROR"
+				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "ERROR"
 				if [ "$_SERVICE_RUN" == true ]; then
 					SendAlert
 				fi
@@ -311,22 +311,22 @@ function OCR_Dispatch {
 	#ParallelExec $NUMBER_OF_PROCESSES "$cmd" false
 
 	# Replaced command array with file to support large fileset
-	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" ]; then
-		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ]; then
+		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	fi
 	#while IFS= read -r -d $'\0' file; do
-	#	echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
+	#	echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	#done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
 
 	# Replaced the while loop because find process subsitition creates a segfault when OCR_Dispatch is called by DispatchRunner with SIGUSR1
 
-	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID"
-	#ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true
-	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID" true 3600 0 .05 $KEEP_LOGGING true false false
+	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+	#ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" true
+	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" true 3600 0 .05 $KEEP_LOGGING true false false
 	retval=$?
 	if [ $retval -ne 0 ]; then
 		Logger "Failed ParallelExec run." "ERROR"
-		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.ParallelExec.OCR_Dispatch.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.ParallelExec.OCR_Dispatch.$SCRIPT_PID.$TSTAMP.$TSTAMP)" "NOTICE"
 	fi
 	return $retval
 }

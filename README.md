@@ -101,3 +101,8 @@ Please make sure to install all necessary addons for tesseract.
 Please check /var/log/pmocr.log or ./pmocr.log file for errors.
 
 Filenames containing special characters should work, nevertheless, if your file doesn't get converted, try to rename it and copy it again to the monitored directory or batch process it again.
+
+By default, failing to prevent files will add a prefix '_OCR_ERR' + date to the filename.
+In order to reprocess those files, the prefix has to be removed with the following command
+
+    $ find /monitor/path -iname "*_OCR_ERR.*" -print0 | xargs -0 -I {} sh -c 'export file="{}"; mv "$file" "${file//_OCR_ERR/}"'

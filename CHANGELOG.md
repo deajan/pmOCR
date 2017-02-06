@@ -1,7 +1,12 @@
 RECENT CHANGES
 --------------
 
-DD Mmm YYYY: v1.51
+DD Mmm YYYY: v1.5x
+TODO:
+- Added basic unit tests
+	- Added batch tests
+
+06 Feb 2017: v1.52
 
 - Service improvements
 	- A forced run is done every MAX_WAIT seconds
@@ -12,10 +17,6 @@ DD Mmm YYYY: v1.51
 	- Improved mail function
 	- Improved ParallelExec function
 	- Improved logging functionality
-
-TODO:
-- Added basic unit tests
-	- Added batch tests
 
 21 Oct 2016: v1.5
 

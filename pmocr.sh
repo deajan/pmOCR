@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.2
-PROGRAM_BUILD=2017010405
+PROGRAM_BUILD=2017020601
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -1552,7 +1552,7 @@ do
 		_SILENT=true
 		;;
 		--verbose|-v)
-		_VERBOSE=true
+		_LOGGER_VERBOSE=true
 		;;
 		-p|--target=PDF|--target=pdf)
 		pdf=true
@@ -1648,7 +1648,7 @@ if [ $_SERVICE_RUN == true ]; then
 		exit 1
 	fi
 
-	if [ $_VERBOSE == false ]; then
+	if [ $_LOGGER_VERBOSE == false ]; then
 		_LOGGER_ERR_ONLY=true
 	fi
 

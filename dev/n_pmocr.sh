@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.4-dev
-PROGRAM_BUILD=2017031003
+PROGRAM_BUILD=2017031004
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -210,6 +210,10 @@ function OCR {
 					# Fix for tesseract pdf output also outputs txt format
 					if [ "$fileExtension" == ".pdf" ] && [ -f "$outputFileName$TEXT_EXTENSION" ]; then
 						rm -f "$outputFileName$TEXT_EXTENSION"
+						if [ $? != 0 ]; then
+							Logger "Cannot remove temporary txt file [$outputFileName$TEXT_EXTENSION]." "WARN"
+							alert=true
+						fi
 					fi
 				else
 					Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
@@ -219,9 +223,17 @@ function OCR {
 			# Remove temporary files
 			if [ -f "$tmpFileIntermediary" ]; then
 				rm -f "$tmpFileIntermediary";
+				if [ $? != 0 ]; then
+					Logger "Cannot remove temporary file [$tmpFileIntermediary]." " WARN"
+					alert=true
+				fi
 			fi
 			if [ -f "$tmpFilePreprocessor" ]; then
 				rm -f "$tmpFilePreprocessor";
+				if [ $? != 0 ]; then
+					Logger "Cannot remove temporary file [$tmpFilePreprocessor]." " WARN"
+					alert=true
+				fi
 			fi
 
 			if [ $result != 0 ]; then
@@ -261,6 +273,13 @@ function OCR {
 						sed -i.tmp 's/   */;/g' "$outputFileName$fileExtension"
 						if [ $? == 0 ]; then
 							rm -f "$outputFileName$fileExtension.tmp"
+							if [ $? != 0 ]; then
+								Logger "Cannot delete temporary file [$outputFileName$fileExtension.tmp]." "WARN"
+								alert=true
+							fi
+						else
+							Logger "Cannot use csvhack on [$outputFileName$fileExtension]." "WARN"
+							alert=true
 						fi
 					fi
 
@@ -268,6 +287,14 @@ function OCR {
 						sed 's/   */;/g' "$outputFileName$TEXT_EXTENSION" > "$outputFileName$CSV_EXTENSION"
 						if [ $? == 0 ]; then
 							rm -f "$outputFileName$TEXT_EXTENSION"
+							if [ $? != 0 ]; then
+								Logger "Cannot delete temporary file [$outputFileName$TEXT_EXTENSION]." "WARN"
+								alert=true
+							fi
+						else
+							Logger "Cannot use csvhack on [$outputFileName$TEXT_EXTENSION]." "WARN"
+							alert=true
+						fi
 						fi
 					fi
 				fi
@@ -275,11 +302,23 @@ function OCR {
 				# Apply permissions and ownership
 				if [ "$PRESERVE_OWNERSHIP" == "yes" ]; then
 					chown --reference "$inputFileName" "$outputFileName$fileExtension"
+					if [ $? != 0 ]; then
+						Logger "Cannot chown [$outputfileName$fileExtension] with reference from [$inputFileName]." "WARN"
+						alert=true
+					fi
 				fi
 				if [ $(IsInteger "$FILE_PERMISSIONS") -eq 1 ]; then
 					chmod $FILE_PERMISSIONS "$outputFileName$fileExtension"
+					if [ $? != 0 ]; then
+						Logger "Cannot mod [$outputfileName$fileExtension] with [$FILE_PERMISSIONS]." "WARN"
+						alert=true
+					fi
 				elif [ "$PRESERVE_OWNERSHIP" == "yes" ]; then
 					chmod --reference "$inputFileName" "$outputFileName$fileExtension"
+					if [ $? != 0 ]; then
+						Logger "Cannot chmod [$outputfileName$fileExtension] with reference from [$inputFileName]." "WARN"
+						alert=true
+					fi
 				fi
 
 				if [ "$MOVE_ORIGINAL_ON_SUCCESS" != "" ]; then
@@ -296,12 +335,20 @@ function OCR {
 				elif [ "$DELETE_ORIGINAL" == "yes" ]; then
 					Logger "Deleting file [$inputFileName]." "DEBUG"
 					rm -f "$inputFileName"
+					if [ $? != 0 ]; then
+						Logger "Cannot delete [$inputFileName]." "WARN"
+						alert=true
+					fi
 				fi
 
 				if [ -f "$inputFileName" ]; then
 					renamedFileName="${inputFileName%.*}$FILENAME_SUFFIX.${inputFileName##*.}"
 					Logger "Renaming file [$inputFileName] to [$renamedFileName]." "DEBUG"
 					mv "$inputFileName" "$renamedFileName"
+					if [ $? != 0 ]; then
+						Logger "Cannot move [$inputFileName] to [$renamedFileName]." "WARN"
+						alert=true
+					fi
 				fi
 
 				if [ "$_SILENT" == false ]; then

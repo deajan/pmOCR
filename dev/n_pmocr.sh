@@ -321,7 +321,7 @@ function OCR {
 				fi
 
 				if [ "$MOVE_ORIGINAL_ON_SUCCESS" != "" ]; then
-					if [ -w "$MOVE_ORIGINAL_ON_SUCCESS" ]; then
+					if [ ! -w "$MOVE_ORIGINAL_ON_SUCCESS" ]; then
 						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_SUCCESS]. Will not move file [$inputFileName]." "WARN"
 						alert=true
 					else

@@ -230,9 +230,10 @@ function OCR {
 					if [ ! -w "$MOVE_ORIGINAL_ON_FAILURE" ]; then
 						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_FAILURE]. Will not move file [$inputFileName]." "WARN"
 					else
-						mv "$inputFileName" "$MOVE_ORIGINAL_ON_FAILURE/$inputFileName"
+						renamedFileName="${inputFileName%.*}-$TSTAMP${inputFileName##*.}"
+						mv "$(basename $inputFileName)" "$MOVE_ORIGINAL_ON_FAILURE/$renamedFileName"
 						if [ $? != 0 ]; then
-							Logger "Cannot move [$inputFileName] to [$MOVE_ORIGINAL_ON_FAILURE/$inputFileName]." "WARN"
+							Logger "Cannot move [$(basename $inputFileName)] to [$MOVE_ORIGINAL_ON_FAILURE/$(basename $inputFileName)]." "WARN"
 						fi
 					fi
 				else
@@ -241,8 +242,10 @@ function OCR {
 					renamedFileName="${inputFileName%.*}-$TSTAMP$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
 					Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
 					mv "$inputFileName" "$renamedFileName"
+					if [ $? != 0 ]; then
+						Logger "Cannot move [$inputFileName] to [$renamedFileName]." "WARN"
+					fi
 				fi
-				#TODO: missing excludes for MOVE_ON folders
 			else
 				# Convert 4 spaces or more to semi colon (hack to transform txt output to CSV)
 				if [ $csvHack == true ]; then
@@ -276,9 +279,9 @@ function OCR {
 					if [ -w "$MOVE_ORIGINAL_ON_SUCCESS" ]; then
 						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_SUCCESS]. Will not move file [$inputFileName]." "WARN"
 					else
-						mv "$inputFileName" "$MOVE_ORIGINAL_ON_SUCCESS/$inputFileName"
+						mv "$(basename $inputFileName)" "$MOVE_ORIGINAL_ON_SUCCESS/$(basenamr $inputFileName)"
 						if [ $? != 0 ]; then
-							Logger "Cannot move [$inputFileName] to [$MOVE_ORIGINAL_ON_SUCCESS/$inputFileName]." "WARN"
+							Logger "Cannot move [$(basename $inputFileName)] to [$MOVE_ORIGINAL_ON_SUCCESS/$(basename $inputFileName)]." "WARN"
 						fi
 					fi
 				elif [ "$DELETE_ORIGINAL" == "yes" ]; then

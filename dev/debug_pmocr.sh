@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.4-dev
-PROGRAM_BUILD=2017031008
+PROGRAM_BUILD=2017031009
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -1519,6 +1519,8 @@ function OCR_Dispatch {
 	__CheckArguments 2-4 $# "$@"		#__WITH_PARANOIA_DEBUG
 
 	local findExcludes
+	local moveSuccessExclude
+	local moveFailureExclude
 	local failedFindExcludes
 	local cmd
 	local retval
@@ -1529,6 +1531,15 @@ function OCR_Dispatch {
 	else
 		findExcludes=""
 	fi
+
+	if [ -d "$MOVE_ORIGINAL_ON_SUCCESS" ]; then
+		moveSuccessExclude="$MOVE_ORIGINAL_ON_SUCCESS*"
+	fi
+
+	if [ -d "$MOVE_ORIGINAL_ON_FAIlURE" ]; then
+		moveFailureExclude="$MOVE_ORIGINAL_ON_FAILURE*"
+	fi
+
 	if [ "$FAILED_FILENAME_SUFFIX" != "" ]; then
 		failedFindExcludes="*$FAILED_FILENAME_SUFFIX.*"
 	else
@@ -1555,7 +1566,7 @@ function OCR_Dispatch {
 
 	# Replaced the while loop because find process subsitition creates a segfault when OCR_Dispatch is called by DispatchRunner with SIGUSR1
 
-	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -name "$moveSuccessExclude" -and ! -name "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	#ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" true
 	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" true 3600 0 .05 $KEEP_LOGGING true false false
 	retval=$?

@@ -473,7 +473,7 @@ function OCR_service {
 			justStarted=false
 		fi
 		# If file modifications occur, send a signal so DispatchRunner is run
-		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" --exclude "$MOVE_ORIGINAL_ON_SUCCESS" --exlude "$MOVE_ORIGINAL_ON_FAILURE"  -qq -r -e create,move "$directoryToProcess" --timeout $MAX_WAIT
+		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" --exclude "$MOVE_ORIGINAL_ON_SUCCESS" --exclude "$MOVE_ORIGINAL_ON_FAILURE"  -qq -r -e create,move "$directoryToProcess" --timeout $MAX_WAIT
 		kill -USR1 $SCRIPT_PID
 	done
 }

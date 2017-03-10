@@ -7,6 +7,7 @@ TODO:
 DD Mmm YYYY: v1.5x
 
 - Support for moving files after processing
+	- Failing to move files will automatically rename them
 - Better installer with --remove support
 - Mail alerts can now be encoded differently than UTF-8
 - Updated ofunctions from obackup / osync

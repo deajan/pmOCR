@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5.2
-PROGRAM_BUILD=2017020601
+PROGRAM_VERSION=1.5.4-dev
+PROGRAM_BUILD=2017031001
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -226,12 +226,23 @@ function OCR {
 					SendAlert
 				fi
 
-				# Add error suffix so failed files won't be run again and create a loop
-				# Add $TSAMP in order to avoid overwriting older files
-				renamedFileName="${inputFileName%.*}-$TSTAMP$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
-				Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
-				mv "$inputFileName" "$renamedFileName"
-
+				if [ "$MOVE_ORIGINAL_ON_FAILURE" != "" ]; then
+					if [ ! -w "$MOVE_ORIGINAL_ON_FAILURE" ]; then
+						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_FAILURE]. Will not move file [$inputFileName]." "WARN"
+					else
+						mv "$inputFileName" "$MOVE_ORIGINAL_ON_FAILURE/$inputFileName"
+						if [ $? != 0 ]; then
+							Logger "Cannot move [$inputFileName] to [$MOVE_ORIGINAL_ON_FAILURE/$inputFileName]." "WARN"
+						fi
+					fi
+				else
+					# Add error suffix so failed files won't be run again and create a loop
+					# Add $TSAMP in order to avoid overwriting older files
+					renamedFileName="${inputFileName%.*}-$TSTAMP$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
+					Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
+					mv "$inputFileName" "$renamedFileName"
+				fi
+				#TODO: missing excludes for MOVE_ON folders
 			else
 				# Convert 4 spaces or more to semi colon (hack to transform txt output to CSV)
 				if [ $csvHack == true ]; then
@@ -261,7 +272,16 @@ function OCR {
 					chmod --reference "$inputFileName" "$outputFileName$fileExtension"
 				fi
 
-				if [ "$DELETE_ORIGINAL" == "yes" ]; then
+				if [ "$MOVE_ORIGINAL_ON_SUCCESS" != "" ]; then
+					if [ -w "$MOVE_ORIGINAL_ON_SUCCESS" ]; then
+						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_SUCCESS]. Will not move file [$inputFileName]." "WARN"
+					else
+						mv "$inputFileName" "$MOVE_ORIGINAL_ON_SUCCESS/$inputFileName"
+						if [ $? != 0 ]; then
+							Logger "Cannot move [$inputFileName] to [$MOVE_ORIGINAL_ON_SUCCESS/$inputFileName]." "WARN"
+						fi
+					fi
+				elif [ "$DELETE_ORIGINAL" == "yes" ]; then
 					Logger "Deleting file [$inputFileName]." "DEBUG"
 					rm -f "$inputFileName"
 				else
@@ -377,6 +397,16 @@ function OCR_service {
 	__CheckArguments 2 $# "$@"		#__WITH_PARANOIA_DEBUG
 
 	local justStarted=true
+	local moveSuccessExclude
+	local moveFailureExclude
+
+	if [ "$MOVE_ORIGINAL_ON_SUCCESS" != "" ]; then
+		moveSuccessExclude="--exclude \"$MOVE_ORIGINAL_ON_SUCCESS\""
+	fi
+	if [ "$MOVE_ORIGINAL_ON_FAILURE" != "" ]; then
+		moveFailureExclude="--exclude \"$MOVE_ORIGINAL_ON_FAILURE\""
+	fi
+
 
 	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "ALWAYS"
 	while [ -f "$SERVICE_MONITOR_FILE" ];do
@@ -386,7 +416,7 @@ function OCR_service {
 			justStarted=false
 		fi
 		# If file modifications occur, send a signal so DispatchRunner is run
-		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" -qq -r -e create,move "$directoryToProcess" --timeout $MAX_WAIT
+		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" $moveSuccessExclude $moveFailureExclude -qq -r -e create,move "$directoryToProcess" --timeout $MAX_WAIT
 		kill -USR1 $SCRIPT_PID
 	done
 }

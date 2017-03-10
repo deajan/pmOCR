@@ -2,8 +2,8 @@
 #### OFUNCTIONS FULL SUBSET ####
 #### OFUNCTIONS MINI SUBSET ####
 
-_OFUNCTIONS_VERSION=2.1-RC2+dev
-_OFUNCTIONS_BUILD=2017020901
+_OFUNCTIONS_VERSION=2.1-RC3+dev
+_OFUNCTIONS_BUILD=2017021301
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -233,6 +233,10 @@ function Logger {
 	else
 		prefix=""
 	fi
+
+	## Obfuscate _REMOTE_TOKEN in logs (for ssh_filter usage only in osync and obackup)
+	value="${value/env _REMOTE_TOKEN=$_REMOTE_TOKEN/__(o_O)__}"
+	value="${value/env _REMOTE_TOKEN=\$_REMOTE_TOKEN/__(o_O)__}"
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "$prefix($level):$value" "$prefix\e[1;33;41m$value\e[0m" true
@@ -1292,6 +1296,12 @@ function RunRemoteCommand {
 	local command="${1}" # Command to run
 	local hardMaxTime="${2}" # Max time to wait for command to compleet
 	__CheckArguments 2 $# "$@"	#__WITH_PARANOIA_DEBUG
+
+
+	if [ "$REMOTE_OPERATION" != "yes" ]; then
+		Logger "Ignoring remote command [$command] because remote host is not configured." "WARN"
+		return 0
+	fi
 
 	CheckConnectivity3rdPartyHosts
 	CheckConnectivityRemoteHost

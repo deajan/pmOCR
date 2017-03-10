@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.4-dev
-PROGRAM_BUILD=2017031002
+PROGRAM_BUILD=2017031003
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -142,6 +142,8 @@ function OCR {
 	local subcmd
 	local result
 
+	local alert=false
+
 		# Expand $FILENAME_ADDITION #TODO remove eval
 		eval "outputFileName=\"${inputFileName%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\""
 
@@ -157,6 +159,7 @@ function OCR {
 				if [ $result -ne 0 ]; then
 					Logger "$PDF_TO_TIFF_EXEC intermediary transformation failed." "ERROR"
 					Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
+					alert=true
 				else
 					fileToProcess="$tmpFileIntermediary"
 				fi
@@ -174,6 +177,7 @@ function OCR {
 				if [ $result -ne 0 ]; then
 					Logger "$OCR_PREPROCESSOR_EXEC preprocesser failed." "ERROR"
 					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
+					alert=true
 				else
 					fileToProcess="$tmpFilePreprocessor"
 				fi
@@ -200,6 +204,7 @@ function OCR {
 					if [ $result -eq 0 ] && grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"; then
 						Logger "Tesseract transformed the document with errors" "WARN"
 						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+						alert=true
 					fi
 
 					# Fix for tesseract pdf output also outputs txt format
@@ -222,9 +227,7 @@ function OCR {
 			if [ $result != 0 ]; then
 				Logger "Could not process file [$inputFileName] (error code $result)." "ERROR"
 				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "ERROR"
-				if [ "$_SERVICE_RUN" == true ]; then
-					SendAlert
-				fi
+				alert=true
 
 				if [ "$MOVE_ORIGINAL_ON_FAILURE" != "" ]; then
 					if [ ! -w "$MOVE_ORIGINAL_ON_FAILURE" ]; then
@@ -234,6 +237,7 @@ function OCR {
 						mv "$(basename $inputFileName)" "$MOVE_ORIGINAL_ON_FAILURE/$renamedFileName"
 						if [ $? != 0 ]; then
 							Logger "Cannot move [$(basename $inputFileName)] to [$MOVE_ORIGINAL_ON_FAILURE/$(basename $inputFileName)]. Will rename it." "WARN"
+							alert=true
 						fi
 					fi
 				fi
@@ -246,6 +250,7 @@ function OCR {
 					mv "$inputFileName" "$renamedFileName"
 					if [ $? != 0 ]; then
 						Logger "Cannot move [$inputFileName] to [$renamedFileName]." "WARN"
+						alert=true
 					fi
 				fi
 			else
@@ -280,10 +285,12 @@ function OCR {
 				if [ "$MOVE_ORIGINAL_ON_SUCCESS" != "" ]; then
 					if [ -w "$MOVE_ORIGINAL_ON_SUCCESS" ]; then
 						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_SUCCESS]. Will not move file [$inputFileName]." "WARN"
+						alert=true
 					else
 						mv "$(basename $inputFileName)" "$MOVE_ORIGINAL_ON_SUCCESS/$(basenamr $inputFileName)"
 						if [ $? != 0 ]; then
 							Logger "Cannot move [$(basename $inputFileName)] to [$MOVE_ORIGINAL_ON_SUCCESS/$(basename $inputFileName)]." "WARN"
+							alert=true
 						fi
 					fi
 				elif [ "$DELETE_ORIGINAL" == "yes" ]; then
@@ -305,6 +312,11 @@ function OCR {
 		else
 			Logger "Skipping file [$inputFileName] already containing text." "VERBOSE"
 		fi
+
+		if [ $alert == true ]; then
+			SendAlert
+		fi
+
 		exit 0
 }
 

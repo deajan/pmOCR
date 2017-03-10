@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5.2
-PROGRAM_BUILD=2017020601
+PROGRAM_VERSION=1.5.4-dev
+PROGRAM_BUILD=2017031006
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -23,8 +23,8 @@ fi
 SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
 
 
-_OFUNCTIONS_VERSION=2.1-RC1+dev
-_OFUNCTIONS_BUILD=2017020502
+_OFUNCTIONS_VERSION=2.1-RC3+dev
+_OFUNCTIONS_BUILD=2017021301
 _OFUNCTIONS_BOOTSTRAP=true
 
 ## BEGIN Generic bash functions written in 2013-2017 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
@@ -136,7 +136,7 @@ function joinString {
 function _Logger {
 	local logValue="${1}"		# Log to file
 	local stdValue="${2}"		# Log to screeen
-	local toStderr="${3:-false}"	# Log to stderr instead of stdout
+	local toStdErr="${3:-false}"	# Log to stderr instead of stdout
 
 	if [ "$logValue" != "" ]; then
 		echo -e "$logValue" >> "$LOG_FILE"
@@ -145,7 +145,7 @@ function _Logger {
 	fi
 
 	if [ "$stdValue" != "" ] && [ "$_LOGGER_SILENT" != true ]; then
-		if [ $toStderr == true ]; then
+		if [ $toStdErr == true ]; then
 			# Force stderr color in subshell
 			(>&2 echo -e "$stdValue")
 
@@ -238,6 +238,10 @@ function Logger {
 	else
 		prefix=""
 	fi
+
+	## Obfuscate _REMOTE_TOKEN in logs (for ssh_filter usage only in osync and obackup)
+	value="${value/env _REMOTE_TOKEN=$_REMOTE_TOKEN/__(o_O)__}"
+	value="${value/env _REMOTE_TOKEN=\$_REMOTE_TOKEN/__(o_O)__}"
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "$prefix($level):$value" "$prefix\e[1;33;41m$value\e[0m" true
@@ -1056,6 +1060,8 @@ function ArrayContains () {
 
 function GetLocalOS {
 	local localOsVar
+	local localOsName
+	local localOsVer
 
 	# There's no good way to tell if currently running in BusyBox shell. Using sluggish way.
 	if ls --help 2>&1 | grep -i "BusyBox" > /dev/null; then
@@ -1116,8 +1122,14 @@ function GetLocalOS {
 		Logger "Local OS: [$localOsVar]." "DEBUG"
 	fi
 
+	# Get linux versions
+	if [ -f "/etc/os-release" ]; then
+		localOsName=$(GetConfFileValue "/etc/os-release" "NAME")
+		localOsVer=$(GetConfFileValue "/etc/os-release" "VERSION")
+	fi
+
 	# Add a global variable for statistics in installer
-	LOCAL_OS_FULL="$localOsVar"
+	LOCAL_OS_FULL="$localOsVar ($localOsName $localOsVer)"
 }
 
 
@@ -1238,6 +1250,8 @@ function OCR {
 	local subcmd
 	local result
 
+	local alert=false
+
 		# Expand $FILENAME_ADDITION #TODO remove eval
 		eval "outputFileName=\"${inputFileName%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\""
 
@@ -1253,6 +1267,7 @@ function OCR {
 				if [ $result -ne 0 ]; then
 					Logger "$PDF_TO_TIFF_EXEC intermediary transformation failed." "ERROR"
 					Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
+					alert=true
 				else
 					fileToProcess="$tmpFileIntermediary"
 				fi
@@ -1270,6 +1285,7 @@ function OCR {
 				if [ $result -ne 0 ]; then
 					Logger "$OCR_PREPROCESSOR_EXEC preprocesser failed." "ERROR"
 					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
+					alert=true
 				else
 					fileToProcess="$tmpFilePreprocessor"
 				fi
@@ -1296,11 +1312,16 @@ function OCR {
 					if [ $result -eq 0 ] && grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"; then
 						Logger "Tesseract transformed the document with errors" "WARN"
 						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+						alert=true
 					fi
 
 					# Fix for tesseract pdf output also outputs txt format
 					if [ "$fileExtension" == ".pdf" ] && [ -f "$outputFileName$TEXT_EXTENSION" ]; then
 						rm -f "$outputFileName$TEXT_EXTENSION"
+						if [ $? != 0 ]; then
+							Logger "Cannot remove temporary txt file [$outputFileName$TEXT_EXTENSION]." "WARN"
+							alert=true
+						fi
 					fi
 				else
 					Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
@@ -1310,24 +1331,48 @@ function OCR {
 			# Remove temporary files
 			if [ -f "$tmpFileIntermediary" ]; then
 				rm -f "$tmpFileIntermediary";
+				if [ $? != 0 ]; then
+					Logger "Cannot remove temporary file [$tmpFileIntermediary]." " WARN"
+					alert=true
+				fi
 			fi
 			if [ -f "$tmpFilePreprocessor" ]; then
 				rm -f "$tmpFilePreprocessor";
+				if [ $? != 0 ]; then
+					Logger "Cannot remove temporary file [$tmpFilePreprocessor]." " WARN"
+					alert=true
+				fi
 			fi
 
 			if [ $result != 0 ]; then
 				Logger "Could not process file [$inputFileName] (error code $result)." "ERROR"
 				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "ERROR"
-				if [ "$_SERVICE_RUN" == true ]; then
-					SendAlert
+				alert=true
+
+				if [ "$MOVE_ORIGINAL_ON_FAILURE" != "" ]; then
+					if [ ! -w "$MOVE_ORIGINAL_ON_FAILURE" ]; then
+						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_FAILURE]. Will not move file [$inputFileName]." "WARN"
+					else
+						renamedFileName="${inputFileName%.*}-$TSTAMP${inputFileName##*.}"
+						mv "$inputFileName" "$MOVE_ORIGINAL_ON_FAILURE/$(basename $renamedFileName)"
+						if [ $? != 0 ]; then
+							Logger "Cannot move [$inputFileName] to [$MOVE_ORIGINAL_ON_FAILURE/$(basename $renamedFileName)]. Will rename it." "WARN"
+							alert=true
+						fi
+					fi
 				fi
 
-				# Add error suffix so failed files won't be run again and create a loop
-				# Add $TSAMP in order to avoid overwriting older files
-				renamedFileName="${inputFileName%.*}-$TSTAMP$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
-				Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
-				mv "$inputFileName" "$renamedFileName"
-
+				if [ -f "$inputFileName" ]; then
+					# Add error suffix so failed files won't be run again and create a loop
+					# Add $TSAMP in order to avoid overwriting older files
+					renamedFileName="${inputFileName%.*}-$TSTAMP$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
+					Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
+					mv "$inputFileName" "$renamedFileName"
+					if [ $? != 0 ]; then
+						Logger "Cannot move [$inputFileName] to [$renamedFileName]." "WARN"
+						alert=true
+					fi
+				fi
 			else
 				# Convert 4 spaces or more to semi colon (hack to transform txt output to CSV)
 				if [ $csvHack == true ]; then
@@ -1336,6 +1381,13 @@ function OCR {
 						sed -i.tmp 's/   */;/g' "$outputFileName$fileExtension"
 						if [ $? == 0 ]; then
 							rm -f "$outputFileName$fileExtension.tmp"
+							if [ $? != 0 ]; then
+								Logger "Cannot delete temporary file [$outputFileName$fileExtension.tmp]." "WARN"
+								alert=true
+							fi
+						else
+							Logger "Cannot use csvhack on [$outputFileName$fileExtension]." "WARN"
+							alert=true
 						fi
 					fi
 
@@ -1343,6 +1395,13 @@ function OCR {
 						sed 's/   */;/g' "$outputFileName$TEXT_EXTENSION" > "$outputFileName$CSV_EXTENSION"
 						if [ $? == 0 ]; then
 							rm -f "$outputFileName$TEXT_EXTENSION"
+							if [ $? != 0 ]; then
+								Logger "Cannot delete temporary file [$outputFileName$TEXT_EXTENSION]." "WARN"
+								alert=true
+							fi
+						else
+							Logger "Cannot use csvhack on [$outputFileName$TEXT_EXTENSION]." "WARN"
+							alert=true
 						fi
 					fi
 				fi
@@ -1350,20 +1409,53 @@ function OCR {
 				# Apply permissions and ownership
 				if [ "$PRESERVE_OWNERSHIP" == "yes" ]; then
 					chown --reference "$inputFileName" "$outputFileName$fileExtension"
+					if [ $? != 0 ]; then
+						Logger "Cannot chown [$outputfileName$fileExtension] with reference from [$inputFileName]." "WARN"
+						alert=true
+					fi
 				fi
 				if [ $(IsInteger "$FILE_PERMISSIONS") -eq 1 ]; then
 					chmod $FILE_PERMISSIONS "$outputFileName$fileExtension"
+					if [ $? != 0 ]; then
+						Logger "Cannot mod [$outputfileName$fileExtension] with [$FILE_PERMISSIONS]." "WARN"
+						alert=true
+					fi
 				elif [ "$PRESERVE_OWNERSHIP" == "yes" ]; then
 					chmod --reference "$inputFileName" "$outputFileName$fileExtension"
+					if [ $? != 0 ]; then
+						Logger "Cannot chmod [$outputfileName$fileExtension] with reference from [$inputFileName]." "WARN"
+						alert=true
+					fi
 				fi
 
-				if [ "$DELETE_ORIGINAL" == "yes" ]; then
+				if [ "$MOVE_ORIGINAL_ON_SUCCESS" != "" ]; then
+					if [ ! -w "$MOVE_ORIGINAL_ON_SUCCESS" ]; then
+						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_SUCCESS]. Will not move file [$inputFileName]." "WARN"
+						alert=true
+					else
+						mv "$inputFileName" "$MOVE_ORIGINAL_ON_SUCCESS/$(basename $inputFileName)"
+						if [ $? != 0 ]; then
+							Logger "Cannot move [$inputFileName] to [$MOVE_ORIGINAL_ON_SUCCESS/$(basename $inputFileName)]." "WARN"
+							alert=true
+						fi
+					fi
+				elif [ "$DELETE_ORIGINAL" == "yes" ]; then
 					Logger "Deleting file [$inputFileName]." "DEBUG"
 					rm -f "$inputFileName"
-				else
+					if [ $? != 0 ]; then
+						Logger "Cannot delete [$inputFileName]." "WARN"
+						alert=true
+					fi
+				fi
+
+				if [ -f "$inputFileName" ]; then
 					renamedFileName="${inputFileName%.*}$FILENAME_SUFFIX.${inputFileName##*.}"
 					Logger "Renaming file [$inputFileName] to [$renamedFileName]." "DEBUG"
 					mv "$inputFileName" "$renamedFileName"
+					if [ $? != 0 ]; then
+						Logger "Cannot move [$inputFileName] to [$renamedFileName]." "WARN"
+						alert=true
+					fi
 				fi
 
 				if [ "$_SILENT" == false ]; then
@@ -1374,6 +1466,11 @@ function OCR {
 		else
 			Logger "Skipping file [$inputFileName] already containing text." "VERBOSE"
 		fi
+
+		if [ $alert == true ]; then
+			SendAlert
+		fi
+
 		exit 0
 }
 
@@ -1471,6 +1568,8 @@ function OCR_service {
 
 
 	local justStarted=true
+	local moveSuccessExclude
+	local moveFailureExclude
 
 	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "ALWAYS"
 	while [ -f "$SERVICE_MONITOR_FILE" ];do
@@ -1480,7 +1579,7 @@ function OCR_service {
 			justStarted=false
 		fi
 		# If file modifications occur, send a signal so DispatchRunner is run
-		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" -qq -r -e create,move "$directoryToProcess" --timeout $MAX_WAIT
+		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" --exclude "$MOVE_ORIGINAL_ON_SUCCESS" --exlude "$MOVE_ORIGINAL_ON_FAILURE"  -qq -r -e create,move "$directoryToProcess" --timeout $MAX_WAIT
 		kill -USR1 $SCRIPT_PID
 	done
 }

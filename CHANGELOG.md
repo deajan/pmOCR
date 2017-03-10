@@ -1,10 +1,15 @@
 RECENT CHANGES
 --------------
-
-DD Mmm YYYY: v1.5x
 TODO:
 - Added basic unit tests
 	- Added batch tests
+
+DD Mmm YYYY: v1.5x
+
+- Support for moving files after processing
+- Better installer with --remove support
+- Mail alerts can now be encoded differently than UTF-8
+- Updated ofunctions from obackup / osync
 
 06 Feb 2017: v1.52
 

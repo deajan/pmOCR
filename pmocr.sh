@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.4-dev
-PROGRAM_BUILD=2017031006
+PROGRAM_BUILD=2017031007
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -1567,9 +1567,20 @@ function OCR_service {
 	local fileExtension="${2}" 		#(filename endings to exclude from processing)
 
 
+	local cmd
+
 	local justStarted=true
 	local moveSuccessExclude
 	local moveFailureExclude
+
+	if [ -d "$MOVE_ORIGINAL_ON_SUCCESS" ]; then
+		$moveSuccessExclude="--exclude \"$MOVE_ORIGINAL_ON_SUCCESS\""
+	fi
+
+	if [ -d "$MOVE_ORIGINAL_ON_FAILURE" ]; then
+		$moveFailureExclude="--exclude \"$MOVE_ORIGINAL_ON_FAILURE\""
+	fi
+
 
 	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "ALWAYS"
 	while [ -f "$SERVICE_MONITOR_FILE" ];do
@@ -1579,7 +1590,8 @@ function OCR_service {
 			justStarted=false
 		fi
 		# If file modifications occur, send a signal so DispatchRunner is run
-		inotifywait --exclude "(.*)$FILENAME_SUFFIX$fileExtension" --exclude "(.*)$FAILED_FILENAME_SUFFIX$fileExtension" --exclude "$MOVE_ORIGINAL_ON_SUCCESS" --exclude "$MOVE_ORIGINAL_ON_FAILURE"  -qq -r -e create,move "$directoryToProcess" --timeout $MAX_WAIT
+		cmd="inotifywait --exclude \"(.*)$FILENAME_SUFFIX$fileExtension\" --exclude \"(.*)$FAILED_FILENAME_SUFFIX$fileExtension\" $moveSuccessExclude $moveFailureExclude  -qq -r -e create,move \"$directoryToProcess\" --timeout $MAX_WAIT"
+		eval $cmd
 		kill -USR1 $SCRIPT_PID
 	done
 }

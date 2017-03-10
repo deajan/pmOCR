@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.4-dev
-PROGRAM_BUILD=2017031001
+PROGRAM_BUILD=2017031002
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -233,10 +233,12 @@ function OCR {
 						renamedFileName="${inputFileName%.*}-$TSTAMP${inputFileName##*.}"
 						mv "$(basename $inputFileName)" "$MOVE_ORIGINAL_ON_FAILURE/$renamedFileName"
 						if [ $? != 0 ]; then
-							Logger "Cannot move [$(basename $inputFileName)] to [$MOVE_ORIGINAL_ON_FAILURE/$(basename $inputFileName)]." "WARN"
+							Logger "Cannot move [$(basename $inputFileName)] to [$MOVE_ORIGINAL_ON_FAILURE/$(basename $inputFileName)]. Will rename it." "WARN"
 						fi
 					fi
-				else
+				fi
+
+				if [ -f "$inputFileName" ]; then
 					# Add error suffix so failed files won't be run again and create a loop
 					# Add $TSAMP in order to avoid overwriting older files
 					renamedFileName="${inputFileName%.*}-$TSTAMP$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
@@ -287,7 +289,9 @@ function OCR {
 				elif [ "$DELETE_ORIGINAL" == "yes" ]; then
 					Logger "Deleting file [$inputFileName]." "DEBUG"
 					rm -f "$inputFileName"
-				else
+				fi
+
+				if [ -f "$inputFileName" ]; then
 					renamedFileName="${inputFileName%.*}$FILENAME_SUFFIX.${inputFileName##*.}"
 					Logger "Renaming file [$inputFileName] to [$renamedFileName]." "DEBUG"
 					mv "$inputFileName" "$renamedFileName"

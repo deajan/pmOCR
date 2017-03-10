@@ -295,7 +295,6 @@ function OCR {
 							Logger "Cannot use csvhack on [$outputFileName$TEXT_EXTENSION]." "WARN"
 							alert=true
 						fi
-						fi
 					fi
 				fi
 

@@ -17,7 +17,7 @@ pmOCR has the following options:
 
 ## Install it
 
-    $ git clone -b "v1.5" https://github.com/deajan/pmOCR
+    $ git clone -b "v1.5.4" https://github.com/deajan/pmOCR
     $ cd pmOCR
     $ ./install.sh
 

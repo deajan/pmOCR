@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.4-dev
-PROGRAM_BUILD=2017031304
+PROGRAM_BUILD=2017031305
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -247,6 +247,7 @@ function OCR {
 					if [ ! -w "$MOVE_ORIGINAL_ON_FAILURE" ]; then
 						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_FAILURE]. Will not move file [$inputFileName]." "WARN"
 					else
+						eval "renamedFileName=\"${inputFileName%.*}$FILENAME_ADDITION.{$inputFileName##*.}\""
 						mv "$inputFileName" "$MOVE_ORIGINAL_ON_FAILURE/$(basename "$renamedFileName")"
 						if [ $? != 0 ]; then
 							Logger "Cannot move [$inputFileName] to [$MOVE_ORIGINAL_ON_FAILURE/$(basename "$renamedFileName")]. Will rename it." "WARN"
@@ -326,7 +327,7 @@ function OCR {
 						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_SUCCESS]. Will not move file [$inputFileName]." "WARN"
 						alert=true
 					else
-						eval "renamedFileName=\"${inputFileName%.*}$FILENAME_ADDITION.{inputFileName##*.}\""
+						eval "renamedFileName=\"${inputFileName%.*}$FILENAME_ADDITION.{$inputFileName##*.}\""
 						mv "$inputFileName" "$MOVE_ORIGINAL_ON_SUCCESS/$(basename "$renamedFileName")"
 						if [ $? != 0 ]; then
 							Logger "Cannot move [$inputFileName] to [$MOVE_ORIGINAL_ON_SUCCESS/$(basename "$renamedFileName")]." "WARN"

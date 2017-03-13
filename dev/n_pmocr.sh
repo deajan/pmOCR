@@ -247,7 +247,7 @@ function OCR {
 					if [ ! -w "$MOVE_ORIGINAL_ON_FAILURE" ]; then
 						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_FAILURE]. Will not move file [$inputFileName]." "WARN"
 					else
-						eval "renamedFileName=\"${inputFileName%.*}$FILENAME_ADDITION.{$inputFileName##*.}\""
+						eval "renamedFileName=\"${inputFileName%.*}$FILENAME_ADDITION.${inputFileName##*.}\""
 						mv "$inputFileName" "$MOVE_ORIGINAL_ON_FAILURE/$(basename "$renamedFileName")"
 						if [ $? != 0 ]; then
 							Logger "Cannot move [$inputFileName] to [$MOVE_ORIGINAL_ON_FAILURE/$(basename "$renamedFileName")]. Will rename it." "WARN"
@@ -327,7 +327,7 @@ function OCR {
 						Logger "Cannot write to folder [$MOVE_ORIGINAL_ON_SUCCESS]. Will not move file [$inputFileName]." "WARN"
 						alert=true
 					else
-						eval "renamedFileName=\"${inputFileName%.*}$FILENAME_ADDITION.{$inputFileName##*.}\""
+						eval "renamedFileName=\"${inputFileName%.*}$FILENAME_ADDITION.${inputFileName##*.}\""
 						mv "$inputFileName" "$MOVE_ORIGINAL_ON_SUCCESS/$(basename "$renamedFileName")"
 						if [ $? != 0 ]; then
 							Logger "Cannot move [$inputFileName] to [$MOVE_ORIGINAL_ON_SUCCESS/$(basename "$renamedFileName")]." "WARN"

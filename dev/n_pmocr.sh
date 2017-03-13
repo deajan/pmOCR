@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
+#TODO: after run cleanup
+
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.4-dev
-PROGRAM_BUILD=2017031011
+PROGRAM_BUILD=2017031301
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -392,7 +394,7 @@ function OCR_Dispatch {
 		moveSuccessExclude="$MOVE_ORIGINAL_ON_SUCCESS*"
 	fi
 
-	if [ -d "$MOVE_ORIGINAL_ON_FAIlURE" ]; then
+	if [ -d "$MOVE_ORIGINAL_ON_FAILURE" ]; then
 		moveFailureExclude="$MOVE_ORIGINAL_ON_FAILURE*"
 	fi
 

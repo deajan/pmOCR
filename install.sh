@@ -8,7 +8,7 @@ PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
 SSH_FILTER="ssh_filter.sh"
 
-SCRIPT_BUILD=2017020802
+SCRIPT_BUILD=2017031302
 
 ## osync / obackup / pmocr / zsnap install script
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8, 10 and 11
@@ -304,8 +304,10 @@ function CopyExampleFiles {
 function CopyProgram {
 	binFiles=()
 	binFiles[0]="$PROGRAM_BINARY"
-	binFiles[1]="$PROGRAM_BATCH"
-	binFiles[2]="$SSH_FILTER"
+	if [ "$PROGRAM" == "osync" ] || [ "$PROGRAM" == "obackup" ]; then
+		binFiles[1]="$PROGRAM_BATCH"
+		binFiles[2]="$SSH_FILTER"
+	fi
 
 	local user=""
 	local group=""
@@ -325,7 +327,9 @@ function CopyProgram {
 function CopyServiceFiles {
 	if ([ "$init" == "systemd" ] && [ -f "$SCRIPT_PATH/$SERVICE_FILE_SYSTEMD_SYSTEM" ]); then
 		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_SYSTEM" "$SERVICE_FILE_SYSTEMD_SYSTEM" "" "" "" true
-		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_USER" "$SERVICE_FILE_SYSTEMD_USER" "" "" "" true
+		if [ -f "$SCRIPT_PATH/$SERVICE_FILE_SYSTEMD_SYSTEM_USER" ]; then
+			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_USER" "$SERVICE_FILE_SYSTEMD_USER" "" "" "" true
+		fi
 
 		QuickLogger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_SYSTEMD_SYSTEM] and [$SERVICE_DIR_SYSTEMD_USER]."
 		QuickLogger "Can be activated with [systemctl start SERVICE_NAME@instance.conf] where instance.conf is the name of the config file in $CONF_DIR."
@@ -379,7 +383,11 @@ function RemoveFile {
 function RemoveAll {
 	RemoveFile "$BIN_DIR/$PROGRAM_BINARY"
 	RemoveFile "$BIN_DIR/$PROGRAM_BATCH"
-	RemoveFile "$BIN_DIR/$SSH_FILTER"
+	if [ ! -f "$BIN_DIR/osync.sh" ] && [ ! -f "$BIN_DIR/obackup.sh" ]; then		# Check if any other program requiring ssh filter is present before removal
+		RemoveFile "$BIN_DIR/$SSH_FILTER"
+	else
+		QuickLogger "Skipping removal of [$BIN_DIR/$SSH_FILTER] because other programs present that need it."
+	fi
 	RemoveFile "$SERVICE_DIR_SYSTEMD_SYSTEM/$SERVICE_FILE_SYSTEMD_SYSTEM"
 	RemoveFile "$SERVICE_DIR_SYSTEMD_USER/$SERVICE_FILE_SYSTEMD_SYSTEM"
 	RemoveFile "$SERVICE_DIR_INIT/$SERVICE_FILE_INIT"

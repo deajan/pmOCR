@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.4-dev
-PROGRAM_BUILD=2017031011
+PROGRAM_BUILD=2017031302
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -24,7 +24,7 @@ SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
 
 
 _OFUNCTIONS_VERSION=2.1-RC3+dev
-_OFUNCTIONS_BUILD=2017021301
+_OFUNCTIONS_BUILD=2017031301
 _OFUNCTIONS_BOOTSTRAP=true
 
 ## BEGIN Generic bash functions written in 2013-2017 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
@@ -85,7 +85,7 @@ if [ "$SLEEP_TIME" == "" ]; then # Leave the possibity to set SLEEP_TIME as envi
 fi
 
 SCRIPT_PID=$$
-TSTAMP=$(date '+%Y%m%d%H%M%S%N')
+TSTAMP=$(date '+%Y%m%dT%H%M%S.%N')
 
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
@@ -1536,7 +1536,7 @@ function OCR_Dispatch {
 		moveSuccessExclude="$MOVE_ORIGINAL_ON_SUCCESS*"
 	fi
 
-	if [ -d "$MOVE_ORIGINAL_ON_FAIlURE" ]; then
+	if [ -d "$MOVE_ORIGINAL_ON_FAILURE" ]; then
 		moveFailureExclude="$MOVE_ORIGINAL_ON_FAILURE*"
 	fi
 
@@ -1546,34 +1546,18 @@ function OCR_Dispatch {
 		failedFindExcludes=""
 	fi
 
-	# Read find result into command list
-	#while IFS= read -r -d $'\0' file; do
-	#	if [ "$cmd" == "" ]; then
-	#		cmd="OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
-	#	else
-	#		cmd="$cmd;OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\""
-	#	fi
-	#done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
-	#ParallelExec $NUMBER_OF_PROCESSES "$cmd" false
-
-	# Replaced command array with file to support large fileset
 	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ]; then
 		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	fi
-	#while IFS= read -r -d $'\0' file; do
-	#	echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
-	#done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -print0)
-
-	# Replaced the while loop because find process subsitition creates a segfault when OCR_Dispatch is called by DispatchRunner with SIGUSR1
 
 	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
-	#ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" true
 	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" true 3600 0 .05 $KEEP_LOGGING true false false
 	retval=$?
 	if [ $retval -ne 0 ]; then
 		Logger "Failed ParallelExec run." "ERROR"
 		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.ParallelExec.OCR_Dispatch.$SCRIPT_PID.$TSTAMP)" "NOTICE"
 	fi
+	CleanUp
 	return $retval
 }
 

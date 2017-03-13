@@ -4,7 +4,7 @@ TODO:
 - Added basic unit tests
 	- Added batch tests
 
-DD Mmm YYYY: v1.5x
+13 Mar 2017: v1.5.4
 
 - Support for moving files after processing
 	- Failing to move files will automatically rename them
@@ -12,7 +12,7 @@ DD Mmm YYYY: v1.5x
 - Mail alerts can now be encoded differently than UTF-8
 - Updated ofunctions from obackup / osync
 
-06 Feb 2017: v1.52
+06 Feb 2017: v1.5.2
 
 - Service improvements
 	- A forced run is done every MAX_WAIT seconds

@@ -68,7 +68,7 @@ fi
 #### DEBUG SUBSET END ####
 
 SCRIPT_PID=$$
-TSTAMP=$(date '+%Y%m%dT%H%M%S%.N')
+TSTAMP=$(date '+%Y%m%dT%H%M%S.%N')
 
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)

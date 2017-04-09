@@ -109,3 +109,5 @@ By default, failing to prevent files will add a prefix '_OCR_ERR' + date to the 
 In order to reprocess those files, the prefix has to be removed with the following command
 
     $ find /monitor/path -iname "*_OCR_ERR.*" -print0 | xargs -0 -I {} sh -c 'export file="{}"; mv "$file" "${file//_OCR_ERR/}"'
+
+If using tesseract to create searchable PDF files, please make sure to have version 3.03 or better installed.

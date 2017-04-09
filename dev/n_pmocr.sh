@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.6-dev
-PROGRAM_BUILD=2017040902
+PROGRAM_BUILD=2017040903
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -101,6 +101,13 @@ function CheckEnvironment {
 	if [ "$OCR_ENGINE" == "tesseract" ]; then
 		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
 			Logger "$PDF_TO_TIFF_EXEC not present." "CRITICAL"
+			exit 1
+		fi
+
+		TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
+		vercomp "$TESSERACT_VERSION" "3"
+		if [ $? -lt 2 ]; then
+			Logger "Tesseract version $TESSERACT_VERSION is not supported. Please use version 3.x or better."
 			exit 1
 		fi
 	fi
@@ -700,6 +707,14 @@ elif [ $_BATCH_RUN == true ]; then
 	fi
 
 	if [ $pdf == true ]; then
+		if [ "$OCR_ENGINE" == "tesseract" ]; then
+			vercomp "$TESSERACT_VERSION" "3"
+                	if [ $? -lt 2 ]; then
+                        	Logger "Tesseract version $TESSERACT_VERSION is not supported to create searchable PDFs. Please use 3.03 or better."
+                        	exit 1
+                	fi
+		fi
+
 		Logger "Beginning PDF OCR recognition of files in [$batchPath]." "NOTICE"
 		OCR_Dispatch "$batchPath" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
 		Logger "Batch ended." "NOTICE"

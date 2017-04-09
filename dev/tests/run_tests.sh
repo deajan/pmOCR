@@ -309,6 +309,9 @@ function test_outputLogs () {
 	echo ""
 
 	cat ${HOME}/pmocr.log
+
+	echo ""
+	find / -iname "*tessdata*"
 }
 
 . "$TESTS_DIR/shunit2/shunit2"

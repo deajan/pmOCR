@@ -710,7 +710,8 @@ elif [ $_BATCH_RUN == true ]; then
 	if [ $pdf == true ]; then
 		if [ "$OCR_ENGINE" == "tesseract3" ]; then
 			VerComp "$TESSERACT_VERSION" "3.02"
-                	if [ $? -gt 1 ]; then
+			result=$?
+                	if [ $result -eq 2 ] || [ $result -eq 0 ]; then
                         	Logger "Tesseract version $TESSERACT_VERSION is not supported to create searchable PDFs. Please use 3.03 or better." "CRITICAL"
                         	exit 1
                 	fi

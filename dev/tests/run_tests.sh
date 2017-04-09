@@ -68,8 +68,6 @@ function oneTimeSetUp () {
         else
                 SUDO_CMD="sudo"
         fi
-
-	env TESSDATA_PREFIX=/usr/share/tesseract-ocr/tessdata
 }
 
 function oneTimeTearDown () {
@@ -115,7 +113,7 @@ function test_batch () {
 	for i in {0..2}; do
 		PrepareLocalDirs
 
-		_DEBUG=yes ./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} --config="$TESTS_DIR/conf/default.conf" "$PMOCR_TESTS_DIR/$BATCH_DIR"
+		./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} --config="$TESTS_DIR/conf/default.conf" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 		assertEquals "Batch run with parameter ${batchParm[$i]}" "0" $?
 
 		# Two transformed files should be present
@@ -310,9 +308,6 @@ function test_outputLogs () {
 	echo ""
 
 	cat ${HOME}/pmocr.log
-
-	echo ""
-	find / -iname "*tessdata*"
 }
 
 . "$TESTS_DIR/shunit2/shunit2"

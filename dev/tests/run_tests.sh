@@ -114,7 +114,7 @@ function test_batch () {
 	for i in {0..2}; do
 		PrepareLocalDirs
 
-		_PARANOIA_DEBUG=yes ./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} --config="$TESTS_DIR/conf/default.conf" "$PMOCR_TESTS_DIR/$BATCH_DIR"
+		_DEBUG=yes ./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} --config="$TESTS_DIR/conf/default.conf" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 		assertEquals "Batch run with parameter ${batchParm[$i]}" "0" $?
 
 		# Two transformed files should be present
@@ -136,7 +136,7 @@ function test_batch () {
 		assertEquals "Missing batch output file [$outputFile]" "0" $?
 	done
 
-	cat /var/log/pmocr.log
+	#cat /var/log/pmocr.log
 }
 
 #function test_service () {
@@ -310,7 +310,7 @@ function test_outputLogs {
 	echo "Log output:"
 	echo ""
 
-	cat /var/log/pmocr.log
+	cat pmocr.log
 }
 
 . "$TESTS_DIR/shunit2/shunit2"

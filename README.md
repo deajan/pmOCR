@@ -21,6 +21,9 @@ pmOCR has the following options:
     $ cd pmOCR
     $ ./install.sh
 
+You will also need inotifywait (from inotify-tools package) and pdffonts (from poppler-utils package).
+If you are using tesseract OCR, you will also need ghostscript in order to be able to transform bitmap PDF documents to indexed PDFs.
+
 ## Batch mode
 
 Use pmocr to batch process all files in a given directory and its subdirectories.

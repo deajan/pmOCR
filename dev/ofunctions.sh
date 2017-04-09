@@ -2,8 +2,8 @@
 #### OFUNCTIONS FULL SUBSET ####
 #### OFUNCTIONS MINI SUBSET ####
 
-_OFUNCTIONS_VERSION=2.1-RC3+dev
-_OFUNCTIONS_BUILD=2017031301
+_OFUNCTIONS_VERSION=2.1.1
+_OFUNCTIONS_BUILD=2017040801
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -29,6 +29,9 @@ fi
 
 ## Correct output of sort command (language agnostic sorting)
 export LC_ALL=C
+
+## Default umask for file creation
+umask 0077
 
 # Standard alert mail body
 MAIL_ALERT_MSG="Execution of $PROGRAM instance $INSTANCE_ID on $(date) has warnings/errors."
@@ -1125,7 +1128,7 @@ function GetLocalOS {
 		*"BSD"*)
 		LOCAL_OS="BSD"
 		;;
-		*"MINGW32"*|*"MSYS"*)
+		*"MINGW32"*|*"MINGW64"*|*"MSYS"*)
 		LOCAL_OS="msys"
 		;;
 		*"CYGWIN"*)
@@ -1226,7 +1229,7 @@ ENDSSH
 			*"BSD"*)
 			REMOTE_OS="BSD"
 			;;
-			*"MINGW32"*|*"MSYS"*)
+			*"MINGW32"*|*"MINGW64"*|*"MSYS"*)
 			REMOTE_OS="msys"
 			;;
 			*"CYGWIN"*)

@@ -50,7 +50,7 @@ function oneTimeSetUp () {
 
 	GetLocalOS
 
-	echo "Running on $LOCAL_OS"
+	echo "Running on $LOCAL_OS_FULL"
 
 	# Setup modes per test
 	#readonly __batchMode=0

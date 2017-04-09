@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# pmocr test suite 2017040901
+# pmocr test suite 2017040902
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -82,16 +82,38 @@ function test_Merge () {
 }
 
 function test_batch () {
+	local outputFile
+
 	cd "$PMOCR_DIR"
 
-	PrepareLocalDirs
+	# Testing batch output for formats pdf, txt and csv
+	batchParm=(-p -t -c)
+	batchOutputFormat=(pdf txt csv)
 
-	./$PMOCR_EXECUTABLE --batch -p "$PMOCR_TESTS_DIR/$BATCH_DIR"
-	assertEquals "batch pdf" "0" $?
+	for i in {0..2}; do
+		PrepareLocalDirs
 
-	#[ -f "$PMOCR_TESTS_DIR/$BATCH_DIR/$SOURCE_FILE_1" ]
-	#assertEquals "batch pdf output file" "0" $?
+		./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} "$PMOCR_TESTS_DIR/$BATCH_DIR"
+		assertEquals "Batch run with parameter ${batchParm[$i]}" "0" $?
 
+		# Two transformed files should be present
+		outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_1%%.*}*_OCR.${batchOutputFormat[$i]}"
+		[ $(wildcardFileExists "$outputFile") -eq 1 ]
+		assertEquals "Missing batch output file [$outputFile]" "0" $?
+
+		outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_2%%.*}*_OCR.${batchOutputFormat[$i]}"
+		[ $(wildcardFileExists "$outputFile") -eq 1 ]
+		assertEquals "Missing batch output file [$outputFile]" "0" $?
+
+		# Original files should be renamed with _OCR
+		outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_1%%.*}_OCR.${SOURCE_FILE_1##*.}"
+		[ -f "$outputFile" ]
+		assertEquals "Missing batch output file [$outputFile]" "0" $?
+
+		outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_2%%.*}_OCR.${SOURCE_FILE_2##*.}"
+		[ -f "$outputFile" ]
+		assertEquals "Missing batch output file [$outputFile]" "0" $?
+	done
 }
 
 #function test_service () {

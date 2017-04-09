@@ -135,6 +135,8 @@ function test_batch () {
 		[ -f "$outputFile" ]
 		assertEquals "Missing batch output file [$outputFile]" "0" $?
 	done
+
+	cat /var/log/pmocr.log
 }
 
 #function test_service () {

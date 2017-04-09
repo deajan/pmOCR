@@ -69,6 +69,7 @@ function oneTimeSetUp () {
                 SUDO_CMD="sudo"
         fi
 
+	env TESSDATA_PREFIX=/usr/share/tesseract-ocr/tessdata
 }
 
 function oneTimeTearDown () {

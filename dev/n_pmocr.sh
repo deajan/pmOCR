@@ -105,7 +105,7 @@ function CheckEnvironment {
 		fi
 
 		TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
-		vercomp "$TESSERACT_VERSION" "3"
+		VerComp "$TESSERACT_VERSION" "3"
 		if [ $? -lt 2 ]; then
 			Logger "Tesseract version $TESSERACT_VERSION is not supported. Please use version 3.x or better."
 			exit 1
@@ -708,7 +708,7 @@ elif [ $_BATCH_RUN == true ]; then
 
 	if [ $pdf == true ]; then
 		if [ "$OCR_ENGINE" == "tesseract" ]; then
-			vercomp "$TESSERACT_VERSION" "3"
+			VerComp "$TESSERACT_VERSION" "3"
                 	if [ $? -lt 2 ]; then
                         	Logger "Tesseract version $TESSERACT_VERSION is not supported to create searchable PDFs. Please use 3.03 or better."
                         	exit 1

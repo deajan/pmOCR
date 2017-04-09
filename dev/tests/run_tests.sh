@@ -104,7 +104,7 @@ function test_batch () {
 
         # Testing batch output for formats pdf, txt and csv
         # Don't test for pdf output if tesseract version is lower than 3.03
-        vercomp "$TESSERACT_VERSION" "3.03"
+        VerComp "$TESSERACT_VERSION" "3.03"
         if [ $? -lt 2 ]; then
                 batchParm=(-p -t -c)
                 batchOutputFormat=(pdf txt csv)
@@ -121,11 +121,11 @@ function test_batch () {
 
 		# Two transformed files should be present
 		outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_1%%.*}*_OCR.${batchOutputFormat[$i]}"
-		[ $(wildcardFileExists "$outputFile") -eq 1 ]
+		[ $(WildcardFileExists "$outputFile") -eq 1 ]
 		assertEquals "Missing batch output file [$outputFile]" "0" $?
 
 		outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_2%%.*}*_OCR.${batchOutputFormat[$i]}"
-		[ $(wildcardFileExists "$outputFile") -eq 1 ]
+		[ $(WildcardFileExists "$outputFile") -eq 1 ]
 		assertEquals "Missing batch output file [$outputFile]" "0" $?
 
 		# Original files should be renamed with _OCR

@@ -3,7 +3,7 @@
 #### OFUNCTIONS MINI SUBSET ####
 
 _OFUNCTIONS_VERSION=2.1.1
-_OFUNCTIONS_BUILD=2017040902
+_OFUNCTIONS_BUILD=2017040903
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -1829,9 +1829,10 @@ function ParentPid {
 	fi
 }
 
+#### VerComp SUBSET ####
 # Neat version compare function found at http://stackoverflow.com/a/4025065/2635443
 # Returns 0 if equal, 1 if $1 > $2 and 2 if $1 < $2
-vercomp () {
+VerComp () {
     if [[ $1 == $2 ]]
     then
         return 0
@@ -1861,6 +1862,7 @@ vercomp () {
     done
     return 0
 }
+#### VerComp SUBSET END ####
 
 #### GetConfFileValue SUBSET ####
 function GetConfFileValue () {
@@ -1898,7 +1900,7 @@ function SetConfFileValue () {
 
 # Function can replace [ -f /some/file* ] tests
 # Modified version of http://stackoverflow.com/a/6364244/2635443
-function wildcardFileExists () {
+function WildcardFileExists () {
         local file="${1}"
         local exists=0
 

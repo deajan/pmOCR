@@ -136,7 +136,17 @@ function test_batch () {
 		assertEquals "Missing batch output file [$outputFile]" "0" $?
 	done
 
+	echo ""
+	echo "Log file"
+	echo ""
 	cat ${HOME}/pmocr.log
+
+	echo ""
+	for i in /tmp/pmocr*; do
+		echo "file $i"
+		cat $i
+	done
+	echo ""
 }
 
 #function test_service () {
@@ -310,7 +320,7 @@ function test_outputLogs {
 	echo "Log output:"
 	echo ""
 
-	cat pmocr.log
+	cat ${HOME}/pmocr.log
 }
 
 . "$TESTS_DIR/shunit2/shunit2"

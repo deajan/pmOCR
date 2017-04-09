@@ -135,18 +135,6 @@ function test_batch () {
 		[ -f "$outputFile" ]
 		assertEquals "Missing batch output file [$outputFile]" "0" $?
 	done
-
-	echo ""
-	echo "Log file"
-	echo ""
-	cat ${HOME}/pmocr.log
-
-	echo ""
-	for i in /tmp/pmocr*; do
-		echo "file $i"
-		cat $i
-	done
-	echo ""
 }
 
 #function test_service () {
@@ -315,7 +303,7 @@ function nope_test_DaemonMode () {
 
 }
 
-function test_outputLogs {
+function test_outputLogs () {
 	echo ""
 	echo "Log output:"
 	echo ""

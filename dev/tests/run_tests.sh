@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# pmocr test suite 2017040904
+# pmocr test suite 2017040905
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -106,11 +106,18 @@ function test_batch () {
 
 	cd "$PMOCR_DIR"
 
-	# Testing batch output for formats pdf, txt and csv
-	batchParm=(-p -t -c)
-	batchOutputFormat=(pdf txt csv)
+        # Testing batch output for formats pdf, txt and csv
+        # Don't test for pdf output if tesseract version is lower than 3.03
+        vercomp "$TESSERACT_VERSION" "3.03"
+        if [ $? -lt 2 ]; then
+                batchParm=(-p -t -c)
+                batchOutputFormat=(pdf txt csv)
+        else
+                batchParm=(-t -c)
+                batchOutputFormat=(txt csv)
+        fi
 
-	for i in {0..2}; do
+        for i in $(seq 0 $((${#batchParm[@]}-1))); do
 		PrepareLocalDirs
 
 		./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} --config="$TESTS_DIR/conf/default.conf" "$PMOCR_TESTS_DIR/$BATCH_DIR"
@@ -302,12 +309,11 @@ function nope_test_DaemonMode () {
 
 }
 
-function test_outputLogs () {
-	echo ""
-	echo "Log output:"
-	echo ""
-
-	cat ${HOME}/pmocr.log
-}
+#function test_outputLogs () {
+#	echo ""
+#	echo "Log output:"
+#	echo ""
+#	cat ${HOME}/pmocr.log
+#}
 
 . "$TESTS_DIR/shunit2/shunit2"

@@ -99,7 +99,7 @@ function test_Merge () {
         assertEquals "Install failed" "0" $?
 
 	# Overwrite standard config file with tesseract one
-	cp -f "$TESTS_DIR/conf/default.conf" /etc/default/default.conf
+	$SUDO_CMD cp -f "$TESTS_DIR/conf/default.conf" /etc/default/default.conf
 }
 
 function test_batch () {

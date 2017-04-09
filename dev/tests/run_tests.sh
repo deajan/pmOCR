@@ -303,4 +303,12 @@ function nope_test_DaemonMode () {
 
 }
 
+function test_outputLogs {
+	echo ""
+	echo "Log output:"
+	echo ""
+
+	cat /var/log/pmocr.log
+}
+
 . "$TESTS_DIR/shunit2/shunit2"

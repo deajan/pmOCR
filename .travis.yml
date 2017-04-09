@@ -1,0 +1,13 @@
+language:
+    bash
+
+os:
+    linux
+    osx
+
+before_install:
+    sudo apt-get install tesseract-ocr
+
+script:
+    TRAVIS_RUN=true dev/tests/run_tests.sh
+

@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5.4-dev
-PROGRAM_BUILD=2017031305
+PROGRAM_VERSION=1.5.6-dev
+PROGRAM_BUILD=2017040904
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -23,8 +23,8 @@ fi
 SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
 
 
-_OFUNCTIONS_VERSION=2.1-RC3+dev
-_OFUNCTIONS_BUILD=2017031301
+_OFUNCTIONS_VERSION=2.1.1
+_OFUNCTIONS_BUILD=2017040903
 _OFUNCTIONS_BOOTSTRAP=true
 
 ## BEGIN Generic bash functions written in 2013-2017 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
@@ -48,6 +48,9 @@ fi
 
 ## Correct output of sort command (language agnostic sorting)
 export LC_ALL=C
+
+## Default umask for file creation
+umask 0077
 
 # Standard alert mail body
 MAIL_ALERT_MSG="Execution of $PROGRAM instance $INSTANCE_ID on $(date) has warnings/errors."
@@ -1127,7 +1130,7 @@ function GetLocalOS {
 		*"BSD"*)
 		LOCAL_OS="BSD"
 		;;
-		*"MINGW32"*|*"MSYS"*)
+		*"MINGW32"*|*"MINGW64"*|*"MSYS"*)
 		LOCAL_OS="msys"
 		;;
 		*"CYGWIN"*)
@@ -1167,6 +1170,94 @@ function GetLocalOS {
 	LOCAL_OS_FULL="$localOsVar ($localOsName $localOsVer)"
 }
 
+#__BEGIN_WITH_PARANOIA_DEBUG
+function __CheckArguments {
+	# Checks the number of arguments of a function and raises an error if some are missing
+
+	if [ "$_DEBUG" == "yes" ]; then
+		local numberOfArguments="${1}" # Number of arguments the tested function should have, can be a number of a range, eg 0-2 for zero to two arguments
+		local numberOfGivenArguments="${2}" # Number of arguments that have been passed
+
+		local minArgs
+		local maxArgs
+
+		# All arguments of the function to check are passed as array in ${3} (the function call waits for $@)
+		# If any of the arguments contains spaces, bash things there are two aguments
+		# In order to avoid this, we need to iterate over ${3} and count
+
+		callerName="${FUNCNAME[1]}"
+
+		local iterate=3
+		local fetchArguments=true
+		local argList=""
+		local countedArguments
+		while [ $fetchArguments == true ]; do
+			cmd='argument=${'$iterate'}'
+			eval $cmd
+			if [ "$argument" == "" ]; then
+				fetchArguments=false
+			else
+				argList="$argList[Argument $((iterate-2)): $argument] "
+				iterate=$((iterate+1))
+			fi
+		done
+
+		countedArguments=$((iterate-3))
+
+		if [ $(IsInteger "$numberOfArguments") -eq 1 ]; then
+			minArgs=$numberOfArguments
+			maxArgs=$numberOfArguments
+		else
+			IFS='-' read minArgs maxArgs <<< "$numberOfArguments"
+		fi
+
+		Logger "Entering function [$callerName]." "PARANOIA_DEBUG"
+
+		if ! ([ $countedArguments -ge $minArgs ] && [ $countedArguments -le $maxArgs ]); then
+			Logger "Function $callerName may have inconsistent number of arguments. Expected min: $minArgs, max: $maxArgs, count: $countedArguments, bash seen: $numberOfGivenArguments." "ERROR"
+			Logger "$callerName arguments: $argList" "ERROR"
+		else
+			if [ ! -z "$argList" ]; then
+				Logger "$callerName arguments: $argList" "PARANOIA_DEBUG"
+			fi
+		fi
+	fi
+}
+
+#__END_WITH_PARANOIA_DEBUG
+
+# Neat version compare function found at http://stackoverflow.com/a/4025065/2635443
+# Returns 0 if equal, 1 if $1 > $2 and 2 if $1 < $2
+VerComp () {
+    if [[ $1 == $2 ]]
+    then
+        return 0
+    fi
+    local IFS=.
+    local i ver1=($1) ver2=($2)
+    # fill empty fields in ver1 with zeros
+    for ((i=${#ver1[@]}; i<${#ver2[@]}; i++))
+    do
+        ver1[i]=0
+    done
+    for ((i=0; i<${#ver1[@]}; i++))
+    do
+        if [[ -z ${ver2[i]} ]]
+        then
+            # fill empty fields in ver2 with zeros
+            ver2[i]=0
+        fi
+        if ((10#${ver1[i]} > 10#${ver2[i]}))
+        then
+            return 1
+        fi
+        if ((10#${ver1[i]} < 10#${ver2[i]}))
+        then
+            return 2
+        fi
+    done
+    return 0
+}
 
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
@@ -1242,9 +1333,16 @@ function CheckEnvironment {
 		fi
 	fi
 
-	if [ "$OCR_ENGINE" == "tesseract" ]; then
+	if [ "$OCR_ENGINE" == "tesseract3" ]; then
 		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
 			Logger "$PDF_TO_TIFF_EXEC not present." "CRITICAL"
+			exit 1
+		fi
+
+		TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
+		VerComp "$TESSERACT_VERSION" "3.00"
+		if [ $? -gt 1 ]; then
+			Logger "Tesseract version $TESSERACT_VERSION is not supported. Please use version 3.x or better." "CRITICAL"
 			exit 1
 		fi
 	fi
@@ -1329,8 +1427,8 @@ function OCR {
 				fi
 			fi
 
-			# Run Abbyy OCR
 			if [ -f "$fileToProcess" ]; then
+				# Run Abbyy OCR
 				if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"$outputFileName$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2>&1"
 					Logger "Executing: $cmd" "DEBUG"
@@ -1341,15 +1439,17 @@ function OCR {
 				elif [ "$OCR_ENGINE" == "tesseract3" ]; then
 					# Empty tmp log file first
 					echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
-					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2>&1"
+					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP\""
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
 					result=$?
 
 					# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
-					if [ $result -eq 0 ] && grep -i "ERROR" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"; then
-						Logger "Tesseract transformed the document with errors" "WARN"
+					# Tesseract may also return 0 exit code with error "read_params_file: Can't open pdf"
+					if [ $result -eq 0 ] && [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP" ]; then
+						Logger "Tesseract produced errors while transforming the document." "WARN"
 						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP)" "NOTICE"
 						alert=true
 					fi
 
@@ -1553,7 +1653,7 @@ function OCR_Dispatch {
 		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	fi
 
-	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" true 3600 0 .05 $KEEP_LOGGING true false false
 	retval=$?
 	if [ $retval -ne 0 ]; then
@@ -1842,6 +1942,15 @@ elif [ $_BATCH_RUN == true ]; then
 	fi
 
 	if [ $pdf == true ]; then
+		if [ "$OCR_ENGINE" == "tesseract3" ]; then
+			VerComp "$TESSERACT_VERSION" "3.02"
+			result=$?
+			if [ $result -eq 2 ] || [ $result -eq 0 ]; then
+				Logger "Tesseract version $TESSERACT_VERSION is not supported to create searchable PDFs. Please use 3.03 or better." "CRITICAL"
+				exit 1
+			fi
+		fi
+
 		Logger "Beginning PDF OCR recognition of files in [$batchPath]." "NOTICE"
 		OCR_Dispatch "$batchPath" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
 		Logger "Batch ended." "NOTICE"

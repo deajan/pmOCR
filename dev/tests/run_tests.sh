@@ -114,7 +114,7 @@ function test_batch () {
 	for i in {0..2}; do
 		PrepareLocalDirs
 
-		./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} --config="$TESTS_DIR/conf/default.conf" "$PMOCR_TESTS_DIR/$BATCH_DIR"
+		_PARANOIA_DEBUG=yes ./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} --config="$TESTS_DIR/conf/default.conf" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 		assertEquals "Batch run with parameter ${batchParm[$i]}" "0" $?
 
 		# Two transformed files should be present

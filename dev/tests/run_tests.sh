@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# pmocr test suite 2017040905
+# pmocr test suite 2017040906
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -52,14 +52,6 @@ function oneTimeSetUp () {
 
 	echo "Running on $LOCAL_OS_FULL"
 
-	# Setup modes per test
-	#readonly __batchMode=0
-	#readonly __daemonMode=1
-
-	#pmocrParameters=()
-	#pmocrParameters[$__batchMode]="-b -p"
-	#pmocrParameters[$__daemonMode]="$CONF_DIR/$LOCAL_CONF"
-
 	#TODO: Assuming that macos has the same syntax than bsd here
         if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "Cygwin" ]; then
                 SUDO_CMD=""
@@ -68,6 +60,10 @@ function oneTimeSetUp () {
         else
                 SUDO_CMD="sudo"
         fi
+
+	# Getting tesseract version
+        TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
+
 }
 
 function oneTimeTearDown () {

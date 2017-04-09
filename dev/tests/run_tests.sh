@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# pmocr test suite 2017040903
+# pmocr test suite 2017040904
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -97,6 +97,9 @@ function test_Merge () {
 	cd "$PMOCR_DIR"
         $SUDO_CMD ./install.sh --no-stats
         assertEquals "Install failed" "0" $?
+
+	# Overwrite standard config file with tesseract one
+	cp -f "$TESTS_DIR/conf/default.conf" /etc/default/default.conf
 }
 
 function test_batch () {

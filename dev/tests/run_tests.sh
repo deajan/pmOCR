@@ -99,7 +99,7 @@ function test_Merge () {
         assertEquals "Install failed" "0" $?
 
 	# Overwrite standard config file with tesseract one
-	$SUDO_CMD cp -f "$TESTS_DIR/conf/default.conf" /etc/default/default.conf
+	#$SUDO_CMD cp -f "$TESTS_DIR/conf/default.conf" /etc/default/default.conf
 }
 
 function test_batch () {
@@ -114,7 +114,7 @@ function test_batch () {
 	for i in {0..2}; do
 		PrepareLocalDirs
 
-		./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} "$PMOCR_TESTS_DIR/$BATCH_DIR"
+		./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} --config="$TESTS_DIR/conf/default.conf" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 		assertEquals "Batch run with parameter ${batchParm[$i]}" "0" $?
 
 		# Two transformed files should be present

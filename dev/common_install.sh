@@ -12,7 +12,7 @@ PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
 SSH_FILTER="ssh_filter.sh"
 
-SCRIPT_BUILD=2017032101
+SCRIPT_BUILD=2017040901
 
 ## osync / obackup / pmocr / zsnap install script
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8, 10 and 11
@@ -221,8 +221,8 @@ function CopyServiceFiles {
 	elif ([ "$init" == "initV" ] && [ -f "$SCRIPT_PATH/$SERVICE_FILE_INIT" ] && [ -d "$SERVICE_DIR_INIT" ]); then
 		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_INIT" "$SERVICE_FILE_INIT" "755" "" "" true
 
-		QuickLogger "Created osync-srv service in [$SERVICE_DIR_INIT]."
-		QuickLogger "Can be activated with [service $OSYNC_SERVICE_FILE_INIT start]."
+		QuickLogger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_INIT]."
+		QuickLogger "Can be activated with [service $SERVICE_FILE_INIT start]."
 		QuickLogger "Can be enabled on boot with [chkconfig $OSYNC_SERVICE_FILE_INIT on]."
 	else
 		QuickLogger "Cannot define what init style is in use on this system. Skipping service file installation."

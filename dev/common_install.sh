@@ -223,7 +223,7 @@ function CopyServiceFiles {
 
 		QuickLogger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_INIT]."
 		QuickLogger "Can be activated with [service $SERVICE_FILE_INIT start]."
-		QuickLogger "Can be enabled on boot with [chkconfig $OSYNC_SERVICE_FILE_INIT on]."
+		QuickLogger "Can be enabled on boot with [chkconfig $SERVICE_FILE_INIT on]."
 	else
 		QuickLogger "Cannot define what init style is in use on this system. Skipping service file installation."
 	fi

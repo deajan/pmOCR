@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# pmocr test suite 2017040902
+# pmocr test suite 2017040903
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -50,6 +50,8 @@ function oneTimeSetUp () {
 
 	GetLocalOS
 
+	echo "Running on $LOCAL_OS"
+
 	# Setup modes per test
 	#readonly __batchMode=0
 	#readonly __daemonMode=1
@@ -57,12 +59,27 @@ function oneTimeSetUp () {
 	#pmocrParameters=()
 	#pmocrParameters[$__batchMode]="-b -p"
 	#pmocrParameters[$__daemonMode]="$CONF_DIR/$LOCAL_CONF"
+
+	#TODO: Assuming that macos has the same syntax than bsd here
+        if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "Cygwin" ]; then
+                SUDO_CMD=""
+        elif [ "$LOCAL_OS" == "BSD" ] || [ "$LOCAL_OS" == "MacOSX" ]; then
+                SUDO_CMD=""
+        else
+                SUDO_CMD="sudo"
+        fi
+
 }
 
 function oneTimeTearDown () {
 
 	#TODO: uncomment this when dev is done
 	#rm -rf "$PMOCR_TESTS_DIR"
+
+	cd "$OSYNC_DIR"
+        $SUDO_CMD ./install.sh --remove --no-stats
+        assertEquals "Uninstall failed" "0" $?
+
 
 	ELAPSED_TIME=$(($SECONDS - $START_TIME))
 	echo "It took $ELAPSED_TIME seconds to run these tests."
@@ -77,8 +94,9 @@ function test_Merge () {
 	./merge.sh
 	assertEquals "Merging code" "0" $?
 
-	# Set osync version to stable while testing to avoid warning message
-	#SetConfFileValue "$OSYNC_DIR/$OSYNC_EXECUTABLE" "IS_STABLE" "yes"
+	cd "$PMOCR_DIR"
+        $SUDO_CMD ./install.sh --no-stats
+        assertEquals "Install failed" "0" $?
 }
 
 function test_batch () {

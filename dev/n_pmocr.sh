@@ -185,8 +185,8 @@ function OCR {
 				fi
 			fi
 
-			# Run Abbyy OCR
 			if [ -f "$fileToProcess" ]; then
+				# Run Abbyy OCR
 				if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"$outputFileName$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2>&1"
 					Logger "Executing: $cmd" "DEBUG"

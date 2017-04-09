@@ -6,7 +6,7 @@ os:
     osx
 
 before_install:
-    sudo apt-get install tesseract-ocr
+    sudo apt-get install tesseract-ocr inotify-tools poppler-utils
 
 script:
     TRAVIS_RUN=true dev/tests/run_tests.sh

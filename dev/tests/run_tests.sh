@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
+*#!/usr/bin/env bash
 
-# pmocr test suite 2017041002
+# pmocr test suite 2017041003
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -22,6 +22,9 @@ FAILED_DIR="failed"
 
 SOURCE_FILE_1="lorem_tif.tif"
 SOURCE_FILE_2="lorem_png.png"
+SOURCE_FILE_3="lorem_pdf.pdf"
+SOURCE_FILE_4="lorem_searchable_pdf.pdf"
+
 
 function PrepareLocalDirs () {
 	# Remote dirs are the same as local dirs, so no problem here
@@ -36,8 +39,12 @@ function PrepareLocalDirs () {
 
 	cp "$SOURCE_DIR/$SOURCE_FILE_1" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 	cp "$SOURCE_DIR/$SOURCE_FILE_2" "$PMOCR_TESTS_DIR/$BATCH_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$BATCH_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_4" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 	cp "$SOURCE_DIR/$SOURCE_FILE_1" "$PMOCR_TESTS_DIR/$SERVICE_DIR"
 	cp "$SOURCE_DIR/$SOURCE_FILE_2" "$PMOCR_TESTS_DIR/$SERVICE_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$SERVICE_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_4" "$PMOCR_TESTS_DIR/$SERVICE_DIR"
 }
 
 function oneTimeSetUp () {
@@ -136,6 +143,14 @@ function test_batch () {
 				[ $(WildcardFileExists "$outputFile") -eq 1 ]
 				assertEquals "Missing batch output file [$outputFile]" "0" $?
 
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_3%%.*}*_OCR.${batchOutputFormat[$i]}"
+				[ $(WildcardFileExists "$outputFile") -eq 1 ]
+				assertEquals "Missing batch output file [$outputFile]" "0" $?
+
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_4%%.*}*_OCR.${batchOutputFormat[$i]}"
+				[ $(WildcardFileExists "$outputFile") -eq 1 ]
+				assertEquals "Missing batch output file [$outputFile]" "0" $?
+
 				# Original files should be renamed with _OCR
 				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_1%%.*}_OCR.${SOURCE_FILE_1##*.}"
 				[ -f "$outputFile" ]
@@ -145,9 +160,31 @@ function test_batch () {
 				[ -f "$outputFile" ]
 				assertEquals "Missing batch output file [$outputFile]" "0" $?
 
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_3%%.*}_OCR.${SOURCE_FILE_3##*.}"
+				[ -f "$outputFile" ]
+				assertEquals "Missing batch output file [$outputFile]" "0" $?
+
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_4%%.*}_OCR.${SOURCE_FILE_3##*.}"
+				[ -f "$outputFile" ]
+				assertEquals "Missing batch output file [$outputFile]" "0" $?
+
 			# Run with skip already searchable PDFs
 			elif [ "$parm" == "-k" ]; then
-				Dummy
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_1%%.*}_OCR.${SOURCE_FILE_1##*.}"
+				[ $(WildcardFileExists "$outputFile") -eq 1 ]
+				assertEquals "Missing batch output file for searchable PDF test [$outputFile]" "0" $?
+
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_2%%.*}_OCR.${SOURCE_FILE_2##*.}"
+				[ $(WildcardFileExists "$outputFile") -eq 1 ]
+				assertEquals "Missing batch output file for searchable PDF test [$outputFile]" "0" $?
+
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_3%%.*}_OCR.${SOURCE_FILE_3##*.}"
+				[ $(WildcardFileExists "$outputFile") -eq 1 ]
+				assertEquals "Missing batch output file for searchable PDF test [$outputFile]" "0" $?
+
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_4%%.*}_OCR.${SOURCE_FILE_4##*.}"
+				[ $(WildcardFileExists "$outputFile") -eq 0 ]
+				assertEquals "Searchable PDF test file should not be present [$outputFile]" "0" $?
 
 			# Run and delete originals on success
 			elif [ "$parm" == "-d" ]; then
@@ -156,6 +193,12 @@ function test_batch () {
 
 				[ ! -f "$SOURCE_FILE_2" ]
 				assertEquals "Original file [$SOURCE_FILE_2] not deleted" "0" $?
+
+				[ ! -f "$SOURCE_FILE_3" ]
+				assertEquals "Original file [$SOURCE_FILE_3] not deleted" "0" $?
+
+				[ ! -f "$SOURCE_FILE_4" ]
+				assertEquals "Original file [$SOURCE_FILE_4] not deleted" "0" $?
 
 			# Replace _OCR with another suffix
 			elif [ "$parm" == "--suffix=TESTSUFFIX" ]; then
@@ -167,14 +210,43 @@ function test_batch () {
 				[ $(WildcardFileExists "$outputFile") -eq 1 ]
 				assertEquals "Missing batch output file [$outputFile]" "0" $?
 
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_3%%.*}*TESTSUFFIX.${SOURCE_FILE_3##*.}"
+				[ $(WildcardFileExists "$outputFile") -eq 1 ]
+				assertEquals "Missing batch output file [$outputFile]" "0" $?
+
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_4%%.*}*TESTSUFFIX.${SOURCE_FILE_4##*.}"
+				[ $(WildcardFileExists "$outputFile") -eq 1 ]
+				assertEquals "Missing batch output file [$outputFile]" "0" $?
+
 			# Remove suffixes
 			elif [ "$parm" == "--no-suffix" ]; then
 				find "$PMOCR_TESTS_DIR/$BATCH_DIR" | egrep "${SOURCE_FILE_1%%.*}\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.${batchOutputFormat[$i]}"
 				assertEquals "Bogus batch output file without suffix" "0" $?
 
+				find "$PMOCR_TESTS_DIR/$BATCH_DIR" | egrep "${SOURCE_FILE_2%%.*}\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.${batchOutputFormat[$i]}"
+				assertEquals "Bogus batch output file without suffix" "0" $?
+
+				find "$PMOCR_TESTS_DIR/$BATCH_DIR" | egrep "${SOURCE_FILE_3%%.*}\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.${batchOutputFormat[$i]}"
+				assertEquals "Bogus batch output file without suffix" "0" $?
+
+				find "$PMOCR_TESTS_DIR/$BATCH_DIR" | egrep "${SOURCE_FILE_4%%.*}\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.${batchOutputFormat[$i]}"
+				assertEquals "Bogus batch output file without suffix" "0" $?
+
 			# Add another text
 			elif [ "$parm" == "--text=TESTTEXT" ]; then
 				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_1%%.*}TESTTEXT_OCR.${batchOutputFormat[$i]}"
+				[ -f "$outputFile" ]
+				assertEquals "Missing batch output file [$outputFile]" "0" $?
+
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_2%%.*}TESTTEXT_OCR.${batchOutputFormat[$i]}"
+				[ -f "$outputFile" ]
+				assertEquals "Missing batch output file [$outputFile]" "0" $?
+
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_3%%.*}TESTTEXT_OCR.${batchOutputFormat[$i]}"
+				[ -f "$outputFile" ]
+				assertEquals "Missing batch output file [$outputFile]" "0" $?
+
+				outputFile="$PMOCR_TESTS_DIR/$BATCH_DIR/${SOURCE_FILE_4%%.*}TESTTEXT_OCR.${batchOutputFormat[$i]}"
 				[ -f "$outputFile" ]
 				assertEquals "Missing batch output file [$outputFile]" "0" $?
 

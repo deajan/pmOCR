@@ -22,7 +22,8 @@ pmOCR has the following options:
     $ ./install.sh
 
 You will also need inotifywait (from inotify-tools package) and pdffonts (from poppler-utils package).
-If you are using tesseract OCR, you will also need ghostscript in order to be able to transform bitmap PDF documents to indexed PDFs.
+If you are using tesseract OCR, please install tesseract-osd and tesseract-[your language] (sometimes called tesseract-ocr-osd).
+You will also need ghostscript in order to be able to transform bitmap PDF documents to indexed PDFs.
 
 ## Batch mode
 

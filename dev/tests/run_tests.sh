@@ -1,4 +1,4 @@
-*#!/usr/bin/env bash
+#!/usr/bin/env bash
 
 # pmocr test suite 2017041003
 
@@ -20,11 +20,36 @@ SERVICE_DIR="service"
 SUCCEED_DIR="succesful"
 FAILED_DIR="failed"
 
+PDF_DIR="PDF"
+TXT_DIR="TEXT"
+CSV_DIR="CSV"
+
 SOURCE_FILE_1="lorem_tif.tif"
 SOURCE_FILE_2="lorem_png.png"
 SOURCE_FILE_3="lorem_pdf.pdf"
 SOURCE_FILE_4="lorem_searchable_pdf.pdf"
 
+# Force killing remaining services on aborted test runs
+
+#trap TrapQuit TERM EXIT HUP QUIT
+
+function TrapQuit {
+        local result
+
+        if [ -f "$SERVICE_MONITOR_FILE" ]; then
+                rm -f "$SERVICE_MONITOR_FILE"
+        fi
+
+        CleanUp
+        KillChilds $$ > /dev/null 2>&1
+        result=$?
+        if [ $result -eq 0 ]; then
+                Logger "Service $PROGRAM stopped instance [$INSTANCE_ID] with pid [$$]." "NOTICE"
+        else
+            	Logger "Service $PROGRAM couldn't properly stop instance [$INSTANCE_ID] with pid [$$]." "ERROR"
+        fi
+	exit $?
+}
 
 function PrepareLocalDirs () {
 	# Remote dirs are the same as local dirs, so no problem here
@@ -34,6 +59,9 @@ function PrepareLocalDirs () {
 	mkdir -p "$PMOCR_TESTS_DIR"
 	mkdir "$PMOCR_TESTS_DIR/$BATCH_DIR"
 	mkdir "$PMOCR_TESTS_DIR/$SERVICE_DIR"
+	mkdir "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
+	mkdir "$PMOCR_TESTS_DIR/$SERVICE_DIR/$TXT_DIR"
+	mkdir "$PMOCR_TESTS_DIR/$SERVICE_DIR/$CSV_DIR"
 	mkdir "$PMOCR_TESTS_DIR/$SUCCEED_DIR"
 	mkdir "$PMOCR_TESTS_DIR/$FAILED_DIR"
 
@@ -41,10 +69,24 @@ function PrepareLocalDirs () {
 	cp "$SOURCE_DIR/$SOURCE_FILE_2" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 	cp "$SOURCE_DIR/$SOURCE_FILE_4" "$PMOCR_TESTS_DIR/$BATCH_DIR"
-	cp "$SOURCE_DIR/$SOURCE_FILE_1" "$PMOCR_TESTS_DIR/$SERVICE_DIR"
-	cp "$SOURCE_DIR/$SOURCE_FILE_2" "$PMOCR_TESTS_DIR/$SERVICE_DIR"
-	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$SERVICE_DIR"
-	cp "$SOURCE_DIR/$SOURCE_FILE_4" "$PMOCR_TESTS_DIR/$SERVICE_DIR"
+
+	cp "$SOURCE_DIR/$SOURCE_FILE_1" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_2" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_4" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
+
+	#WIP
+	return
+
+	cp "$SOURCE_DIR/$SOURCE_FILE_1" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$TXT_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_2" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$TXT_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$TXT_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_4" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$TXT_DIR"
+
+	cp "$SOURCE_DIR/$SOURCE_FILE_1" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$CSV_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_2" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$CSV_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$CSV_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_4" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$CSV_DIR"
 }
 
 function oneTimeSetUp () {
@@ -70,6 +112,13 @@ function oneTimeSetUp () {
 
 	# Getting tesseract version
         TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
+
+	# Clean run and log files
+	if [ -f /var/log/pmocr.log ]; then
+		rm -f /var/log/pmocr.log
+	fi
+
+	rm -f /tmp/pmocr.*
 
 }
 
@@ -104,7 +153,7 @@ function test_Merge () {
 	#$SUDO_CMD cp -f "$TESTS_DIR/conf/default.conf" /etc/default/default.conf
 }
 
-function test_batch () {
+function nope_test_batch () {
 	local outputFile
 
 	cd "$PMOCR_DIR"
@@ -255,9 +304,29 @@ function test_batch () {
 	done
 }
 
-#function test_service () {
-# #TODO
-#}
+function test_StandardService () {
+	local pid
+	local numberFiles
+
+	cd "$PMOCR_DIR"
+
+	PrepareLocalDirs
+
+	_DEBUG=yes ./$PMOCR_EXECUTABLE --service --config="$TESTS_DIR/conf/service.conf" &
+	pid=$!
+
+	[ ! $pid -ne 0 ]
+	assertEquals "Instance not launched, pid [$pid]" "1" $?
+
+	# Trivial wait time for pmocr to process files
+	sleep 15
+
+	numberFiles=$(find "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.pdf" | wc -l)
+	[ $numberFiles -eq 3 ]
+	assertEquals "Service run pdf transformed files found number invalid [$numberFiles]" "0" $?
+
+	KillChilds $pid
+}
 
 function nope_test_WaitForTaskCompletion () {
 	local pids
@@ -363,61 +432,6 @@ function nope_test_ParallelExec () {
 	cmd="sleep 4;du /none;sleep 3;du /none;sleep 2"
 	ParallelExec 3 "$cmd" false 1 2 .05 7000 true true false ${FUNCNAME[0]}
 	assertNotEquals "ParallelExec full test 3" "0" $?
-
-}
-
-function nope_test_DaemonMode () {
-	if [ "$LOCAL_OS" == "WinNT10" ] || [ "$LOCAL_OS" == "msys" ]; then
-		echo "Skipping daemon mode test as Win10 does not have inotifywait support."
-		return 0
-	fi
-
-	for i in "${osyncDaemonParameters[@]}"; do
-
-		cd "$OSYNC_DIR"
-		PrepareLocalDirs
-
-		FileA="FileA"
-		FileB="FileB"
-		FileC="FileC"
-
-		touch "$INITIATOR_DIR/$FileA"
-		touch "$TARGET_DIR/$FileB"
-
-		./$OSYNC_EXECUTABLE "$CONF_DIR/$LOCAL_CONF" --on-changes &
-		pid=$!
-
-		# Trivial value of 2xMIN_WAIT from config files
-		echo "Sleeping for 120s"
-		sleep 120
-
-		[ -f "$TARGET_DIR/$FileB" ]
-		assertEquals "File [$TARGET_DIR/$FileB] should be synced." "0" $?
-		[ -f "$INITIATOR_DIR/$FileA" ]
-		assertEquals "File [$INITIATOR_DIR/$FileB] should be synced." "0" $?
-
-		touch "$INITIATOR_DIR/$FileC"
-		rm -f "$INITIATOR_DIR/$FileA"
-		rm -f "$TARGET_DIR/$FileB"
-
-		echo "Sleeping for 120s"
-		sleep 120
-
-		[ ! -f "$TARGET_DIR/$FileB" ]
-		assertEquals "File [$TARGET_DIR/$FileB] should be deleted." "0" $?
-		[ ! -f "$INITIATOR_DIR/$FileA" ]
-		assertEquals "File [$INITIATOR_DIR/$FileA] should be deleted." "0" $?
-
-		[ -f "$TARGET_DIR/$OSYNC_DELETE_DIR/$FileA" ]
-		assertEquals "File [$TARGET_DIR/$OSYNC_DELETE_DIR/$FileA] should be in soft deletion dir." "0" $?
-		[ -f "$INITIATOR_DIR/$OSYNC_DELETE_DIR/$FileB" ]
-		assertEquals "File [$INITIATOR_DIR/$OSYNC_DELETE_DIR/$FileB] should be in soft deletion dir." "0" $?
-
-		[ -f "$TARGET_DIR/$FileC" ]
-		assertEquals "File [$TARGET_DIR/$FileC] should be synced." "0" $?
-
-		kill $pid
-	done
 
 }
 

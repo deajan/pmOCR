@@ -109,6 +109,7 @@ function oneTimeSetUp () {
 
 	# Getting tesseract version
         TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
+	echo "Running with tesseract $TESSERACT_VERSION"
 
 	# Clean run and log files
 	if [ -f /var/log/pmocr.log ]; then
@@ -308,7 +309,7 @@ function test_StandardService () {
 
 	PrepareLocalDirs
 
-	_DEBUG=yes ./$PMOCR_EXECUTABLE --service --config="$TESTS_DIR/conf/service.conf" &
+	./$PMOCR_EXECUTABLE --service --config="$TESTS_DIR/conf/service.conf" &
 	pid=$!
 
 	[ ! $pid -ne 0 ]
@@ -334,8 +335,6 @@ function test_StandardService () {
 
 	kill -TERM $pid && sleep 5
 	KillChilds $pid
-
-	cat ${HOME}/pmocr.log
 }
 
 

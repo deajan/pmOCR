@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.6-dev
-PROGRAM_BUILD=2017041002
+PROGRAM_BUILD=2017041003
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -106,8 +106,7 @@ function CheckEnvironment {
 		fi
 
 		TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
-		VerComp "$TESSERACT_VERSION" "3.00"
-		if [ $? -gt 1 ]; then
+		if [ $(VerComp "$TESSERACT_VERSION" "3.00") -gt 1 ]; then
 			Logger "Tesseract version $TESSERACT_VERSION is not supported. Please use version 3.x or better." "CRITICAL"
 			exit 1
 		fi
@@ -710,8 +709,7 @@ elif [ $_BATCH_RUN == true ]; then
 
 	if [ $pdf == true ]; then
 		if [ "$OCR_ENGINE" == "tesseract3" ]; then
-			VerComp "$TESSERACT_VERSION" "3.02"
-			result=$?
+			result=$(VerComp "$TESSERACT_VERSION" "3.02")
                 	if [ $result -eq 2 ] || [ $result -eq 0 ]; then
                         	Logger "Tesseract version $TESSERACT_VERSION is not supported to create searchable PDFs. Please use 3.03 or better." "CRITICAL"
                         	exit 1

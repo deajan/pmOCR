@@ -75,9 +75,6 @@ function PrepareLocalDirs () {
 	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
 	cp "$SOURCE_DIR/$SOURCE_FILE_4" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
 
-	#WIP
-	return
-
 	cp "$SOURCE_DIR/$SOURCE_FILE_1" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$TXT_DIR"
 	cp "$SOURCE_DIR/$SOURCE_FILE_2" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$TXT_DIR"
 	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$TXT_DIR"
@@ -160,8 +157,7 @@ function nope_test_batch () {
 
         # Testing batch output for formats pdf, txt and csv
         # Don't test for pdf output if tesseract version is lower than 3.03
-        VerComp "$TESSERACT_VERSION" "3.03"
-        if [ $? -lt 2 ]; then
+        if [ $(VerComp "$TESSERACT_VERSION" "3.03") -lt 2 ]; then
                 batchParm=(-p -t -c)
                 batchOutputFormat=(pdf txt csv)
         else
@@ -325,8 +321,19 @@ function test_StandardService () {
 	[ $numberFiles -eq 3 ]
 	assertEquals "Service run pdf transformed files found number invalid [$numberFiles]" "0" $?
 
+	numberFiles=$(find "$PMOCR_TESTS_DIR/$SERVICE_DIR/$TXT_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.txt" | wc -l)
+	[ $numberFiles -eq 3 ]
+	assertEquals "Service run txt transformed files found number invalid [$numberFiles]" "0" $?
+
+	numberFiles=$(find "$PMOCR_TESTS_DIR/$SERVICE_DIR/$CSV_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.csv" | wc -l)
+	[ $numberFiles -eq 3 ]
+	assertEquals "Service run csv transformed files found number invalid [$numberFiles]" "0" $?
+
+	kill -TERM $pid && sleep 5
 	KillChilds $pid
 }
+
+
 
 function nope_test_WaitForTaskCompletion () {
 	local pids

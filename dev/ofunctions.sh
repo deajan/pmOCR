@@ -3,7 +3,7 @@
 #### OFUNCTIONS MINI SUBSET ####
 
 _OFUNCTIONS_VERSION=2.1.1
-_OFUNCTIONS_BUILD=2017040903
+_OFUNCTIONS_BUILD=2017041001
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -1832,10 +1832,13 @@ function ParentPid {
 #### VerComp SUBSET ####
 # Neat version compare function found at http://stackoverflow.com/a/4025065/2635443
 # Returns 0 if equal, 1 if $1 > $2 and 2 if $1 < $2
-VerComp () {
+function VerComp () {
+	local result
+
     if [[ $1 == $2 ]]
     then
-        return 0
+	echo 0
+        return
     fi
     local IFS=.
     local i ver1=($1) ver2=($2)
@@ -1853,14 +1856,18 @@ VerComp () {
         fi
         if ((10#${ver1[i]} > 10#${ver2[i]}))
         then
-            return 1
+		echo 1
+		return
         fi
         if ((10#${ver1[i]} < 10#${ver2[i]}))
         then
-            return 2
+		echo 2
+            	return
         fi
     done
-    return 0
+
+    	echo 0
+	return
 }
 #### VerComp SUBSET END ####
 

@@ -331,6 +331,8 @@ function test_StandardService () {
 
 	kill -TERM $pid && sleep 5
 	KillChilds $pid
+
+	cat ${HOME}/pmocr.log
 }
 
 

@@ -264,7 +264,7 @@ function Logger {
 		return
 	elif [ "$level" == "VERBOSE" ]; then
 		if [ $_LOGGER_VERBOSE == true ]; then
-			_Logger "$prefix:$value" "$prefix$value"
+			_Logger "$prefix($level):$value" "$prefix$value"
 		fi
 		return
 	elif [ "$level" == "ALWAYS" ]; then

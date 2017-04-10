@@ -1,8 +1,20 @@
 RECENT CHANGES
 --------------
-TODO:
-- Added basic unit tests
+
+dd Mmm YYYY
+
+- Added tesseract version preflight checks
+- Added unit test framework (basic functionnality yet)
 	- Added batch tests
+		- File suffixes & no suffixes
+		- File text / date additions
+		- Skip searchable pdf tests
+		- Delete original upon successful processing
+	! Added service tests
+		! File moves on success & failure
+- Fixed CSV transformation didn't work
+- Fixed a low severity security issue where log & run files are world readable
+- Fixed some installer strings
 
 13 Mar 2017: v1.5.4
 

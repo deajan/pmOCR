@@ -10,8 +10,10 @@ dd Mmm YYYY
 		- File text / date additions
 		- Skip searchable pdf tests
 		- Delete original upon successful processing
-	! Added service tests
+	- Added service tests
+		- Basic PDF / TXT / CSV tests
 		! File moves on success & failure
+- Fixed SERVICE-MONITOR file (run file) created in root
 - Fixed CSV transformation didn't work
 - Fixed a low severity security issue where log & run files are world readable
 - Fixed some installer strings

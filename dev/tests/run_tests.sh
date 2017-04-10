@@ -315,7 +315,7 @@ function test_StandardService () {
 	assertEquals "Instance not launched, pid [$pid]" "1" $?
 
 	# Trivial wait time for pmocr to process files
-	sleep 15
+	sleep 60
 
 	numberFiles=$(find "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.pdf" | wc -l)
 	[ $numberFiles -eq 3 ]

@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.6-dev
-PROGRAM_BUILD=2017040904
+PROGRAM_BUILD=2017041001
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -212,7 +212,8 @@ function OCR {
 
 					# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
 					# Tesseract may also return 0 exit code with error "read_params_file: Can't open pdf"
-					if [ $result -eq 0 ] && [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP" ]; then
+					if [ $result -eq 0 ] && grep -i "error" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP"; then
+						result=9999
 						Logger "Tesseract produced errors while transforming the document." "WARN"
 						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
 						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP)" "NOTICE"

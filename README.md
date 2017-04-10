@@ -1,5 +1,8 @@
 ## pmOCR (poor man's OCR tool)
 
+[![Build Status](https://travis-ci.org/deajan/pmOCR.svg?branch=master)](https://travis-ci.org/deajan/pmOCR) [![GitHub Release](https://img.shields.io/github/release/deajan/pmOCR.svg?label=Latest)](https://github.com/deajan/pmOCR/releases/latest)
+
+
 A multicore batch & service wrapper script for Tesseract 3 or ABBYY CLI OCR 11 FOR LINUX based on Finereader Engine 11 optical character recognition (www.ocr4linux.com).
 
 Conversions support tiff/jpg/png/pdf/bmp to PDF, TXT and CSV (also DOCX and XSLX for Abbyy OCR). It can actually support any other format that your OCR engine can handle.

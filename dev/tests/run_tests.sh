@@ -318,7 +318,7 @@ function test_StandardService () {
 	sleep 60
 
 	# Don't test PDF output on tesseract <= 3.02
-        if [ ! $(VerComp "$TESSERACT_VERSION" "3.03") -lt 2 ]; then
+        if [ $(VerComp "$TESSERACT_VERSION" "3.03") -ne 2 ]; then
 		numberFiles=$(find "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.pdf" | wc -l)
 		[ $numberFiles -eq 3 ]
 		assertEquals "Service run pdf transformed files found number invalid [$numberFiles]" "0" $?

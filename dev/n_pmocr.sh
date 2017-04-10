@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.6-dev
-PROGRAM_BUILD=2017041001
+PROGRAM_BUILD=2017041002
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -20,10 +20,10 @@ if [ "$MAX_WAIT" == "" ]; then
 	MAX_WAIT=86400 # One day in seconds
 fi
 
-SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
-
 include #### OFUNCTIONS MINI SUBSET ####
 include #### VerComp SUBSET ####
+
+SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
 
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then

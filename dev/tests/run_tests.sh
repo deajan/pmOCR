@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# pmocr test suite 2017041004
+# pmocr test suite 2017041101
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -65,8 +65,10 @@ function PrepareLocalDirs () {
 	mkdir "$PMOCR_TESTS_DIR/$SERVICE_DIR/$TXT_DIR"
 	mkdir "$PMOCR_TESTS_DIR/$SERVICE_DIR/$CSV_DIR"
 	mkdir "$PMOCR_TESTS_DIR/$SUCCEED_DIR"
-	mkdir "$PMOCR_TESTS_DIR/$FAILED_DIR"
+	mkdir "$PMOCR_TESTS_DIR/$FAILURE_DIR"
+}
 
+function CopyTestFiles () {
 	cp "$SOURCE_DIR/$SOURCE_FILE_1" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 	cp "$SOURCE_DIR/$SOURCE_FILE_2" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$BATCH_DIR"
@@ -176,6 +178,7 @@ function nope_test_batch () {
 		for parm in "${otherParm[@]}"; do
 
 			PrepareLocalDirs
+			CopyTestFiles
 
 			echo "Running batch run with parameters ${batchParm[$i]} ${parm}"
 			./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} ${parm} --config="$CONF_DIR/$BATCH_CONF" "$PMOCR_TESTS_DIR/$BATCH_DIR"
@@ -312,6 +315,7 @@ function nope_test_StandardService () {
 	cd "$PMOCR_DIR"
 
 	PrepareLocalDirs
+	CopyTestFiles
 
 	./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
 	pid=$!
@@ -342,15 +346,16 @@ function nope_test_StandardService () {
 }
 
 function test_MovedFilesService () {
-	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" "$PMOCR_TESTS_DIR/$SUCCEED_DIR"
-	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" "$PMOCR_TESTS_DIR/$FAILURE_DIR"
-
 	local pid
 	local numberFiles
+
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" "$PMOCR_TESTS_DIR/$SUCCEED_DIR"
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" "$PMOCR_TESTS_DIR/$FAILURE_DIR"
 
 	cd "$PMOCR_DIR"
 
 	PrepareLocalDirs
+	CopyTestFiles
 
 	./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
 	pid=$!
@@ -361,27 +366,61 @@ function test_MovedFilesService () {
 	# Trivial wait time for pmocr to process files
 	sleep 60
 
+	# Test original file presence in succeed
+
 	# Don't test PDF output on tesseract <= 3.02
         if [ $(VerComp "$TESSERACT_VERSION" "3.03") -ne 2 ]; then
-		numberFiles=$(find "$PMOCR_TESTS_DIR//$SUCCEED_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.pdf" | wc -l)
+		numberFiles=$(find "$PMOCR_TESTS_DIR/$SUCCEED_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.pdf" | wc -l)
 		[ $numberFiles -eq 3 ]
 		assertEquals "Service run pdf transformed files found number invalid [$numberFiles]" "0" $?
 	fi
 
-	numberFiles=$(find "$PMOCR_TESTS_DIR/$SUCCEED_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.txt" | wc -l)
+	numberFiles=$(find "$PMOCR_TESTS_DIR/$SUCCEED_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.png" | wc -l)
 	[ $numberFiles -eq 3 ]
 	assertEquals "Service run txt transformed files found number invalid [$numberFiles]" "0" $?
 
-	numberFiles=$(find "$PMOCR_TESTS_DIR/$SUCCEED_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.csv" | wc -l)
+	numberFiles=$(find "$PMOCR_TESTS_DIR/$SUCCEED_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.tif" | wc -l)
 	[ $numberFiles -eq 3 ]
 	assertEquals "Service run csv transformed files found number invalid [$numberFiles]" "0" $?
+
 
 	kill -TERM $pid && sleep 5
 	KillChilds $pid
 
-	#WIP
-	#SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" ""
-	#SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" ""
+	PrepareLocalDirs
+	./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
+	pid=$!
+
+	[ ! $pid -ne 0 ]
+	assertEquals "Instance not launched, pid [$pid]" "1" $?
+
+	# Make sure next transformations will fail in order to move originals to failed dir
+	sleep 2
+	OCR_ENGINE_EXEC=$(GetConfFileValue "$CONF_DIR/$SERVICE_CONF" "OCR_ENGINE_EXEC")
+	$SUDO_CMD mv $OCR_ENGINE_EXEC $OCR_ENGINE_EXEC"-alt"
+
+	#CopyTestFiles
+	# Only copy PDF files in order to not have doubles
+	cp "$SOURCE_DIR/$SOURCE_FILE_1" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_2" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_3" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
+	cp "$SOURCE_DIR/$SOURCE_FILE_4" "$PMOCR_TESTS_DIR/$SERVICE_DIR/$PDF_DIR"
+
+
+
+	# Trivial wait time for pmocr to process files
+	sleep 60
+
+	# Test for failed files presence (3 files only)
+	numberFiles=$(find "$PMOCR_TESTS_DIR/$FAILURE_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.(pdf|tif|png)" | wc -l)
+	[ $numberFiles -eq 3 ]
+	assertEquals "Service run pdf transformed files found number invalid [$numberFiles]" "0" $?
+
+	# Rename OCR engine to make it great again
+	$SUDO_CMD mv $OCR_ENGINE_EXEC"-alt" $OCR_ENGINE_EXEC
+
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" ""
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" ""
 }
 
 function nope_test_WaitForTaskCompletion () {

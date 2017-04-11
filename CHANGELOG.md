@@ -12,7 +12,7 @@ dd Mmm YYYY
 		- Delete original upon successful processing
 	- Added service tests
 		- Basic PDF / TXT / CSV tests
-		! File moves on success & failure
+		- File moves on success & failure
 - Fixed SERVICE-MONITOR file (run file) created in root
 - Fixed CSV transformation didn't work
 - Fixed a low severity security issue where log & run files are world readable

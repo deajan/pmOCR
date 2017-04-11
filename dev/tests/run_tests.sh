@@ -20,7 +20,7 @@ PMOCR_TESTS_DIR="${HOME}/pmocr-tests"
 BATCH_DIR="batch"
 SERVICE_DIR="service"
 SUCCEED_DIR="succesful"
-FAILED_DIR="failed"
+FAILURE_DIR="failed"
 
 PDF_DIR="PDF"
 TXT_DIR="TEXT"
@@ -342,8 +342,8 @@ function nope_test_StandardService () {
 }
 
 function test_MovedFilesService () {
-	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" "$HOME/$SUCCEED_DIR"
-	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" "$HOME/$FAILURE_DIR"
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" "$PMOCR_TESTS_DIR/$SUCCEED_DIR"
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" "$PMOCR_TESTS_DIR/$FAILURE_DIR"
 
 	local pid
 	local numberFiles
@@ -379,8 +379,9 @@ function test_MovedFilesService () {
 	kill -TERM $pid && sleep 5
 	KillChilds $pid
 
-	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" ""
-	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" ""
+	#WIP
+	#SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" ""
+	#SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" ""
 }
 
 function nope_test_WaitForTaskCompletion () {

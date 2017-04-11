@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# pmocr test suite 2017041101
+# pmocr test suite 2017041102
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -8,6 +8,8 @@ DEV_DIR="$PMOCR_DIR/dev"
 TESTS_DIR="$DEV_DIR/tests"
 SOURCE_DIR="$TESTS_DIR/source"
 CONF_DIR="$TESTS_DIR/conf"
+
+TMP_FILE="$DEV_DIR/tmp"
 
 BATCH_CONF="default.conf"
 SERVICE_CONF="service.conf"

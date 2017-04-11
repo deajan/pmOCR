@@ -7,8 +7,10 @@ PMOCR_DIR=${PMOCR_DIR%%/dev*}
 DEV_DIR="$PMOCR_DIR/dev"
 TESTS_DIR="$DEV_DIR/tests"
 SOURCE_DIR="$TESTS_DIR/source"
+CONF_DIR="$TESTS_DIR/conf"
 
-LOCAL_CONF="local.conf"
+BATCH_CONF="default.conf"
+SERVICE_CONF="service.conf"
 
 PMOCR_EXECUTABLE="pmocr.sh"
 PMOCR_DEV_EXECUTABLE="dev/n_pmocr.sh"
@@ -118,6 +120,8 @@ function oneTimeSetUp () {
 
 	rm -f /tmp/pmocr.*
 
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" ""
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" ""
 }
 
 function oneTimeTearDown () {
@@ -148,7 +152,7 @@ function test_Merge () {
         assertEquals "Install failed" "0" $?
 
 	# Overwrite standard config file with tesseract one
-	#$SUDO_CMD cp -f "$TESTS_DIR/conf/default.conf" /etc/default/default.conf
+	#$SUDO_CMD cp -f "$CONF_DIR/$BATCH_CONF" /etc/default/default.conf
 }
 
 function nope_test_batch () {
@@ -174,7 +178,7 @@ function nope_test_batch () {
 			PrepareLocalDirs
 
 			echo "Running batch run with parameters ${batchParm[$i]} ${parm}"
-			./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} ${parm} --config="$TESTS_DIR/conf/default.conf" "$PMOCR_TESTS_DIR/$BATCH_DIR"
+			./$PMOCR_EXECUTABLE --batch ${batchParm[$i]} ${parm} --config="$CONF_DIR/$BATCH_CONF" "$PMOCR_TESTS_DIR/$BATCH_DIR"
 			assertEquals "Batch run with parameter ${batchParm[$i]} ${parm}" "0" $?
 
 
@@ -301,7 +305,7 @@ function nope_test_batch () {
 	done
 }
 
-function test_StandardService () {
+function nope_test_StandardService () {
 	local pid
 	local numberFiles
 
@@ -309,7 +313,7 @@ function test_StandardService () {
 
 	PrepareLocalDirs
 
-	./$PMOCR_EXECUTABLE --service --config="$TESTS_DIR/conf/service.conf" &
+	./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
 	pid=$!
 
 	[ ! $pid -ne 0 ]
@@ -337,7 +341,47 @@ function test_StandardService () {
 	KillChilds $pid
 }
 
+function test_MovedFilesService () {
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" "$HOME/$SUCCEED_DIR"
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" "$HOME/$FAILURE_DIR"
 
+	local pid
+	local numberFiles
+
+	cd "$PMOCR_DIR"
+
+	PrepareLocalDirs
+
+	./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
+	pid=$!
+
+	[ ! $pid -ne 0 ]
+	assertEquals "Instance not launched, pid [$pid]" "1" $?
+
+	# Trivial wait time for pmocr to process files
+	sleep 60
+
+	# Don't test PDF output on tesseract <= 3.02
+        if [ $(VerComp "$TESSERACT_VERSION" "3.03") -ne 2 ]; then
+		numberFiles=$(find "$PMOCR_TESTS_DIR//$SUCCEED_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.pdf" | wc -l)
+		[ $numberFiles -eq 3 ]
+		assertEquals "Service run pdf transformed files found number invalid [$numberFiles]" "0" $?
+	fi
+
+	numberFiles=$(find "$PMOCR_TESTS_DIR/$SUCCEED_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.txt" | wc -l)
+	[ $numberFiles -eq 3 ]
+	assertEquals "Service run txt transformed files found number invalid [$numberFiles]" "0" $?
+
+	numberFiles=$(find "$PMOCR_TESTS_DIR/$SUCCEED_DIR" -type f  | egrep "*\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\_OCR.csv" | wc -l)
+	[ $numberFiles -eq 3 ]
+	assertEquals "Service run csv transformed files found number invalid [$numberFiles]" "0" $?
+
+	kill -TERM $pid && sleep 5
+	KillChilds $pid
+
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" ""
+	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" ""
+}
 
 function nope_test_WaitForTaskCompletion () {
 	local pids

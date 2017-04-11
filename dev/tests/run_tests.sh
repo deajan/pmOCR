@@ -157,7 +157,7 @@ function test_Merge () {
 	#$SUDO_CMD cp -f "$CONF_DIR/$BATCH_CONF" /etc/default/default.conf
 }
 
-function nope_test_batch () {
+function test_batch () {
 	local outputFile
 
 	cd "$PMOCR_DIR"
@@ -308,7 +308,7 @@ function nope_test_batch () {
 	done
 }
 
-function nope_test_StandardService () {
+function test_StandardService () {
 	local pid
 	local numberFiles
 
@@ -423,7 +423,7 @@ function test_MovedFilesService () {
 	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" ""
 }
 
-function nope_test_WaitForTaskCompletion () {
+function test_WaitForTaskCompletion () {
 	local pids
 
 	# Tests if wait for task completion works correctly with ofunctions v2
@@ -473,7 +473,7 @@ function nope_test_WaitForTaskCompletion () {
 	assertEquals "WaitForTaskCompletion test 5" "2" $?
 }
 
-function nope_test_ParallelExec () {
+function test_ParallelExec () {
 	# work with ofunction v2
 
 	# Test if parallelExec works correctly in array mode

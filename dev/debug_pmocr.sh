@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5.6-dev
-PROGRAM_BUILD=2017040904
+PROGRAM_VERSION=1.5.6
+PROGRAM_BUILD=2017041003
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -20,11 +20,9 @@ if [ "$MAX_WAIT" == "" ]; then
 	MAX_WAIT=86400 # One day in seconds
 fi
 
-SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
-
 
 _OFUNCTIONS_VERSION=2.1.1
-_OFUNCTIONS_BUILD=2017040903
+_OFUNCTIONS_BUILD=2017041101
 _OFUNCTIONS_BOOTSTRAP=true
 
 ## BEGIN Generic bash functions written in 2013-2017 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
@@ -279,7 +277,7 @@ function Logger {
 		return
 	elif [ "$level" == "VERBOSE" ]; then
 		if [ $_LOGGER_VERBOSE == true ]; then
-			_Logger "$prefix:$value" "$prefix$value"
+			_Logger "$prefix($level):$value" "$prefix$value"
 		fi
 		return
 	elif [ "$level" == "ALWAYS" ]; then
@@ -1228,36 +1226,49 @@ function __CheckArguments {
 
 # Neat version compare function found at http://stackoverflow.com/a/4025065/2635443
 # Returns 0 if equal, 1 if $1 > $2 and 2 if $1 < $2
-VerComp () {
-    if [[ $1 == $2 ]]
-    then
-        return 0
-    fi
-    local IFS=.
-    local i ver1=($1) ver2=($2)
-    # fill empty fields in ver1 with zeros
-    for ((i=${#ver1[@]}; i<${#ver2[@]}; i++))
-    do
-        ver1[i]=0
-    done
-    for ((i=0; i<${#ver1[@]}; i++))
-    do
-        if [[ -z ${ver2[i]} ]]
-        then
-            # fill empty fields in ver2 with zeros
-            ver2[i]=0
-        fi
-        if ((10#${ver1[i]} > 10#${ver2[i]}))
-        then
-            return 1
-        fi
-        if ((10#${ver1[i]} < 10#${ver2[i]}))
-        then
-            return 2
-        fi
-    done
-    return 0
+function VerComp () {
+	if [ "$1" == "" ] || [ "$2" == "" ]; then
+		Logger "Bogus Vercomp values [$1] and [$2]." "WARN"
+		return 1
+	fi
+
+	if [[ $1 == $2 ]]
+		then
+			echo 0
+		return
+	fi
+
+	local IFS=.
+	local i ver1=($1) ver2=($2)
+	# fill empty fields in ver1 with zeros
+	for ((i=${#ver1[@]}; i<${#ver2[@]}; i++))
+	do
+        	ver1[i]=0
+	done
+	for ((i=0; i<${#ver1[@]}; i++))
+	do
+		if [[ -z ${ver2[i]} ]]
+		then
+			# fill empty fields in ver2 with zeros
+			ver2[i]=0
+		fi
+		if ((10#${ver1[i]} > 10#${ver2[i]}))
+		then
+			echo 1
+			return
+        	fi
+        	if ((10#${ver1[i]} < 10#${ver2[i]}))
+        	then
+			echo 2
+            		return
+        	fi
+    	done
+
+    	echo 0
+	return
 }
+
+SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.SERVICE-MONITOR.run.$SCRIPT_PID.$TSTAMP"
 
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
@@ -1340,8 +1351,7 @@ function CheckEnvironment {
 		fi
 
 		TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
-		VerComp "$TESSERACT_VERSION" "3.00"
-		if [ $? -gt 1 ]; then
+		if [ $(VerComp "$TESSERACT_VERSION" "3.00") -gt 1 ]; then
 			Logger "Tesseract version $TESSERACT_VERSION is not supported. Please use version 3.x or better." "CRITICAL"
 			exit 1
 		fi
@@ -1446,7 +1456,8 @@ function OCR {
 
 					# Workaround for tesseract complaining about missing OSD data but still processing file without changing exit code
 					# Tesseract may also return 0 exit code with error "read_params_file: Can't open pdf"
-					if [ $result -eq 0 ] && [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP" ]; then
+					if [ $result -eq 0 ] && grep -i "error" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP"; then
+						result=9999
 						Logger "Tesseract produced errors while transforming the document." "WARN"
 						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
 						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP)" "NOTICE"
@@ -1943,8 +1954,7 @@ elif [ $_BATCH_RUN == true ]; then
 
 	if [ $pdf == true ]; then
 		if [ "$OCR_ENGINE" == "tesseract3" ]; then
-			VerComp "$TESSERACT_VERSION" "3.02"
-			result=$?
+			result=$(VerComp "$TESSERACT_VERSION" "3.02")
 			if [ $result -eq 2 ] || [ $result -eq 0 ]; then
 				Logger "Tesseract version $TESSERACT_VERSION is not supported to create searchable PDFs. Please use 3.03 or better." "CRITICAL"
 				exit 1

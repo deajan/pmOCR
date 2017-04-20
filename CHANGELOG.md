@@ -1,7 +1,7 @@
 RECENT CHANGES
 --------------
 
-dd Mmm YYYY
+20 Avr 2017: v1.5.6
 
 - Added tesseract version preflight checks
 - Added unit test framework (basic functionnality yet)

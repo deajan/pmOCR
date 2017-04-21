@@ -1,6 +1,10 @@
 RECENT CHANGES
 --------------
 
+21 Avr 2017: v1.5.7
+
+- Fixed a bug cleaning the SERVICE_MONITOR file after each run
+
 20 Avr 2017: v1.5.6
 
 - Added tesseract version preflight checks
@@ -17,6 +21,7 @@ RECENT CHANGES
 - Fixed CSV transformation didn't work
 - Fixed a low severity security issue where log & run files are world readable
 - Fixed some installer strings
+- Tmp files are now cleaned on the fly after each dispatch
 
 13 Mar 2017: v1.5.4
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# pmocr test suite 2017041102
+# pmocr test suite 2017052801
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -322,8 +322,12 @@ function test_StandardService () {
 	./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
 	pid=$!
 
-	[ ! $pid -ne 0 ]
+
+	if [ ! $pid -ne 0 ]; then
 	assertEquals "Instance not launched, pid [$pid]" "1" $?
+	else
+		echo "Launched instance with pid [$pid]."
+	fi
 
 	# Trivial wait time for pmocr to process files
 	sleep 60
@@ -362,8 +366,11 @@ function test_MovedFilesService () {
 	./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
 	pid=$!
 
-	[ ! $pid -ne 0 ]
+	if [ ! $pid -ne 0 ]; then
 	assertEquals "Instance not launched, pid [$pid]" "1" $?
+	else
+		echo "Launched instance with pid [$pid]."
+	fi
 
 	# Trivial wait time for pmocr to process files
 	sleep 60
@@ -420,6 +427,9 @@ function test_MovedFilesService () {
 
 	# Rename OCR engine to make it great again
 	$SUDO_CMD mv $OCR_ENGINE_EXEC"-alt" $OCR_ENGINE_EXEC
+
+	kill -TERM $pid && sleep 5
+	KillChilds $pid
 
 	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_SUCCESS" ""
 	SetConfFileValue "$CONF_DIR/$SERVICE_CONF" "MOVE_ORIGINAL_ON_FAILURE" ""

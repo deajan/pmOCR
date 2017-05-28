@@ -2,8 +2,8 @@
 #### OFUNCTIONS FULL SUBSET ####
 #### OFUNCTIONS MINI SUBSET ####
 
-_OFUNCTIONS_VERSION=2.1.1
-_OFUNCTIONS_BUILD=2017041101
+_OFUNCTIONS_VERSION=2.1.4-dev
+_OFUNCTIONS_BUILD=2017052804
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -317,15 +317,28 @@ function KillChilds {
 	local pid="${1}" # Parent pid to kill childs
 	local self="${2:-false}" # Should parent be killed too ?
 
-	# Warning: pgrep does not exist in cygwin, have this checked in CheckEnvironment
-	if children="$(pgrep -P "$pid")"; then
-		for child in $children; do
-			Logger "Launching KillChilds \"$child\" true" "DEBUG"	#__WITH_PARANOIA_DEBUG
-			KillChilds "$child" true
-		done
+	if [ $(IsNumeric "$pid") -eq 0 ] || [ "$pid" == "" ]; then
+		Logger "Bogus pid given [$pid]." "CRITICAL"
+		return 1
 	fi
-		# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
+
+	if kill -0 "$pid" > /dev/null 2>&1; then
+		# Warning: pgrep does not exist in cygwin, have this checked in CheckEnvironment
+		if children="$(pgrep -P "$pid")"; then
+			if [[ "$pid" == *"$children"* ]]; then
+				Logger "Bogus pgrep implementation." "CRITICAL"
+				children="${children/$pid/}"
+			fi
+			for child in $children; do
+				Logger "Launching KillChilds \"$child\" true" "DEBUG"	#__WITH_PARANOIA_DEBUG
+				KillChilds "$child" true
+			done
+		fi
+	fi
+
+	# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
 	if [ "$self" == true ]; then
+		# We need to check for pid again because it may have disappeared after recursive function call
 		if kill -0 "$pid" > /dev/null 2>&1; then
 			kill -s TERM "$pid"
 			Logger "Sent SIGTERM to process [$pid]." "DEBUG"
@@ -637,6 +650,22 @@ function Spinner {
 	fi
 }
 
+function _PerfProfiler {												#__WITH_PARANOIA_DEBUG
+	local perfString												#__WITH_PARANOIA_DEBUG
+															#__WITH_PARANOIA_DEBUG
+	perfString=$(ps -p $$ -o args,pid,ppid,%cpu,%mem,time,etime,state,wchan)					#__WITH_PARANOIA_DEBUG
+															#__WITH_PARANOIA_DEBUG
+	for i in $(pgrep -P $$); do											#__WITH_PARANOIA_DEBUG
+		perfString="$perfString\n"$(ps -p $i -o args,pid,ppid,%cpu,%mem,time,etime,state,wchan | tail -1)	#__WITH_PARANOIA_DEBUG
+	done														#__WITH_PARANOIA_DEBUG
+															#__WITH_PARANOIA_DEBUG
+	if type iostat > /dev/null 2>&1; then										#__WITH_PARANOIA_DEBUG
+		perfString="$perfString\n"$(iostat)									#__WITH_PARANOIA_DEBUG
+	fi														#__WITH_PARANOIA_DEBUG
+															#__WITH_PARANOIA_DEBUG
+	Logger "PerfProfiler:\n$perfString" "PARANOIA_DEBUG"								#__WITH_PARANOIA_DEBUG
+}															#__WITH_PARANOIA_DEBUG
+
 
 # Time control function for background processes, suitable for multiple synchronous processes
 # Fills a global variable called WAIT_FOR_TASK_COMPLETION_$callerName that contains list of failed pids in format pid1:result1;pid2:result2
@@ -769,6 +798,11 @@ function WaitForTaskCompletion {
 		pidsArray=("${newPidsArray[@]}")
 		# Trivial wait time for bash to not eat up all CPU
 		sleep $sleepTime
+
+		if [ "$_PERF_PROFILER" == "yes" ]; then				##__WITH_PARANOIA_DEBUG
+			_PerfProfiler						##__WITH_PARANOIA_DEBUG
+		fi								##__WITH_PARANOIA_DEBUG
+
 	done
 
 	Logger "${FUNCNAME[0]} ended for [$callerName] using [$pidCount] subprocesses with [$errorcount] errors." "PARANOIA_DEBUG"	#__WITH_PARANOIA_DEBUG
@@ -934,6 +968,10 @@ function ParallelExec {
 
 		# Trivial wait time for bash to not eat up all CPU
 		sleep $sleepTime
+
+		if [ "$_PERF_PROFILER" == "yes" ]; then				##__WITH_PARANOIA_DEBUG
+			_PerfProfiler						##__WITH_PARANOIA_DEBUG
+		fi								##__WITH_PARANOIA_DEBUG
 	done
 
 	return $errorCount
@@ -1154,9 +1192,6 @@ function GetLocalOS {
 		exit 1
 		;;
 	esac
-	if [ "$_OFUNCTIONS_VERSION" != "" ]; then
-		Logger "Local OS: [$localOsVar]." "DEBUG"
-	fi
 
 	# Get linux versions
 	if [ -f "/etc/os-release" ]; then
@@ -1166,6 +1201,10 @@ function GetLocalOS {
 
 	# Add a global variable for statistics in installer
 	LOCAL_OS_FULL="$localOsVar ($localOsName $localOsVer)"
+
+	if [ "$_OFUNCTIONS_VERSION" != "" ]; then
+		Logger "Local OS: [$LOCAL_OS_FULL]." "DEBUG"
+	fi
 }
 #### GetLocalOS SUBSET END ####
 
@@ -1238,10 +1277,13 @@ function GetRemoteOS {
 
 $SSH_CMD env _REMOTE_TOKEN="$_REMOTE_TOKEN" bash -s << 'ENDSSH' >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" 2>&1
 
+
 function GetOs {
 	local localOsVar
 	local localOsName
 	local localOsVer
+
+	local osInfo="/etc/os-release"
 
 	# There's no good way to tell if currently running in BusyBox shell. Using sluggish way.
 	if ls --help 2>&1 | grep -i "BusyBox" > /dev/null; then
@@ -1261,9 +1303,11 @@ function GetOs {
 		fi
 	fi
 	# Get linux versions
-	if [ -f "/etc/os-release" ]; then
-		localOsName=$(GetConfFileValue "/etc/os-release" "NAME")
-		localOsVer=$(GetConfFileValue "/etc/os-release" "VERSION")
+	if [ -f "$osInfo" ]; then
+		localOsName=$(grep "^NAME=" "$osInfo")
+                localOsName="${localOsName##*=}"
+		localOsVer=$(grep "^VERSION=" "$osInfo")
+		localOsVer="${localOsVer##*=}"
 	fi
 
 	echo "$localOsVar ($localOsName $localOsVer)"
@@ -1611,13 +1655,13 @@ function PostInit {
 
 	# Define remote commands
 	if [ -f "$SSH_RSA_PRIVATE_KEY" ]; then
-		SSH_CMD="$(type -p ssh) $SSH_COMP -i $SSH_RSA_PRIVATE_KEY $SSH_OPTS $REMOTE_USER@$REMOTE_HOST -p $REMOTE_PORT"
-		SCP_CMD="$(type -p scp) $SSH_COMP -i $SSH_RSA_PRIVATE_KEY -P $REMOTE_PORT"
-		RSYNC_SSH_CMD="$(type -p ssh) $SSH_COMP -i $SSH_RSA_PRIVATE_KEY $SSH_OPTS -p $REMOTE_PORT"
+		SSH_CMD="$(type -p ssh) $SSH_COMP -q -i $SSH_RSA_PRIVATE_KEY $SSH_OPTS $REMOTE_USER@$REMOTE_HOST -p $REMOTE_PORT"
+		SCP_CMD="$(type -p scp) $SSH_COMP -q -i $SSH_RSA_PRIVATE_KEY -P $REMOTE_PORT"
+		RSYNC_SSH_CMD="$(type -p ssh) $SSH_COMP -q -i $SSH_RSA_PRIVATE_KEY $SSH_OPTS -p $REMOTE_PORT"
 	elif [ -f "$SSH_PASSWORD_FILE" ]; then
-		SSH_CMD="$(type -p sshpass) -f $SSH_PASSWORD_FILE $(type -p ssh) $SSH_COMP $SSH_OPTS $REMOTE_USER@$REMOTE_HOST -p $REMOTE_PORT"
-		SCP_CMD="$(type -p sshpass) -f $SSH_PASSWORD_FILE $(type -p scp) $SSH_COMP -P $REMOTE_PORT"
-		RSYNC_SSH_CMD="$(type -p sshpass) -f $SSH_PASSWORD_FILE $(type -p ssh) $SSH_COMP $SSH_OPTS -p $REMOTE_PORT"
+		SSH_CMD="$(type -p sshpass) -f $SSH_PASSWORD_FILE $(type -p ssh) $SSH_COMP -q $SSH_OPTS $REMOTE_USER@$REMOTE_HOST -p $REMOTE_PORT"
+		SCP_CMD="$(type -p sshpass) -f $SSH_PASSWORD_FILE $(type -p scp) $SSH_COMP -q -P $REMOTE_PORT"
+		RSYNC_SSH_CMD="$(type -p sshpass) -f $SSH_PASSWORD_FILE $(type -p ssh) $SSH_COMP -q $SSH_OPTS -p $REMOTE_PORT"
 	else
 		SSH_PASSWORD=""
 		SSH_CMD=""

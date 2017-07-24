@@ -1,6 +1,11 @@
 RECENT CHANGES
 --------------
 
+dd Mmm YYYY: v1.5.8
+
+- More clear preflight error messages
+- Updated ofunctions to fix log sending with double compressed extensions
+
 21 Avr 2017: v1.5.7
 
 - Fixed a bug cleaning the SERVICE_MONITOR file after each run

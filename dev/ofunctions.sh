@@ -3,7 +3,7 @@
 #### OFUNCTIONS MINI SUBSET ####
 
 _OFUNCTIONS_VERSION=2.1.4-rc1
-_OFUNCTIONS_BUILD=2017052902
+_OFUNCTIONS_BUILD=2017060903
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -404,7 +404,6 @@ function SendAlert {
 
 	eval "cat \"$LOG_FILE\" $COMPRESSION_PROGRAM > $ALERT_LOG_FILE"
 	if [ $? != 0 ]; then
-		Logger "Cannot create [$ALERT_LOG_FILE]" "WARN"
 		attachment=false
 	else
 		attachment=true
@@ -1278,7 +1277,7 @@ function GetRemoteOS {
 
 	local remoteOsVar
 
-$SSH_CMD env _REMOTE_TOKEN="$_REMOTE_TOKEN" bash -s << 'ENDSSH' >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" 2>&1
+$SSH_CMD env LC_ALL=C env _REMOTE_TOKEN="$_REMOTE_TOKEN" bash -s << 'ENDSSH' >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" 2>&1
 
 
 function GetOs {
@@ -1417,7 +1416,7 @@ function RunRemoteCommand {
 	fi
 
 	Logger "Running command [$command] on remote host." "NOTICE"
-	cmd=$SSH_CMD' "env _REMOTE_TOKEN="'$_REMOTE_TOKEN'" $command" > "'$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP'" 2>&1'
+	cmd=$SSH_CMD' "env LC_ALL=C env _REMOTE_TOKEN="'$_REMOTE_TOKEN'" $command" > "'$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP'" 2>&1'
 	Logger "cmd: $cmd" "DEBUG"
 	eval "$cmd" &
 	WaitForTaskCompletion $! 0 $hardMaxTime $SLEEP_TIME $KEEP_LOGGING true true false
@@ -1714,7 +1713,10 @@ function SetCompression {
 			COMPRESSION_EXTENSION=
 		fi
 	fi
-	ALERT_LOG_FILE="$ALERT_LOG_FILE$COMPRESSION_EXTENSION"
+
+	if [ ".${ALERT_LOG_FILE##*.}" != "$COMPRESSION_EXTENSION" ]; then
+		ALERT_LOG_FILE="$ALERT_LOG_FILE$COMPRESSION_EXTENSION"
+	fi
 }
 
 function InitLocalOSDependingSettings {

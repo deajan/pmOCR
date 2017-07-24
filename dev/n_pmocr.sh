@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5.7
-PROGRAM_BUILD=2017042101
+PROGRAM_VERSION=1.5.8-dev
+PROGRAM_BUILD=2017072401
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -29,7 +29,7 @@ SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.$INSTANCE_ID.$SCRIPT_PID.$TSTAMP.SERVICE
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
 		if ! type "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
-			Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"
+			Logger "OCR engine executable [$OCR_ENGINE_EXEC] not present." "CRITICAL"
 			exit 1
 		fi
 	else
@@ -39,7 +39,7 @@ function CheckEnvironment {
 
 	if [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
 		if ! type "$OCR_PREPROCESSOR_EXEC" > /dev/null 2>&1; then
-			Logger "$OCR_PREPROCESSOR_EXEC not present." "CRITICAL"
+			Logger "OCR preprocessor executable [$OCR_PREPROCESSOR_EXEC] not present." "CRITICAL"
 			exit 1
 		fi
 	fi
@@ -102,13 +102,13 @@ function CheckEnvironment {
 
 	if [ "$OCR_ENGINE" == "tesseract3" ]; then
 		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
-			Logger "$PDF_TO_TIFF_EXEC not present." "CRITICAL"
+			Logger "PDF to TIFF conversion executable [$PDF_TO_TIFF_EXEC] not present." "CRITICAL"
 			exit 1
 		fi
 
 		TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
 		if [ $(VerComp "$TESSERACT_VERSION" "3.00") -gt 1 ]; then
-			Logger "Tesseract version $TESSERACT_VERSION is not supported. Please use version 3.x or better." "CRITICAL"
+			Logger "Tesseract version [$TESSERACT_VERSION] is not supported. Please use version 3.x or better." "CRITICAL"
 			exit 1
 		fi
 	fi

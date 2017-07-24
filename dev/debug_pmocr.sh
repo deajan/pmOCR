@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5.7
-PROGRAM_BUILD=2017042101
+PROGRAM_VERSION=1.5.8-dev
+PROGRAM_BUILD=2017072401
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -21,8 +21,8 @@ if [ "$MAX_WAIT" == "" ]; then
 fi
 
 
-_OFUNCTIONS_VERSION=2.1.1
-_OFUNCTIONS_BUILD=2017041101
+_OFUNCTIONS_VERSION=2.1.4-rc1
+_OFUNCTIONS_BUILD=2017060903
 _OFUNCTIONS_BOOTSTRAP=true
 
 ## BEGIN Generic bash functions written in 2013-2017 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
@@ -86,6 +86,8 @@ if [ "$SLEEP_TIME" == "" ]; then # Leave the possibity to set SLEEP_TIME as envi
 fi
 
 SCRIPT_PID=$$
+
+# TODO: Check if %N works on MacOS
 TSTAMP=$(date '+%Y%m%dT%H%M%S.%N')
 
 LOCAL_USER=$(whoami)
@@ -328,15 +330,29 @@ function KillChilds {
 	local pid="${1}" # Parent pid to kill childs
 	local self="${2:-false}" # Should parent be killed too ?
 
-	# Warning: pgrep does not exist in cygwin, have this checked in CheckEnvironment
-	if children="$(pgrep -P "$pid")"; then
-		for child in $children; do
-			Logger "Launching KillChilds \"$child\" true" "DEBUG"	#__WITH_PARANOIA_DEBUG
-			KillChilds "$child" true
-		done
+	# Paranoid checks, we can safely assume that $pid shouldn't be 0 nor 1
+	if [ $(IsNumeric "$pid") -eq 0 ] || [ "$pid" == "" ] || [ "$pid" == "0" ] || [ "$pid" == "1" ]; then
+		Logger "Bogus pid given [$pid]." "CRITICAL"
+		return 1
 	fi
-		# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
+
+	if kill -0 "$pid" > /dev/null 2>&1; then
+		# Warning: pgrep is not native on cygwin, have this checked in CheckEnvironment
+		if children="$(pgrep -P "$pid")"; then
+			if [[ "$pid" == *"$children"* ]]; then
+				Logger "Bogus pgrep implementation." "CRITICAL"
+				children="${children/$pid/}"
+			fi
+			for child in $children; do
+				Logger "Launching KillChilds \"$child\" true" "DEBUG"	#__WITH_PARANOIA_DEBUG
+				KillChilds "$child" true
+			done
+		fi
+	fi
+
+	# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
 	if [ "$self" == true ]; then
+		# We need to check for pid again because it may have disappeared after recursive function call
 		if kill -0 "$pid" > /dev/null 2>&1; then
 			kill -s TERM "$pid"
 			Logger "Sent SIGTERM to process [$pid]." "DEBUG"
@@ -399,7 +415,6 @@ function SendAlert {
 
 	eval "cat \"$LOG_FILE\" $COMPRESSION_PROGRAM > $ALERT_LOG_FILE"
 	if [ $? != 0 ]; then
-		Logger "Cannot create [$ALERT_LOG_FILE]" "WARN"
 		attachment=false
 	else
 		attachment=true
@@ -646,6 +661,22 @@ function Spinner {
 	fi
 }
 
+function _PerfProfiler {												#__WITH_PARANOIA_DEBUG
+	local perfString												#__WITH_PARANOIA_DEBUG
+															#__WITH_PARANOIA_DEBUG
+	perfString=$(ps -p $$ -o args,pid,ppid,%cpu,%mem,time,etime,state,wchan)					#__WITH_PARANOIA_DEBUG
+															#__WITH_PARANOIA_DEBUG
+	for i in $(pgrep -P $$); do											#__WITH_PARANOIA_DEBUG
+		perfString="$perfString\n"$(ps -p $i -o args,pid,ppid,%cpu,%mem,time,etime,state,wchan | tail -1)	#__WITH_PARANOIA_DEBUG
+	done														#__WITH_PARANOIA_DEBUG
+															#__WITH_PARANOIA_DEBUG
+	if type iostat > /dev/null 2>&1; then										#__WITH_PARANOIA_DEBUG
+		perfString="$perfString\n"$(iostat)									#__WITH_PARANOIA_DEBUG
+	fi														#__WITH_PARANOIA_DEBUG
+															#__WITH_PARANOIA_DEBUG
+	Logger "PerfProfiler:\n$perfString" "PARANOIA_DEBUG"								#__WITH_PARANOIA_DEBUG
+}															#__WITH_PARANOIA_DEBUG
+
 
 # Time control function for background processes, suitable for multiple synchronous processes
 # Fills a global variable called WAIT_FOR_TASK_COMPLETION_$callerName that contains list of failed pids in format pid1:result1;pid2:result2
@@ -778,6 +809,11 @@ function WaitForTaskCompletion {
 		pidsArray=("${newPidsArray[@]}")
 		# Trivial wait time for bash to not eat up all CPU
 		sleep $sleepTime
+
+		if [ "$_PERF_PROFILER" == "yes" ]; then				##__WITH_PARANOIA_DEBUG
+			_PerfProfiler						##__WITH_PARANOIA_DEBUG
+		fi								##__WITH_PARANOIA_DEBUG
+
 	done
 
 	Logger "${FUNCNAME[0]} ended for [$callerName] using [$pidCount] subprocesses with [$errorcount] errors." "PARANOIA_DEBUG"	#__WITH_PARANOIA_DEBUG
@@ -943,6 +979,10 @@ function ParallelExec {
 
 		# Trivial wait time for bash to not eat up all CPU
 		sleep $sleepTime
+
+		if [ "$_PERF_PROFILER" == "yes" ]; then				##__WITH_PARANOIA_DEBUG
+			_PerfProfiler						##__WITH_PARANOIA_DEBUG
+		fi								##__WITH_PARANOIA_DEBUG
 	done
 
 	return $errorCount
@@ -1154,9 +1194,6 @@ function GetLocalOS {
 		exit 1
 		;;
 	esac
-	if [ "$_OFUNCTIONS_VERSION" != "" ]; then
-		Logger "Local OS: [$localOsVar]." "DEBUG"
-	fi
 
 	# Get linux versions
 	if [ -f "/etc/os-release" ]; then
@@ -1166,6 +1203,10 @@ function GetLocalOS {
 
 	# Add a global variable for statistics in installer
 	LOCAL_OS_FULL="$localOsVar ($localOsName $localOsVer)"
+
+	if [ "$_OFUNCTIONS_VERSION" != "" ]; then
+		Logger "Local OS: [$LOCAL_OS_FULL]." "DEBUG"
+	fi
 }
 
 #__BEGIN_WITH_PARANOIA_DEBUG
@@ -1274,7 +1315,7 @@ SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.$INSTANCE_ID.$SCRIPT_PID.$TSTAMP.SERVICE
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
 		if ! type "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
-			Logger "$OCR_ENGINE_EXEC not present." "CRITICAL"
+			Logger "OCR engine executable [$OCR_ENGINE_EXEC] not present." "CRITICAL"
 			exit 1
 		fi
 	else
@@ -1284,7 +1325,7 @@ function CheckEnvironment {
 
 	if [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
 		if ! type "$OCR_PREPROCESSOR_EXEC" > /dev/null 2>&1; then
-			Logger "$OCR_PREPROCESSOR_EXEC not present." "CRITICAL"
+			Logger "OCR preprocessor executable [$OCR_PREPROCESSOR_EXEC] not present." "CRITICAL"
 			exit 1
 		fi
 	fi
@@ -1347,13 +1388,13 @@ function CheckEnvironment {
 
 	if [ "$OCR_ENGINE" == "tesseract3" ]; then
 		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
-			Logger "$PDF_TO_TIFF_EXEC not present." "CRITICAL"
+			Logger "PDF to TIFF conversion executable [$PDF_TO_TIFF_EXEC] not present." "CRITICAL"
 			exit 1
 		fi
 
 		TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
 		if [ $(VerComp "$TESSERACT_VERSION" "3.00") -gt 1 ]; then
-			Logger "Tesseract version $TESSERACT_VERSION is not supported. Please use version 3.x or better." "CRITICAL"
+			Logger "Tesseract version [$TESSERACT_VERSION] is not supported. Please use version 3.x or better." "CRITICAL"
 			exit 1
 		fi
 	fi

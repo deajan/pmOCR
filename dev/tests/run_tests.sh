@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# pmocr test suite 2017052801
+# pmocr test suite 2018010401
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -103,6 +103,9 @@ function oneTimeSetUp () {
 	GetLocalOS
 
 	echo "Running on $LOCAL_OS_FULL"
+
+	echo ""
+	echo -e "Running tesseract\n$(tesseract -v)"
 
 	#TODO: Assuming that macos has the same syntax than bsd here
         if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "Cygwin" ]; then

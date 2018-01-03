@@ -376,6 +376,8 @@ function test_MovedFilesService () {
 	sleep 90
 
 	# Test original file presence in succeed
+	#WIP
+	ls "$PMOCR_TESTS_DIR/$SUCCEED_DIR"
 
 	# Don't test PDF output on tesseract <= 3.02
         if [ $(VerComp "$TESSERACT_VERSION" "3.03") -ne 2 ]; then

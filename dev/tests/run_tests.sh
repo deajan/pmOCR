@@ -363,7 +363,7 @@ function test_MovedFilesService () {
 	PrepareLocalDirs
 	CopyTestFiles
 
-	./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
+	_DEBUG=yes ./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
 	pid=$!
 
 	if [ ! $pid -ne 0 ]; then
@@ -373,7 +373,7 @@ function test_MovedFilesService () {
 	fi
 
 	# Trivial wait time for pmocr to process files
-	sleep 60
+	sleep 90
 
 	# Test original file presence in succeed
 

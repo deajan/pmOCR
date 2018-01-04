@@ -159,11 +159,11 @@ function OCR {
 
 		#WIP
 		# Add check to see whether outputFileName already exists, if so, add a random timestamp
-		Logger "$outputFileName" "WARN"
+		Logger "---$outputFileName" "WARN"
 		if [ -f "$outputFileName" ]; then
-			outputFileName="$outputFileName$(date '+%Y%m%dT%H%M%S.%N')"
+			outputFileName="$outputFileName$(date '+%N')"
 		fi
-		Logger "$outputFileName" "WARN"
+		Logger "----$outputFileName" "WARN"
 
 		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$inputFileName" 2> /dev/null | wc -l) -lt 3 ])); then
 

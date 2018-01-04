@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.8-dev
-PROGRAM_BUILD=2018010301
+PROGRAM_BUILD=2018010401
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -1565,6 +1565,14 @@ function OCR {
 
 		# Expand $FILENAME_ADDITION
 		eval "outputFileName=\"${inputFileName%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\""
+
+		#WIP
+		# Add check to see whether outputFileName already exists, if so, add a random timestamp
+		Logger "---$outputFileName" "WARN"
+		if [ -f "$outputFileName" ]; then
+			outputFileName="$outputFileName$(date '+%N')"
+		fi
+		Logger "----$outputFileName" "WARN"
 
 		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$inputFileName" 2> /dev/null | wc -l) -lt 3 ])); then
 

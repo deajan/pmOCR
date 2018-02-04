@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.5.8-dev
-PROGRAM_BUILD=2018010401
+PROGRAM_BUILD=2018020401
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -621,6 +621,23 @@ if [ "$CONFIG_FILE" != "" ]; then
 	LoadConfigFile "$CONFIG_FILE"
 else
 	LoadConfigFile "$DEFAULT_CONFIG_FILE"
+fi
+
+if [ "$LOGFILE" == "" ]; then
+        if [ -w /var/log ]; then
+                LOG_FILE="/var/log/$PROGRAM.$INSTANCE_ID.log"
+        elif ([ "$HOME" != "" ] && [ -w "$HOME" ]); then
+                LOG_FILE="$HOME/$PROGRAM.$INSTANCE_ID.log"
+        else
+                LOG_FILE="./$PROGRAM.$INSTANCE_ID.log"
+        fi
+else
+        LOG_FILE="$LOGFILE"
+fi
+if [ ! -w "$(dirname $LOG_FILE)" ]; then
+        echo "Cannot write to log [$(dirname $LOG_FILE)]."
+else
+        Logger "Script begin, logging to [$LOG_FILE]." "DEBUG"
 fi
 
 # Set default conversion format

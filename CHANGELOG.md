@@ -3,6 +3,7 @@ RECENT CHANGES
 
 dd Mmm YYYY: v1.6.0
 
+!- Fixed logs not writing correctly in service mode (OCR_Dispatch and lower function Logger doesn't work in)
 - Skipping files currently being written to (workaround for slow file transfers), leaving them for next run
 - Add nanoseconds to filename if output file already exists on move
 - More clear preflight error messages

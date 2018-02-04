@@ -436,7 +436,7 @@ function OCR_Dispatch {
 	# Check if file is currently being written to (mitigates slow transfer files being processed before transfer is finished)
 	touch "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0 | while IFS= read -r -d $'\0' file; do
-		if ! lsof -f -- "$file" > /dev/nul 2>&1; then
+		if ! lsof -f -- "$file" > /dev/null 2>&1; then
 			echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 		else
 			Logger "Skipping file [$file] currently being written to." "NOTICE"

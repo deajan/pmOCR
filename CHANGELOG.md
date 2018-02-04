@@ -1,10 +1,15 @@
 RECENT CHANGES
 --------------
 
-dd Mmm YYYY: v1.5.8
+dd Mmm YYYY: v1.6.0
 
+- Skipping files currently being written to (workaround for slow file transfers), leaving them for next run
+- Add nanoseconds to filename if output file already exists on move
 - More clear preflight error messages
-- Updated ofunctions to fix log sending with double compressed extensions
+- Updated ofunctions
+	- New more complete ExecTasks function to replace ParallelExec
+	- Fix log sending with double compressed extensions
+	- Minor fixes
 
 21 Avr 2017: v1.5.7
 

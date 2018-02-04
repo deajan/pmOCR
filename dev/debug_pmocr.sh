@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.5.8-dev
-PROGRAM_BUILD=2018020402
+PROGRAM_VERSION=1.6.0-dev
+PROGRAM_BUILD=2018020403
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -1464,6 +1464,11 @@ function CheckEnvironment {
 			exit 1
 		fi
 
+		if ! type lsof > /dev/null 2>&1; then
+			Logger "lsof not present." "CRITICAL"
+			exit 1
+		fi
+
 		if [ "$PDF_MONITOR_DIR" != "" ]; then
 			if [ ! -w "$PDF_MONITOR_DIR" ]; then
 				Logger "Directory [$PDF_MONITOR_DIR] not writable." "ERROR"
@@ -1834,10 +1839,20 @@ function OCR_Dispatch {
 		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	fi
 
-	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+	# Old way of doing
+	#find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+
+	# Check if file is currently being written to (mitigates slow transfer files being processed before transfer is finished)
+	touch "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+	find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0 | while IFS= read -r -d $'\0' file; do
+		if ! lsof -f -- "$file" > /dev/nul 2>&1; then
+			echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+		else
+			Logger "Skipping file [$file] currently being written to." "NOTICE"
+		fi
+	done
+
 	ExecTasks "${FUNCNAME[0]}" 0 0 3600 0 .05 $KEEP_LOGGING true false false false 6 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" "" $NUMBER_OF_PROCESSES
-	#WIP
-	#ParallelExec $NUMBER_OF_PROCESSES "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" true 3600 0 .05 $KEEP_LOGGING true false false
 	retval=$?
 	if [ $retval -ne 0 ]; then
 		Logger "Failed ParallelExec run." "ERROR"

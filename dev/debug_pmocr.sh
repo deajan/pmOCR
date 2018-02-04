@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018020404
+PROGRAM_BUILD=2018020501
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -1783,8 +1783,8 @@ function OCR {
 					fi
 				fi
 
-				if [ "$_SILENT" == false ]; then
-					Logger "Processed file [$inputFileName]." "NOTICE"
+				if [ $_SILENT != true ]; then
+					Logger "Processed file [$inputFileName]." "ALWAYS"
 				fi
 			fi
 
@@ -1848,7 +1848,7 @@ function OCR_Dispatch {
 		if ! lsof -f -- "$file" > /dev/null 2>&1; then
 			echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 		else
-			Logger "Skipping file [$file] currently being written to." "NOTICE"
+			Logger "Skipping file [$file] currently being written to." "ALWAYS"
 		fi
 	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
 

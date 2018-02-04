@@ -439,7 +439,7 @@ function OCR_Dispatch {
 		if ! lsof -f -- "$file" > /dev/null 2>&1; then
 			echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 		else
-			Logger "Skipping file [$file] currently being written to." "NOTICE"
+			Logger "Skipping file [$file] currently being written to." "ALWAYS"
 		fi
 	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
 

@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018020404
+PROGRAM_BUILD=2018020501
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -374,8 +374,8 @@ function OCR {
 					fi
 				fi
 
-				if [ "$_SILENT" == false ]; then
-					Logger "Processed file [$inputFileName]." "NOTICE"
+				if [ $_SILENT != true ]; then
+					Logger "Processed file [$inputFileName]." "ALWAYS"
 				fi
 			fi
 

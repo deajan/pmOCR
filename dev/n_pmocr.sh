@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018020501
+PROGRAM_BUILD=2018022401
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -443,7 +443,7 @@ function OCR_Dispatch {
 		fi
 	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
 
-	ExecTasks "${FUNCNAME[0]}" 0 0 3600 0 .05 $KEEP_LOGGING true false false false 6 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" "" $NUMBER_OF_PROCESSES
+	ExecTasks "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" "${FUNCNAME[0]}" true 0 0 3600 0 true .05 $KEEP_LOGGING false false false $NUMBER_OF_PROCESSES
 	retval=$?
 	if [ $retval -ne 0 ]; then
 		Logger "Failed ParallelExec run." "ERROR"

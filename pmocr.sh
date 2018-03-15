@@ -29,7 +29,7 @@ fi
 #command line arguments don't take -AaqV for example
 
 _OFUNCTIONS_VERSION=2.3.0-dev
-_OFUNCTIONS_BUILD=2018022402
+_OFUNCTIONS_BUILD=2018031501
 _OFUNCTIONS_BOOTSTRAP=true
 
 ## BEGIN Generic bash functions written in 2013-2017 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
@@ -1211,7 +1211,7 @@ function IsNumeric {
 
 #### CheckRFC822 SUBSET ####
 # Checks email address validity
-function checkRFC822 {
+function CheckRFC822 {
 	local mail="${1}"
 	local rfc822="^[a-z0-9!#\$%&'*+/=?^_\`{|}~-]+(\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*@([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?\$"
 

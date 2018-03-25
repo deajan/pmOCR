@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 
-## MERGE 2017040901
+## MERGE 2018021901
 
 ## Merges ofunctions.sh and n_program.sh into program.sh
 ## Adds installer
 
+function Usage {
+	echo "Merges ofunctions.sh and n_program.sh into debug_program.sh and ../program.sh"
+	echo "Usage"
+	echo "$0 osync|obackup|pmocr"
+}
+
 function __PREPROCESSOR_Merge {
-	PROGRAM=pmocr
+	local PROGRAM="$1"
 
 	VERSION=$(grep "PROGRAM_VERSION=" n_$PROGRAM.sh)
 	VERSION=${VERSION#*=}
@@ -24,8 +30,7 @@ function __PREPROCESSOR_Merge {
 		__PREPROCESSOR_MergeSubset "$subset" "${subset//SUBSET/SUBSET END}" "ofunctions.sh" "debug_$PROGRAM.sh"
 	done
 
-	__PREPROCESSOR_CleanDebug
-	__PREPROCESSOR_CopyCommons
+	__PREPROCESSOR_CleanDebug "$PROGRAM"
 	rm -f tmp_$PROGRAM.sh
 	if [ $? != 0 ]; then
 		QuickLogger "Cannot remove tmp_$PROGRAM.sh"
@@ -54,6 +59,7 @@ function __PREPROCESSOR_Constants {
 	'#### VerComp SUBSET ####'
 	'#### GetConfFileValue SUBSET ####'
 	'#### SetConfFileValue SUBSET ####'
+	'#### CheckRFC822 SUBSET ####'
 	)
 }
 
@@ -104,6 +110,8 @@ function __PREPROCESSOR_MergeSubset {
 }
 
 function __PREPROCESSOR_CleanDebug {
+	local PROGRAM="$1"
+
 	sed '/'$PARANOIA_DEBUG_BEGIN'/,/'$PARANOIA_DEBUG_END'/d' debug_$PROGRAM.sh | grep -v "$PARANOIA_DEBUG_LINE" > ../$PROGRAM.sh
 	if [ $? != 0 ]; then
 		QuickLogger "Cannot remove PARANOIA_DEBUG code from standard build."
@@ -127,6 +135,8 @@ function __PREPROCESSOR_CleanDebug {
 }
 
 function __PREPROCESSOR_CopyCommons {
+	local PROGRAM="$1"
+
 	sed "s/\[prgname\]/$PROGRAM/g" common_install.sh > ../install.sh
 	if [ $? != 0 ]; then
 		QuickLogger "Cannot assemble install."
@@ -172,5 +182,19 @@ function __PREPROCESSOR_CopyCommons {
 
 # If sourced don't do anything
 if [ "$(basename $0)" == "merge.sh" ]; then
-	__PREPROCESSOR_Merge
+	if [ "$1" == "osync" ]; then
+
+		__PREPROCESSOR_Merge osync
+		__PREPROCESSOR_Merge osync_target_helper
+		__PREPROCESSOR_CopyCommons osync
+	elif [ "$1" == "obackup" ]; then
+		__PREPROCESSOR_Merge obackup
+		__PREPROCESSOR_CopyCommons obackup
+	elif [ "$1" == "pmocr" ]; then
+		__PREPROCESSOR_Merge pmocr
+		__PREPROCESSOR_CopyCommons pmocr
+	else
+		echo "No valid program given."
+		exit 1
+	fi
 fi

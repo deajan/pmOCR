@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018022401
+PROGRAM_BUILD=2018032501
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -22,9 +22,6 @@ fi
 
 include #### OFUNCTIONS MINI SUBSET ####
 include #### VerComp SUBSET ####
-
-# This file must not be cleaned with CleanUp function, hence it's naming scheme is different
-SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.$INSTANCE_ID.$SCRIPT_PID.$TSTAMP.SERVICE-MONITOR.run"
 
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
@@ -651,6 +648,9 @@ if [ ! -w "$(dirname $LOG_FILE)" ]; then
 else
         Logger "Script begin, logging to [$LOG_FILE]." "DEBUG"
 fi
+
+# This file must not be cleaned with CleanUp function, hence it's naming scheme is different
+SERVICE_MONITOR_FILE="$RUN_DIR/$PROGRAM.$INSTANCE_ID.$SCRIPT_PID.$TSTAMP.SERVICE-MONITOR.run"
 
 # Set default conversion format
 if [ $pdf == false ] && [ $docx == false ] && [ $xlsx == false ] && [ $txt == false ] && [ $csv == false ]; then

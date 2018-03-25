@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# pmocr test suite 2018010401
+# pmocr test suite 2018032501
 
 PMOCR_DIR="$(pwd)"
 PMOCR_DIR=${PMOCR_DIR%%/dev*}
@@ -151,7 +151,7 @@ function oneTimeTearDown () {
 # This test has to be done everytime in order for main executable to be fresh
 function test_Merge () {
 	cd "$DEV_DIR"
-	./merge.sh
+	./merge.sh pmocr
 	assertEquals "Merging code" "0" $?
 
 	cd "$PMOCR_DIR"
@@ -366,7 +366,7 @@ function test_MovedFilesService () {
 	PrepareLocalDirs
 	CopyTestFiles
 
-	_DEBUG=yes ./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
+	./$PMOCR_EXECUTABLE --service --config="$CONF_DIR/$SERVICE_CONF" &
 	pid=$!
 
 	if [ ! $pid -ne 0 ]; then
@@ -377,10 +377,6 @@ function test_MovedFilesService () {
 
 	# Trivial wait time for pmocr to process files
 	sleep 90
-
-	# Test original file presence in succeed
-	#WIP
-	ls "$PMOCR_TESTS_DIR/$SUCCEED_DIR"
 
 	# Don't test PDF output on tesseract <= 3.02
         if [ $(VerComp "$TESSERACT_VERSION" "3.03") -ne 2 ]; then

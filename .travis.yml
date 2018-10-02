@@ -7,6 +7,7 @@ os:
 
 before_install:
     sudo apt-get update
+    sleep 10
     sudo apt-get install tesseract-ocr tesseract-ocr-osd tesseract-ocr-eng ghostscript inotify-tools poppler-utils
 
 script:

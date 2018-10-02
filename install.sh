@@ -2,8 +2,6 @@
 
 ## Installer script suitable for osync / obackup / pmocr
 
-_OFUNCTIONS_BOOTSTRAP=true
-
 PROGRAM=pmocr
 
 PROGRAM_VERSION=$(grep "PROGRAM_VERSION=" $PROGRAM.sh)
@@ -12,11 +10,398 @@ PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
 SSH_FILTER="ssh_filter.sh"
 
-SCRIPT_BUILD=2017072701
+SCRIPT_BUILD=2018100201
+INSTANCE_ID="installer-$SCRIPT_BUILD"
 
 ## osync / obackup / pmocr / zsnap install script
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8, 10 and 11
 ## Please adapt this to fit your distro needs
+
+_OFUNCTIONS_VERSION=2.3.0-RC2
+_OFUNCTIONS_BUILD=2018100205
+_OFUNCTIONS_BOOTSTRAP=true
+
+if ! type "$BASH" > /dev/null; then
+	echo "Please run this script only with bash shell. Tested on bash >= 3.2"
+	exit 127
+fi
+
+## Correct output of sort command (language agnostic sorting)
+export LC_ALL=C
+
+## Default umask for file creation
+umask 0077
+
+# Standard alert mail body
+MAIL_ALERT_MSG="Execution of $PROGRAM instance $INSTANCE_ID on $(date) has warnings/errors."
+
+# Environment variables that can be overriden by programs
+_DRYRUN=false
+_LOGGER_SILENT=false
+_LOGGER_VERBOSE=false
+_LOGGER_ERR_ONLY=false
+_LOGGER_PREFIX="date"
+if [ "$KEEP_LOGGING" == "" ]; then
+	KEEP_LOGGING=1801
+fi
+
+# Initial error status, logging 'WARN', 'ERROR' or 'CRITICAL' will enable alerts flags
+ERROR_ALERT=false
+WARN_ALERT=false
+
+
+## allow debugging from command line with _DEBUG=yes
+if [ ! "$_DEBUG" == "yes" ]; then
+	_DEBUG=no
+	_LOGGER_VERBOSE=false
+else
+	trap 'TrapError ${LINENO} $?' ERR
+	_LOGGER_VERBOSE=true
+fi
+
+if [ "$SLEEP_TIME" == "" ]; then # Leave the possibity to set SLEEP_TIME as environment variable when runinng with bash -x in order to avoid spamming console
+	SLEEP_TIME=.05
+fi
+
+SCRIPT_PID=$$
+
+LOCAL_USER=$(whoami)
+LOCAL_HOST=$(hostname)
+
+if [ "$PROGRAM" == "" ]; then
+	PROGRAM="ofunctions"
+fi
+
+## Default log file until config file is loaded
+if [ -w /var/log ]; then
+	LOG_FILE="/var/log/$PROGRAM.log"
+elif ([ "$HOME" != "" ] && [ -w "$HOME" ]); then
+	LOG_FILE="$HOME/$PROGRAM.log"
+elif [ -w . ]; then
+	LOG_FILE="./$PROGRAM.log"
+else
+	LOG_FILE="/tmp/$PROGRAM.log"
+fi
+
+## Default directory where to store temporary run files
+if [ -w /tmp ]; then
+	RUN_DIR=/tmp
+elif [ -w /var/tmp ]; then
+	RUN_DIR=/var/tmp
+else
+	RUN_DIR=.
+fi
+
+# Get a random number on Windows BusyBox alike, also works on most Unixes that have dd, if dd is not found, then return $RANDOM
+function PoorMansRandomGenerator {
+	local digits="${1}" # The number of digits to generate
+	local number
+	local isFirst=true
+
+	if type dd >/dev/null 2>&1; then
+
+		# Some read bytes can't be used, se we read twice the number of required bytes
+		dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
+			if [ $isFirst == false ] || [ $(printf "%d" "'$char") != "0" ]; then
+				number=$number$(printf "%d" "'$char")
+				isFirst=false
+			fi
+			if [ ${#number} -ge $digits ]; then
+				echo ${number:0:$digits}
+				break;
+			fi
+		done
+	elif [ "$RANDOM" -ne 0 ]; then
+		 echo $RANDOM
+	else
+		Logger "Cannot generate random number." "ERROR"
+	fi
+}
+function PoorMansRandomGenerator {
+        local digits="${1}" # The number of digits to generate
+        local number
+
+        # Some read bytes can't be used, se we read twice the number of required bytes
+        dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
+                number=$number$(printf "%d" "'$char")
+                if [ ${#number} -ge $digits ]; then
+                        echo ${number:0:$digits}
+                        break;
+                fi
+        done
+}
+
+# Initial TSTMAP value before function declaration
+TSTAMP=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 4)
+
+# Default alert attachment filename
+ALERT_LOG_FILE="$RUN_DIR/$PROGRAM.$SCRIPT_PID.$TSTAMP.last.log"
+
+# Set error exit code if a piped command fails
+set -o pipefail
+set -o errtrace
+
+
+# Array to string converter, see http://stackoverflow.com/questions/1527049/bash-join-elements-of-an-array
+# usage: joinString separaratorChar Array
+function joinString {
+	local IFS="$1"; shift; echo "$*";
+}
+
+# Sub function of Logger
+function _Logger {
+	local logValue="${1}"		# Log to file
+	local stdValue="${2}"		# Log to screeen
+	local toStdErr="${3:-false}"	# Log to stderr instead of stdout
+
+	if [ "$logValue" != "" ]; then
+		echo -e "$logValue" >> "$LOG_FILE"
+
+		# Build current log file for alerts if we have a sufficient environment
+		if [ "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" != "" ]; then
+			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+		fi
+	fi
+
+	if [ "$stdValue" != "" ] && [ "$_LOGGER_SILENT" != true ]; then
+		if [ $toStdErr == true ]; then
+			# Force stderr color in subshell
+			(>&2 echo -e "$stdValue")
+
+		else
+			echo -e "$stdValue"
+		fi
+	fi
+}
+
+# Remote logger similar to below Logger, without log to file and alert flags
+function RemoteLogger {
+	local value="${1}"		# Sentence to log (in double quotes)
+	local level="${2}"		# Log level
+	local retval="${3:-undef}"	# optional return value of command
+
+	if [ "$_LOGGER_PREFIX" == "time" ]; then
+		prefix="TIME: $SECONDS - "
+	elif [ "$_LOGGER_PREFIX" == "date" ]; then
+		prefix="R $(date) - "
+	else
+		prefix=""
+	fi
+
+	if [ "$level" == "CRITICAL" ]; then
+		_Logger "" "$prefix\e[1;33;41m$value\e[0m" true
+		if [ $_DEBUG == "yes" ]; then
+			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
+		fi
+		return
+	elif [ "$level" == "ERROR" ]; then
+		_Logger "" "$prefix\e[31m$value\e[0m" true
+		if [ $_DEBUG == "yes" ]; then
+			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
+		fi
+		return
+	elif [ "$level" == "WARN" ]; then
+		_Logger "" "$prefix\e[33m$value\e[0m" true
+		if [ $_DEBUG == "yes" ]; then
+			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
+		fi
+		return
+	elif [ "$level" == "NOTICE" ]; then
+		if [ $_LOGGER_ERR_ONLY != true ]; then
+			_Logger "" "$prefix$value"
+		fi
+		return
+	elif [ "$level" == "VERBOSE" ]; then
+		if [ $_LOGGER_VERBOSE == true ]; then
+			_Logger "" "$prefix$value"
+		fi
+		return
+	elif [ "$level" == "ALWAYS" ]; then
+		_Logger	 "" "$prefix$value"
+		return
+	elif [ "$level" == "DEBUG" ]; then
+		if [ "$_DEBUG" == "yes" ]; then
+			_Logger "" "$prefix$value"
+			return
+		fi
+	else
+		_Logger "" "\e[41mLogger function called without proper loglevel [$level].\e[0m" true
+		_Logger "" "Value was: $prefix$value" true
+	fi
+}
+
+# General log function with log levels:
+
+# Environment variables
+# _LOGGER_SILENT: Disables any output to stdout & stderr
+# _LOGGER_ERR_ONLY: Disables any output to stdout except for ALWAYS loglevel
+# _LOGGER_VERBOSE: Allows VERBOSE loglevel messages to be sent to stdout
+
+# Loglevels
+# Except for VERBOSE, all loglevels are ALWAYS sent to log file
+
+# CRITICAL, ERROR, WARN sent to stderr, color depending on level, level also logged
+# NOTICE sent to stdout
+# VERBOSE sent to stdout if _LOGGER_VERBOSE = true
+# ALWAYS is sent to stdout unless _LOGGER_SILENT = true
+# DEBUG & PARANOIA_DEBUG are only sent to stdout if _DEBUG=yes
+# SIMPLE is a wrapper for QuickLogger that does not use advanced functionality
+function Logger {
+	local value="${1}"		# Sentence to log (in double quotes)
+	local level="${2}"		# Log level
+	local retval="${3:-undef}"	# optional return value of command
+
+	if [ "$_LOGGER_PREFIX" == "time" ]; then
+		prefix="TIME: $SECONDS - "
+	elif [ "$_LOGGER_PREFIX" == "date" ]; then
+		prefix="$(date '+%Y-%m-%d %H:%M:%S') - "
+	else
+		prefix=""
+	fi
+
+	## Obfuscate _REMOTE_TOKEN in logs (for ssh_filter usage only in osync and obackup)
+	value="${value/env _REMOTE_TOKEN=$_REMOTE_TOKEN/__(o_O)__}"
+	value="${value/env _REMOTE_TOKEN=\$_REMOTE_TOKEN/__(o_O)__}"
+
+	if [ "$level" == "CRITICAL" ]; then
+		_Logger "$prefix($level):$value" "$prefix\e[1;33;41m$value\e[0m" true
+		ERROR_ALERT=true
+		# ERROR_ALERT / WARN_ALERT is not set in main when Logger is called from a subprocess. Need to keep this flag.
+		echo -e "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$\n$prefix($level):$value" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP"
+		return
+	elif [ "$level" == "ERROR" ]; then
+		_Logger "$prefix($level):$value" "$prefix\e[91m$value\e[0m" true
+		ERROR_ALERT=true
+		echo -e "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$\n$prefix($level):$value" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP"
+		return
+	elif [ "$level" == "WARN" ]; then
+		_Logger "$prefix($level):$value" "$prefix\e[33m$value\e[0m" true
+		WARN_ALERT=true
+		echo -e "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$\n$prefix($level):$value" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.warn.$SCRIPT_PID.$TSTAMP"
+		return
+	elif [ "$level" == "NOTICE" ]; then
+		if [ "$_LOGGER_ERR_ONLY" != true ]; then
+			_Logger "$prefix$value" "$prefix$value"
+		fi
+		return
+	elif [ "$level" == "VERBOSE" ]; then
+		if [ $_LOGGER_VERBOSE == true ]; then
+			_Logger "$prefix($level):$value" "$prefix$value"
+		fi
+		return
+	elif [ "$level" == "ALWAYS" ]; then
+		_Logger "$prefix$value" "$prefix$value"
+		return
+	elif [ "$level" == "DEBUG" ]; then
+		if [ "$_DEBUG" == "yes" ]; then
+			_Logger "$prefix$value" "$prefix$value"
+			return
+		fi
+	elif [ "$level" == "SIMPLE" ]; then
+		if [ "$_LOGGER_SILENT" == true ]; then
+			_Logger "$preix$value"
+		else
+			_Logger "$preix$value" "$prefix$value"
+		fi
+		return
+	else
+		_Logger "\e[41mLogger function called without proper loglevel [$level].\e[0m" "\e[41mLogger function called without proper loglevel [$level].\e[0m" true
+		_Logger "Value was: $prefix$value" "Value was: $prefix$value" true
+	fi
+}
+
+# Portable child (and grandchild) kill function tester under Linux, BSD and MacOS X
+function KillChilds {
+	local pid="${1}" # Parent pid to kill childs
+	local self="${2:-false}" # Should parent be killed too ?
+
+	# Paranoid checks, we can safely assume that $pid should not be 0 nor 1
+	if [ $(IsInteger "$pid") -eq 0 ] || [ "$pid" == "" ] || [ "$pid" == "0" ] || [ "$pid" == "1" ]; then
+		Logger "Bogus pid given [$pid]." "CRITICAL"
+		return 1
+	fi
+
+	if kill -0 "$pid" > /dev/null 2>&1; then
+		if children="$(pgrep -P "$pid")"; then
+			if [[ "$pid" == *"$children"* ]]; then
+				Logger "Bogus pgrep implementation." "CRITICAL"
+				children="${children/$pid/}"
+			fi
+			for child in $children; do
+				KillChilds "$child" true
+			done
+		fi
+	fi
+
+	# Try to kill nicely, if not, wait 15 seconds to let Trap actions happen before killing
+	if [ "$self" == true ]; then
+		# We need to check for pid again because it may have disappeared after recursive function call
+		if kill -0 "$pid" > /dev/null 2>&1; then
+			kill -s TERM "$pid"
+			Logger "Sent SIGTERM to process [$pid]." "DEBUG"
+			if [ $? != 0 ]; then
+				sleep 15
+				Logger "Sending SIGTERM to process [$pid] failed." "DEBUG"
+				kill -9 "$pid"
+				if [ $? != 0 ]; then
+					Logger "Sending SIGKILL to process [$pid] failed." "DEBUG"
+					return 1
+				fi	# Simplify the return 0 logic here
+			else
+				return 0
+			fi
+		else
+			return 0
+		fi
+	else
+		return 0
+	fi
+}
+
+function KillAllChilds {
+	local pids="${1}" # List of parent pids to kill separated by semi-colon
+	local self="${2:-false}" # Should parent be killed too ?
+
+
+	local errorcount=0
+
+	IFS=';' read -a pidsArray <<< "$pids"
+	for pid in "${pidsArray[@]}"; do
+		KillChilds $pid $self
+		if [ $? != 0 ]; then
+			errorcount=$((errorcount+1))
+			fi
+	done
+	return $errorcount
+}
+
+function CleanUp {
+
+	if [ "$_DEBUG" != "yes" ]; then
+		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP"
+		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
+		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP.tmp"
+	fi
+}
+
+function GenericTrapQuit {
+	local exitcode=0
+
+	# Get ERROR / WARN alert flags from subprocesses that call Logger
+	if [ -f "$RUN_DIR/$PROGRAM.Logger.warn.$SCRIPT_PID.$TSTAMP" ]; then
+		WARN_ALERT=true
+		exitcode=2
+	fi
+	if [ -f "$RUN_DIR/$PROGRAM.Logger.error.$SCRIPT_PID.$TSTAMP" ]; then
+		ERROR_ALERT=true
+		exitcode=1
+	fi
+
+	CleanUp
+	exit $exitcode
+}
+
+
 
 # Get current install.sh path from http://stackoverflow.com/a/246128/2635443
 SCRIPT_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -45,8 +430,9 @@ function GetCommandlineArguments {
 			Usage
 			;;
                         *)
-			Logger "Unknown option '$i'" "CRITICAL"
+			Logger "Unknown option '$i'" "SIMPLE"
 			Usage
+			exit
                         ;;
                 esac
 	done
@@ -60,6 +446,7 @@ SERVICE_DIR_INIT=$FAKEROOT/etc/init.d
 # Should be /usr/lib/systemd/system, but /lib/systemd/system exists on debian & rhel / fedora
 SERVICE_DIR_SYSTEMD_SYSTEM=$FAKEROOT/lib/systemd/system
 SERVICE_DIR_SYSTEMD_USER=$FAKEROOT/etc/systemd/user
+SERVICE_DIR_OPENRC=$FAKEROOT/etc/init.d
 
 if [ "$PROGRAM" == "osync" ]; then
 	SERVICE_NAME="osync-srv"
@@ -70,6 +457,7 @@ fi
 SERVICE_FILE_INIT="$SERVICE_NAME"
 SERVICE_FILE_SYSTEMD_SYSTEM="$SERVICE_NAME@.service"
 SERVICE_FILE_SYSTEMD_USER="$SERVICE_NAME@.service.user"
+SERVICE_FILE_OPENRC="$SERVICE_NAME-openrc"
 
 ## Generic code
 
@@ -82,34 +470,14 @@ else
 	LOG_FILE="./$PROGRAM-install.log"
 fi
 
-# QuickLogger subfunction, can be called directly
-function _QuickLogger {
-	local value="${1}"
-	local destination="${2}" # Destination: stdout, log, both
-
-	if ([ "$destination" == "log" ] || [ "$destination" == "both" ]); then
-		echo -e "$(date) - $value" >> "$LOG_FILE"
-	elif ([ "$destination" == "stdout" ] || [ "$destination" == "both" ]); then
-		echo -e "$value"
-	fi
-}
-
-# Generic quick logging function
-function QuickLogger {
-	local value="${1}"
-
-	if [ "$_LOGGER_SILENT" == true ]; then
-		_QuickLogger "$value" "log"
-	else
-		_QuickLogger "$value" "stdout"
-	fi
-}
-## from https://gist.github.com/cdown/1163649
+## Modified version of https://gist.github.com/cdown/1163649
 function UrlEncode {
 	local length="${#1}"
 
+	local i
+
 	local LANG=C
-	for (( i = 0; i < length; i++ )); do
+	for i in $(seq 0 $((length-1))); do
 		local c="${1:i:1}"
 		case $c in
 			[a-zA-Z0-9.~_-])
@@ -186,10 +554,34 @@ function GetLocalOS {
 	if [ -f "/etc/os-release" ]; then
 		localOsName=$(GetConfFileValue "/etc/os-release" "NAME" true)
 		localOsVer=$(GetConfFileValue "/etc/os-release" "VERSION" true)
+	elif [ "$LOCAL_OS" == "BusyBox" ]; then
+		localOsVer=`ls --help 2>&1 | head -1 | cut -f2 -d' '`
+		localOsName="BusyBox"
 	fi
 
-	# Add a global variable for statistics in installer
-	LOCAL_OS_FULL="$localOsVar ($localOsName $localOsVer)"
+	# Get Host info for Windows
+	if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "BusyBox" ] || [ "$LOCAL_OS" == "Cygwin" ] || [ "$LOCAL_OS" == "WinNT10" ]; then localOsVar="$(uname -a)"
+		if [ "$PROGRAMW6432" != "" ]; then
+			LOCAL_OS_BITNESS=64
+			LOCAL_OS_FAMILY="Windows"
+		elif [ "$PROGRAMFILES" != "" ]; then
+			LOCAL_OS_BITNESS=32
+			LOCAL_OS_FAMILY="Windows"
+		# Case where running on BusyBox but no program files defined
+		elif [ "$LOCAL_OS" == "BusyBox" ]; then
+			LOCAL_OS_FAMILY="Unix"
+		fi
+	# Get Host info for Unix
+	else
+		LOCAL_OS_FAMILY="Unix"
+		if uname -m | grep '64' > /dev/null 2>&1; then
+			LOCAL_OS_BITNESS=64
+		else
+			LOCAL_OS_BITNESS=32
+		fi
+	fi
+
+	LOCAL_OS_FULL="$localOsVar ($localOsName $localOsVer) $LOCAL_OS_BITNESS-bit $LOCAL_OS_FAMILY"
 
 	if [ "$_OFUNCTIONS_VERSION" != "" ]; then
 		Logger "Local OS: [$LOCAL_OS_FULL]." "DEBUG"
@@ -238,12 +630,12 @@ function SetLocalOSSettings {
 	esac
 
 	if [ "$LOCAL_OS" == "Android" ] || [ "$LOCAL_OS" == "BusyBox" ]; then
-		QuickLogger "Cannot be installed on [$LOCAL_OS]. Please use $PROGRAM.sh directly."
+		Logger "Cannot be installed on [$LOCAL_OS]. Please use $PROGRAM.sh directly." "SIMPLE"
 		exit 1
 	fi
 
 	if ([ "$USER" != "" ] && [ "$(whoami)" != "$USER" ] && [ "$FAKEROOT" == "" ]); then
-		QuickLogger "Must be run as $USER."
+		Logger "Must be run as $USER." "SIMPLE"
 		exit 1
 	fi
 
@@ -251,14 +643,19 @@ function SetLocalOSSettings {
 }
 
 function GetInit {
-	if [ -f /sbin/init ]; then
+	if [ -f /sbin/openrc-run ]; then
+		init="openrc"
+		Logger "Detected openrc." "SIMPLE"
+	elif [ -f /sbin/init ]; then
 		if file /sbin/init | grep systemd > /dev/null; then
 			init="systemd"
+			Logger "Detected systemd." "SIMPLE"
 		else
 			init="initV"
+			Logger "Detected initV." "SIMPLE"
 		fi
 	else
-		QuickLogger "Can't detect initV or systemd. Service files won't be installed. You can still run $PROGRAM manually or via cron."
+		Logger "Can't detect initV, systemd or openRC. Service files won't be installed. You can still run $PROGRAM manually or via cron." "SIMPLE"
 		init="none"
 	fi
 }
@@ -269,9 +666,9 @@ function CreateDir {
 	if [ ! -d "$dir" ]; then
 		mkdir -p "$dir"
 		if [ $? == 0 ]; then
-			QuickLogger "Created directory [$dir]."
+			Logger "Created directory [$dir]." "SIMPLE"
 		else
-			QuickLogger "Cannot create directory [$dir]."
+			Logger "Cannot create directory [$dir]." "SIMPLE"
 			exit 1
 		fi
 	fi
@@ -280,36 +677,39 @@ function CreateDir {
 function CopyFile {
 	local sourcePath="${1}"
 	local destPath="${2}"
-	local fileName="${3}"
-	local fileMod="${4}"
-	local fileUser="${5}"
-	local fileGroup="${6}"
-	local overwrite="${7:-false}"
+	local sourceFileName="${3}"
+	local destFileName="${4}"
+	local fileMod="${5}"
+	local fileUser="${6}"
+	local fileGroup="${7}"
+	local overwrite="${8:-false}"
 
 	local userGroup=""
 	local oldFileName
 
-	if [ -f "$destPath/$fileName" ] && [ $overwrite == false ]; then
-		oldFileName="$fileName"
-		fileName="$oldFileName.new"
-		cp "$sourcePath/$oldFileName" "$destPath/$fileName"
-	else
-		cp "$sourcePath/$fileName" "$destPath"
+	if [ "$destFileName" == "" ]; then
+		destFileName="$sourceFileName"
 	fi
 
+	if [ -f "$destPath/$destFileName" ] && [ $overwrite == false ]; then
+		destfileName="$sourceFileName.new"
+		Logger "Copying [$sourceFileName] to [$destPath/$destFilename]." "SIMPLE"
+	fi
+
+	cp "$sourcePath/$sourceFileName" "$destPath/$destFileName"
 	if [ $? != 0 ]; then
-		QuickLogger "Cannot copy [$fileName] to [$destPath]. Make sure to run install script in the directory containing all other files."
-		QuickLogger "Also make sure you have permissions to write to [$BIN_DIR]."
+		Logger "Cannot copy [$sourcePath/$sourceFileName] to [$destPath/$destFileName]. Make sure to run install script in the directory containing all other files." "SIMPLE"
+		Logger "Also make sure you have permissions to write to [$BIN_DIR]." "SIMPLE"
 		exit 1
 	else
-		QuickLogger "Copied [$fileName] to [$destPath]."
+		Logger "Copied [$sourcePath/$sourceFileName] to [$destPath/$destFileName]." "SIMPLE"
 		if [ "$fileMod" != "" ]; then
-			chmod "$fileMod" "$destPath/$fileName"
+			chmod "$fileMod" "$destPath/$destFileName"
 			if [ $? != 0 ]; then
-				QuickLogger "Cannot set file permissions of [$destPath/$fileName] to [$fileMod]."
+				Logger "Cannot set file permissions of [$destPath/$destFileName] to [$fileMod]." "SIMPLE"
 				exit 1
 			else
-				QuickLogger "Set file permissions to [$fileMod] on [$destPath/$fileName]."
+				Logger "Set file permissions to [$fileMod] on [$destPath/$destFileName]." "SIMPLE"
 			fi
 		fi
 
@@ -320,12 +720,12 @@ function CopyFile {
 				userGroup="$userGroup"":$fileGroup"
 			fi
 
-			chown "$userGroup" "$destPath/$fileName"
+			chown "$userGroup" "$destPath/$destFileName"
 			if [ $? != 0 ]; then
-				QuickLogger "Could not set file ownership on [$destPath/$fileName] to [$userGroup]."
+				Logger "Could not set file ownership on [$destPath/$destFileName] to [$userGroup]." "SIMPLE"
 				exit 1
 			else
-				QuickLogger "Set file ownership on [$destPath/$fileName] to [$userGroup]."
+				Logger "Set file ownership on [$destPath/$destFileName] to [$userGroup]." "SIMPLE"
 			fi
 		fi
 	fi
@@ -341,7 +741,7 @@ function CopyExampleFiles {
 
 	for file in "${exampleFiles[@]}"; do
 		if [ -f "$SCRIPT_PATH/$file" ]; then
-			CopyFile "$SCRIPT_PATH" "$CONF_DIR" "$file" "" "" "" false
+			CopyFile "$SCRIPT_PATH" "$CONF_DIR" "$file" "$file" "" "" "" false
 		fi
 	done
 }
@@ -365,32 +765,37 @@ function CopyProgram {
 	fi
 
 	for file in "${binFiles[@]}"; do
-		CopyFile "$SCRIPT_PATH" "$BIN_DIR" "$file" 755 "$user" "$group" true
+		CopyFile "$SCRIPT_PATH" "$BIN_DIR" "$file" "$file" 755 "$user" "$group" true
 	done
 }
 
 function CopyServiceFiles {
 	if ([ "$init" == "systemd" ] && [ -f "$SCRIPT_PATH/$SERVICE_FILE_SYSTEMD_SYSTEM" ]); then
 		CreateDir "$SERVICE_DIR_SYSTEMD_SYSTEM"
-		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_SYSTEM" "$SERVICE_FILE_SYSTEMD_SYSTEM" "" "" "" true
+		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_SYSTEM" "$SERVICE_FILE_SYSTEMD_SYSTEM" "$SERVICE_FILE_SYSTEMD_SYSTEM" "" "" "" true
 		if [ -f "$SCRIPT_PATH/$SERVICE_FILE_SYSTEMD_USER" ]; then
 			CreateDir "$SERVICE_DIR_SYSTEMD_USER"
-			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_USER" "$SERVICE_FILE_SYSTEMD_USER" "" "" "" true
+			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_USER" "$SERVICE_FILE_SYSTEMD_USER" "$SERVICE_FILE_SYSTEMD_USER" "" "" "" true
 		fi
-
-		QuickLogger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_SYSTEMD_SYSTEM] and [$SERVICE_DIR_SYSTEMD_USER]."
-		QuickLogger "Can be activated with [systemctl start SERVICE_NAME@instance.conf] where instance.conf is the name of the config file in $CONF_DIR."
-		QuickLogger "Can be enabled on boot with [systemctl enable $SERVICE_NAME@instance.conf]."
-		QuickLogger "In userland, active with [systemctl --user start $SERVICE_NAME@instance.conf]."
+		Logger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_SYSTEMD_SYSTEM] and [$SERVICE_DIR_SYSTEMD_USER]." "SIMPLE"
+		Logger "Can be activated with [systemctl start SERVICE_NAME@instance.conf] where instance.conf is the name of the config file in $CONF_DIR." "SIMPLE"
+		Logger "Can be enabled on boot with [systemctl enable $SERVICE_NAME@instance.conf]." "SIMPLE"
+		Logger "In userland, active with [systemctl --user start $SERVICE_NAME@instance.conf]." "SIMPLE"
 	elif ([ "$init" == "initV" ] && [ -f "$SCRIPT_PATH/$SERVICE_FILE_INIT" ] && [ -d "$SERVICE_DIR_INIT" ]); then
-		CreateDir "$SERVICE_DIR_INIT"
-		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_INIT" "$SERVICE_FILE_INIT" "755" "" "" true
+		#CreateDir "$SERVICE_DIR_INIT"
+		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_INIT" "$SERVICE_FILE_INIT" "$SERVICE_FILE_INIT" "755" "" "" true
 
-		QuickLogger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_INIT]."
-		QuickLogger "Can be activated with [service $SERVICE_FILE_INIT start]."
-		QuickLogger "Can be enabled on boot with [chkconfig $SERVICE_FILE_INIT on]."
+		Logger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_INIT]." "SIMPLE"
+		Logger "Can be activated with [service $SERVICE_FILE_INIT start]." "SIMPLE"
+		Logger "Can be enabled on boot with [chkconfig $SERVICE_FILE_INIT on]." "SIMPLE"
+	elif ([ "$init" == "openrc" ] && [ -f "$SCRIPT_PATH/$SERVICE_FILE_OPENRC" ] && [ -d "$SERVICE_DIR_OPENRC" ]); then
+		# Rename service to usual service file
+		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_OPENRC" "$SERVICE_FILE_OPENRC" "$SERVICE_FILE_INIT" "755" "" "" true
+
+		Logger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_OPENRC]." "SIMPLE"
+		Logger "Can be activated with [rc-update add $SERVICE_NAME.instance] where instance is a configuration file found in /etc/osync." "SIMPLE"
 	else
-		QuickLogger "Cannot define what init style is in use on this system. Skipping service file installation."
+		Logger "Cannot properly find how to deal with init on this system. Skipping service file installation." "SIMPLE"
 	fi
 }
 
@@ -409,7 +814,7 @@ function Statistics {
 		fi
 	fi
 
-	QuickLogger "Neiter wget nor curl could be used for. Cannot run statistics. Use the provided link please."
+	Logger "Neiter wget nor curl could be used for. Cannot run statistics. Use the provided link please." "SIMPLE"
 	return 1
 }
 
@@ -419,12 +824,12 @@ function RemoveFile {
 	if [ -f "$file" ]; then
 		rm -f "$file"
 		if [ $? != 0 ]; then
-			QuickLogger "Could not remove file [$file]."
+			Logger "Could not remove file [$file]." "SIMPLE"
 		else
-			QuickLogger "Removed file [$file]."
+			Logger "Removed file [$file]." "SIMPLE"
 		fi
 	else
-		QuickLogger "File [$file] not found. Skipping."
+		Logger "File [$file] not found. Skipping." "SIMPLE"
 	fi
 }
 
@@ -438,13 +843,13 @@ function RemoveAll {
 	if [ ! -f "$BIN_DIR/osync.sh" ] && [ ! -f "$BIN_DIR/obackup.sh" ]; then		# Check if any other program requiring ssh filter is present before removal
 		RemoveFile "$BIN_DIR/$SSH_FILTER"
 	else
-		QuickLogger "Skipping removal of [$BIN_DIR/$SSH_FILTER] because other programs present that need it."
+		Logger "Skipping removal of [$BIN_DIR/$SSH_FILTER] because other programs present that need it." "SIMPLE"
 	fi
 	RemoveFile "$SERVICE_DIR_SYSTEMD_SYSTEM/$SERVICE_FILE_SYSTEMD_SYSTEM"
 	RemoveFile "$SERVICE_DIR_SYSTEMD_USER/$SERVICE_FILE_SYSTEMD_USER"
 	RemoveFile "$SERVICE_DIR_INIT/$SERVICE_FILE_INIT"
 
-	QuickLogger "Skipping configuration files in [$CONF_DIR]. You may remove this directory manually."
+	Logger "Skipping configuration files in [$CONF_DIR]. You may remove this directory manually." "SIMPLE"
 }
 
 function Usage {
@@ -457,6 +862,34 @@ function Usage {
 	exit 127
 }
 
+function TrapQuit {
+	local exitcode=0
+
+	# Get ERROR / WARN alert flags from subprocesses that call Logger
+	if [ -f "$RUN_DIR/$PROGRAM.Logger.warn.$SCRIPT_PID.$TSTAMP" ]; then
+		WARN_ALERT=true
+		exitcode=2
+	fi
+	if [ -f "$RUN_DIR/$PROGRAM.Logger.error.$SCRIPT_PID.$TSTAMP" ]; then
+		ERROR_ALERT=true
+		exitcode=1
+	fi
+
+	CleanUp
+	exit $exitcode
+}
+
+############################## Script entry point
+
+trap TrapQuit TERM EXIT HUP QUIT
+
+if [ ! -w "$(dirname $LOG_FILE)" ]; then
+        echo "Cannot write to log [$(dirname $LOG_FILE)]."
+else
+        Logger "Script begin, logging to [$LOG_FILE]." "DEBUG"
+fi
+
+
 GetLocalOS
 SetLocalOSSettings
 GetInit
@@ -465,7 +898,7 @@ STATS_LINK="http://instcount.netpower.fr?program=$PROGRAM&version=$PROGRAM_VERSI
 
 if [ "$ACTION" == "uninstall" ]; then
 	RemoveAll
-	QuickLogger "$PROGRAM uninstalled."
+	Logger "$PROGRAM uninstalled." "SIMPLE"
 else
 	CreateDir "$CONF_DIR"
 	CreateDir "$BIN_DIR"
@@ -474,11 +907,11 @@ else
 	if [ "$PROGRAM" == "osync" ] || [ "$PROGRAM" == "pmocr" ]; then
 		CopyServiceFiles
 	fi
-	QuickLogger "$PROGRAM installed. Use with $BIN_DIR/$PROGRAM"
+	Logger "$PROGRAM installed. Use with $BIN_DIR/$PROGRAM_BINARY" "SIMPLE"
 	if [ "$PROGRAM" == "osync" ] || [ "$PROGRAM" == "obackup" ]; then
-		QuickLogger ""
-		QuickLogger "If connecting remotely, consider setup ssh filter to enhance security."
-		QuickLogger ""
+		echo ""
+		Logger "If connecting remotely, consider setup ssh filter to enhance security." "SIMPLE"
+		echo ""
 	fi
 fi
 
@@ -486,7 +919,7 @@ if [ $_STATS -eq 1 ]; then
 	if [ $_LOGGER_SILENT == true ]; then
 		Statistics
 	else
-		QuickLogger "In order to make usage statistics, the script would like to connect to $STATS_LINK"
+		Logger "In order to make usage statistics, the script would like to connect to $STATS_LINK" "SIMPLE"
 		read -r -p "No data except those in the url will be send. Allow [Y/n] " response
 		case $response in
 			[nN])

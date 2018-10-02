@@ -1,23 +1,12 @@
 #!/usr/bin/env bash
-#### OFUNCTIONS FULL SUBSET ####
-#### OFUNCTIONS MINI SUBSET ####
+## Generic and highly portable bash functions written in 2013-2018 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
-#TODO: ExecTasks postponed arrays / files grow a lot. Consider having them "rolling"
-#done: add checkRFC function (and use it for --destination-mails)
-#done: ExecTasks still needs some better call argument list
-#done: ExecTasks sub function relocate
-#done: SendMail and SendEmail convert functions inverted, check on osync and obackup
-#command line arguments don't take -AaqV for example
+#TODO: ExecTasks postponed arrays / files grow a lot. Consider having them "rolling" (cleaned at numberOfEvents)
+#TODO: command line arguments don't take -AaqV for example
 
-_OFUNCTIONS_VERSION=2.3.0-dev
-_OFUNCTIONS_BUILD=2018031501
-#### _OFUNCTIONS_BOOTSTRAP SUBSET ####
-_OFUNCTIONS_BOOTSTRAP=true
-#### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
-
-## BEGIN Generic bash functions written in 2013-2017 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
-
+####################################################################################################################################################################
 ## To use in a program, define the following variables:
+
 ## PROGRAM=program-name
 ## INSTANCE_ID=program-instance-name
 ## _DEBUG=yes/no
@@ -26,10 +15,26 @@ _OFUNCTIONS_BOOTSTRAP=true
 ## _LOGGER_ERR_ONLY=true/false
 ## _LOGGER_PREFIX="date"/"time"/""
 
-#TODO: global WAIT_FOR_TASK_COMPLETION_id instead of callerName has to be backported to ParallelExec and osync / obackup / pmocr ocde
+## Also, set the following trap in order to clean temporary files
+## trap GenericTrapQuit TERM EXIT HUP QUIT
 
+## Then simply source ofunctions with
+## source "./ofunctions.sh"
+
+## Why use GenericTrapQuit in order to catch exitcode ?
 ## Logger sets {ERROR|WARN}_ALERT variable when called with critical / error / warn loglevel
 ## When called from subprocesses, variable of main process cannot be set. Status needs to be get via $RUN_DIR/$PROGRAM.Logger.{error|warn}.$SCRIPT_PID.$TSTAMP
+
+####################################################################################################################################################################
+
+#### OFUNCTIONS FULL SUBSET ####
+#### OFUNCTIONS MINI SUBSET ####
+#### OFUNCTIONS MICRO SUBSET ####
+_OFUNCTIONS_VERSION=2.3.0-RC2
+_OFUNCTIONS_BUILD=2018100205
+#### _OFUNCTIONS_BOOTSTRAP SUBSET ####
+_OFUNCTIONS_BOOTSTRAP=true
+#### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
 
 if ! type "$BASH" > /dev/null; then
 	echo "Please run this script only with bash shell. Tested on bash >= 3.2"
@@ -81,9 +86,6 @@ fi
 
 SCRIPT_PID=$$
 
-# TODO: Check if %N works on MacOS
-TSTAMP=$(date '+%Y%m%dT%H%M%S.%N')
-
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
 
@@ -111,6 +113,49 @@ else
 	RUN_DIR=.
 fi
 
+#### PoorMansRandomGenerator SUBSET ####
+# Get a random number on Windows BusyBox alike, also works on most Unixes that have dd, if dd is not found, then return $RANDOM
+function PoorMansRandomGenerator {
+	local digits="${1}" # The number of digits to generate
+	local number
+	local isFirst=true
+
+	if type dd >/dev/null 2>&1; then
+
+		# Some read bytes can't be used, se we read twice the number of required bytes
+		dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
+			if [ $isFirst == false ] || [ $(printf "%d" "'$char") != "0" ]; then
+				number=$number$(printf "%d" "'$char")
+				isFirst=false
+			fi
+			if [ ${#number} -ge $digits ]; then
+				echo ${number:0:$digits}
+				break;
+			fi
+		done
+	elif [ "$RANDOM" -ne 0 ]; then
+		 echo $RANDOM
+	else
+		Logger "Cannot generate random number." "ERROR"
+	fi
+}
+function PoorMansRandomGenerator {
+        local digits="${1}" # The number of digits to generate
+        local number
+
+        # Some read bytes can't be used, se we read twice the number of required bytes
+        dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
+                number=$number$(printf "%d" "'$char")
+                if [ ${#number} -ge $digits ]; then
+                        echo ${number:0:$digits}
+                        break;
+                fi
+        done
+}
+#### PoorMansRandomGenerator SUBSET END ####
+
+# Initial TSTMAP value before function declaration
+TSTAMP=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 4)
 
 # Default alert attachment filename
 ALERT_LOG_FILE="$RUN_DIR/$PROGRAM.$SCRIPT_PID.$TSTAMP.last.log"
@@ -118,13 +163,6 @@ ALERT_LOG_FILE="$RUN_DIR/$PROGRAM.$SCRIPT_PID.$TSTAMP.last.log"
 # Set error exit code if a piped command fails
 set -o pipefail
 set -o errtrace
-
-
-function Dummy {
-	__CheckArguments 0 $# "$@"	#__WITH_PARANOIA_DEBUG
-
-	sleep $SLEEP_TIME
-}
 
 #### Logger SUBSET ####
 #### RemoteLogger SUBSET ####
@@ -143,8 +181,11 @@ function _Logger {
 
 	if [ "$logValue" != "" ]; then
 		echo -e "$logValue" >> "$LOG_FILE"
-		# Current log file
-		echo -e "$logValue" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+
+		# Build current log file for alerts if we have a sufficient environment
+		if [ "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" != "" ]; then
+			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+		fi
 	fi
 
 	if [ "$stdValue" != "" ] && [ "$_LOGGER_SILENT" != true ]; then
@@ -179,7 +220,7 @@ function RemoteLogger {
 		fi
 		return
 	elif [ "$level" == "ERROR" ]; then
-		_Logger "" "$prefix\e[91m$value\e[0m" true
+		_Logger "" "$prefix\e[31m$value\e[0m" true
 		if [ $_DEBUG == "yes" ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
@@ -201,7 +242,7 @@ function RemoteLogger {
 		fi
 		return
 	elif [ "$level" == "ALWAYS" ]; then
-		_Logger  "" "$prefix$value"
+		_Logger	 "" "$prefix$value"
 		return
 	elif [ "$level" == "DEBUG" ]; then
 		if [ "$_DEBUG" == "yes" ]; then
@@ -235,6 +276,7 @@ function RemoteLogger {
 # VERBOSE sent to stdout if _LOGGER_VERBOSE = true
 # ALWAYS is sent to stdout unless _LOGGER_SILENT = true
 # DEBUG & PARANOIA_DEBUG are only sent to stdout if _DEBUG=yes
+# SIMPLE is a wrapper for QuickLogger that does not use advanced functionality
 function Logger {
 	local value="${1}"		# Sentence to log (in double quotes)
 	local level="${2}"		# Log level
@@ -243,7 +285,7 @@ function Logger {
 	if [ "$_LOGGER_PREFIX" == "time" ]; then
 		prefix="TIME: $SECONDS - "
 	elif [ "$_LOGGER_PREFIX" == "date" ]; then
-		prefix="$(date) - "
+		prefix="$(date '+%Y-%m-%d %H:%M:%S') - "
 	else
 		prefix=""
 	fi
@@ -291,37 +333,19 @@ function Logger {
 			_Logger "$prefix$value" "$prefix\e[35m$value\e[0m"	#__WITH_PARANOIA_DEBUG
 			return							#__WITH_PARANOIA_DEBUG
 		fi								#__WITH_PARANOIA_DEBUG
+	elif [ "$level" == "SIMPLE" ]; then
+		if [ "$_LOGGER_SILENT" == true ]; then
+			_Logger "$preix$value"
+		else
+			_Logger "$preix$value" "$prefix$value"
+		fi
+		return
 	else
 		_Logger "\e[41mLogger function called without proper loglevel [$level].\e[0m" "\e[41mLogger function called without proper loglevel [$level].\e[0m" true
 		_Logger "Value was: $prefix$value" "Value was: $prefix$value" true
 	fi
 }
 #### Logger SUBSET END ####
-
-#### QuickLogger SUBSET ####
-# QuickLogger subfunction, can be called directly
-function _QuickLogger {
-	local value="${1}"
-	local destination="${2}" # Destination: stdout, log, both
-
-	if ([ "$destination" == "log" ] || [ "$destination" == "both" ]); then
-		echo -e "$(date) - $value" >> "$LOG_FILE"
-	elif ([ "$destination" == "stdout" ] || [ "$destination" == "both" ]); then
-		echo -e "$value"
-	fi
-}
-
-# Generic quick logging function
-function QuickLogger {
-	local value="${1}"
-
-	if [ "$_LOGGER_SILENT" == true ]; then
-		_QuickLogger "$value" "log"
-	else
-		_QuickLogger "$value" "stdout"
-	fi
-}
-#### QuickLogger SUBSET END ####
 
 # Portable child (and grandchild) kill function tester under Linux, BSD and MacOS X
 function KillChilds {
@@ -335,7 +359,6 @@ function KillChilds {
 	fi
 
 	if kill -0 "$pid" > /dev/null 2>&1; then
-		# Warning: pgrep is not native on cygwin, have this checked in CheckEnvironment
 		if children="$(pgrep -P "$pid")"; then
 			if [[ "$pid" == *"$children"* ]]; then
 				Logger "Bogus pgrep implementation." "CRITICAL"
@@ -390,6 +413,38 @@ function KillAllChilds {
 	done
 	return $errorcount
 }
+
+#### CleanUp SUBSET ####
+function CleanUp {
+	__CheckArguments 0 $# "$@"	#__WITH_PARANOIA_DEBUG
+
+	if [ "$_DEBUG" != "yes" ]; then
+		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP"
+		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
+		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP.tmp"
+	fi
+}
+#### CleanUp SUBSET END ####
+
+function GenericTrapQuit {
+	local exitcode=0
+
+	# Get ERROR / WARN alert flags from subprocesses that call Logger
+	if [ -f "$RUN_DIR/$PROGRAM.Logger.warn.$SCRIPT_PID.$TSTAMP" ]; then
+		WARN_ALERT=true
+		exitcode=2
+	fi
+	if [ -f "$RUN_DIR/$PROGRAM.Logger.error.$SCRIPT_PID.$TSTAMP" ]; then
+		ERROR_ALERT=true
+		exitcode=1
+	fi
+
+	CleanUp
+	exit $exitcode
+}
+
+
+#### OFUNCTIONS MICRO SUBSET END ####
 
 # osync/obackup/pmocr script specific mail alert function, use SendEmail function for generic mail sending
 function SendAlert {
@@ -457,6 +512,12 @@ function SendAlert {
 # encryption can be set to tls, ssl or none
 # smtpUser and smtpPassword are optional
 # SendEmail "subject" "Body text" "receiver@example.com receiver2@otherdomain.com" "/path/to/attachment.file" "senderMail@example.com" "smtpServer.domain.tld" "smtpPort" "encryption" "smtpUser" "smtpPassword"
+
+# If text is received as attachment ATT00001.bin or noname, consider adding the following to /etc/mail.rc
+#set ttycharset=iso-8859-1
+#set sendcharsets=iso-8859-1
+#set encoding=8bit
+
 function SendEmail {
 	local subject="${1}"
 	local message="${2}"
@@ -479,11 +540,16 @@ function SendEmail {
 
 	local i
 
-	for i in "${destinationMails}"; do
-		if [ $(CheckRFC822 "$i") -ne 1 ]; then
-			Logger "Given email [$i] does not seem to be valid." "WARN"
-		fi
-	done
+	if [ "${destinationMails[@]}" != "" ]; then
+		for i in "${destinationMails[@]}"; do
+			if [ $(CheckRFC822 "$i") -ne 1 ]; then
+				Logger "Given email [$i] does not seem to be valid." "WARN"
+			fi
+		done
+	else
+		Logger "No valid email adresses given." "WARN"
+		return 1
+	fi
 
 	# Prior to sending an email, convert its body if needed
 	if [ "$MAIL_BODY_CHARSET" != "" ]; then
@@ -757,33 +823,33 @@ function ParallelExec {
 
 function ExecTasks {
 	# Mandatory arguments
-	local mainInput="${1}"                          # Contains list of pids / commands separated by semicolons or filepath to list of pids / commands
+	local mainInput="${1}"				# Contains list of pids / commands separated by semicolons or filepath to list of pids / commands
 
 	# Optional arguments
-	local id="${2:-base}"                           # Optional ID in order to identify global variables from this run (only bash variable names, no '-'). Global variables are WAIT_FOR_TASK_COMPLETION_$id and HARD_MAX_EXEC_TIME_REACHED_$id
-	local readFromFile="${3:-false}"                # Is mainInput / auxInput a semicolon separated list (true) or a filepath (false)
-	local softPerProcessTime="${4:-0}"              # Max time (in seconds) a pid or command can run before a warning is logged, unless set to 0
-	local hardPerProcessTime="${5:-0}"              # Max time (in seconds) a pid or command can run before the given command / pid is stopped, unless set to 0
-	local softMaxTime="${6:-0}"                     # Max time (in seconds) for the whole function to run before a warning is logged, unless set to 0
-	local hardMaxTime="${7:-0}"                     # Max time (in seconds) for the whole function to run before all pids / commands given are stopped, unless set to 0
-	local counting="${8:-true}"                     # Should softMaxTime and hardMaxTime be accounted since function begin (true) or since script begin (false)
-	local sleepTime="${9:-.5}"                      # Seconds between each state check. The shorter the value, the snappier ExecTasks will be, but as a tradeoff, more cpu power will be used (good values are between .05 and 1)
-	local keepLogging="${10:-1800}"                 # Every keepLogging seconds, an alive message is logged. Setting this value to zero disables any alive logging
-	local spinner="${11:-true}"                     # Show spinner (true) or do not show anything (false) while running
-	local noTimeErrorLog="${12:-false}"             # Log errors when reaching soft / hard execution times (false) or do not log errors on those triggers (true)
-	local noErrorLogsAtAll="${13:-false}"           # Do not log any errros at all (useful for recursive ExecTasks checks)
+	local id="${2:-base}"				# Optional ID in order to identify global variables from this run (only bash variable names, no '-'). Global variables are WAIT_FOR_TASK_COMPLETION_$id and HARD_MAX_EXEC_TIME_REACHED_$id
+	local readFromFile="${3:-false}"		# Is mainInput / auxInput a semicolon separated list (true) or a filepath (false)
+	local softPerProcessTime="${4:-0}"		# Max time (in seconds) a pid or command can run before a warning is logged, unless set to 0
+	local hardPerProcessTime="${5:-0}"		# Max time (in seconds) a pid or command can run before the given command / pid is stopped, unless set to 0
+	local softMaxTime="${6:-0}"			# Max time (in seconds) for the whole function to run before a warning is logged, unless set to 0
+	local hardMaxTime="${7:-0}"			# Max time (in seconds) for the whole function to run before all pids / commands given are stopped, unless set to 0
+	local counting="${8:-true}"			# Should softMaxTime and hardMaxTime be accounted since function begin (true) or since script begin (false)
+	local sleepTime="${9:-.5}"			# Seconds between each state check. The shorter the value, the snappier ExecTasks will be, but as a tradeoff, more cpu power will be used (good values are between .05 and 1)
+	local keepLogging="${10:-1800}"			# Every keepLogging seconds, an alive message is logged. Setting this value to zero disables any alive logging
+	local spinner="${11:-true}"			# Show spinner (true) or do not show anything (false) while running
+	local noTimeErrorLog="${12:-false}"		# Log errors when reaching soft / hard execution times (false) or do not log errors on those triggers (true)
+	local noErrorLogsAtAll="${13:-false}"		# Do not log any errros at all (useful for recursive ExecTasks checks)
 
 	# Parallelism specific arguments
-	local numberOfProcesses="${14:-0}"              # Number of simulanteous commands to run, given as mainInput. Set to 0 by default (WaitForTaskCompletion mode). Setting this value enables ParallelExec mode.
-	local auxInput="${15}"                          # Contains list of commands separated by semicolons or filepath fo list of commands. Exit code of those commands decide whether main commands will be executed or not
-	local maxPostponeRetries="${16:-3}"             # If a conditional command fails, how many times shall we try to postpone the associated main command. Set this to 0 to disable postponing
-	local minTimeBetweenRetries="${17:-300}"        # Time (in seconds) between postponed command retries
-	local validExitCodes="${18:-0}"                 # Semi colon separated list of valid main command exit codes which will not trigger errors
+	local numberOfProcesses="${14:-0}"		# Number of simulanteous commands to run, given as mainInput. Set to 0 by default (WaitForTaskCompletion mode). Setting this value enables ParallelExec mode.
+	local auxInput="${15}"				# Contains list of commands separated by semicolons or filepath fo list of commands. Exit code of those commands decide whether main commands will be executed or not
+	local maxPostponeRetries="${16:-3}"		# If a conditional command fails, how many times shall we try to postpone the associated main command. Set this to 0 to disable postponing
+	local minTimeBetweenRetries="${17:-300}"	# Time (in seconds) between postponed command retries
+	local validExitCodes="${18:-0}"			# Semi colon separated list of valid main command exit codes which will not trigger errors
 
 	local i
 
-	Logger "${FUNCNAME[0]} called by [${FUNCNAME[0]} < ${FUNCNAME[1]} < ${FUNCNAME[2]} < ${FUNCNAME[3]} < ${FUNCNAME[4]} ...]." "PARANOIA_DEBUG"     #__WITH_PARANOIA_DEBUG
-	__CheckArguments 1-18 $# "$@"                                                                                                                                          #__WITH_PARANOIA_DEBUG
+	Logger "${FUNCNAME[0]} called by [${FUNCNAME[0]} < ${FUNCNAME[1]} < ${FUNCNAME[2]} < ${FUNCNAME[3]} < ${FUNCNAME[4]} ...]." "PARANOIA_DEBUG"	 #__WITH_PARANOIA_DEBUG
+	__CheckArguments 1-18 $# "$@"																	       #__WITH_PARANOIA_DEBUG
 
 	# Since ExecTasks takes up to 17 arguments, do a quick preflight check in DEBUG mode
 	if [ "$_DEBUG" == "yes" ]; then
@@ -806,40 +872,40 @@ function ExecTasks {
 	IFS=';' read -r -a validExitCodes <<< "$validExitCodes"
 
 	# ParallelExec specific variables
-	local auxItemCount=0            # Number of conditional commands
-	local commandsArray=()          # Array containing commands
+	local auxItemCount=0		# Number of conditional commands
+	local commandsArray=()		# Array containing commands
 	local commandsConditionArray=() # Array containing conditional commands
-	local currentCommand            # Variable containing currently processed command
-	local currentCommandCondition   # Variable containing currently processed conditional command
-	local commandsArrayPid=()       # Array containing pids of commands currently run
-	local postponedRetryCount=0     # Number of current postponed commands retries
-	local postponedItemCount=0      # Number of commands that have been postponed (keep at least one in order to check once)
+	local currentCommand		# Variable containing currently processed command
+	local currentCommandCondition	# Variable containing currently processed conditional command
+	local commandsArrayPid=()	# Array containing pids of commands currently run
+	local postponedRetryCount=0	# Number of current postponed commands retries
+	local postponedItemCount=0	# Number of commands that have been postponed (keep at least one in order to check once)
 	local postponedCounter=0
-	local isPostponedCommand=false  # Is the current command from a postponed file ?
-	local postponedExecTime=0       # How much time has passed since last postponed condition was checked
-	local needsPostponing           # Does currentCommand need to be postponed
+	local isPostponedCommand=false	# Is the current command from a postponed file ?
+	local postponedExecTime=0	# How much time has passed since last postponed condition was checked
+	local needsPostponing		# Does currentCommand need to be postponed
 	local temp
 
 	# Common variables
-	local pid                       # Current pid working on
-	local pidState                  # State of the process
-	local mainItemCount=0           # number of given items (pids or commands)
-	local readFromFile              # Should we read pids / commands from a file (true)
+	local pid			# Current pid working on
+	local pidState			# State of the process
+	local mainItemCount=0		# number of given items (pids or commands)
+	local readFromFile		# Should we read pids / commands from a file (true)
 	local counter=0
-	local log_ttime=0               # local time instance for comparaison
+	local log_ttime=0		# local time instance for comparaison
 
-	local seconds_begin=$SECONDS    # Seconds since the beginning of the script
-	local exec_time=0               # Seconds since the beginning of this function
+	local seconds_begin=$SECONDS	# Seconds since the beginning of the script
+	local exec_time=0		# Seconds since the beginning of this function
 
-	local retval=0                  # return value of monitored pid process
-	local subRetval=0               # return value of condition commands
-	local errorcount=0              # Number of pids that finished with errors
-	local pidsArray                 # Array of currently running pids
-	local newPidsArray              # New array of currently running pids for next iteration
-	local pidsTimeArray             # Array containing execution begin time of pids
-	local executeCommand            # Boolean to check if currentCommand can be executed given a condition
+	local retval=0			# return value of monitored pid process
+	local subRetval=0		# return value of condition commands
+	local errorcount=0		# Number of pids that finished with errors
+	local pidsArray			# Array of currently running pids
+	local newPidsArray		# New array of currently running pids for next iteration
+	local pidsTimeArray		# Array containing execution begin time of pids
+	local executeCommand		# Boolean to check if currentCommand can be executed given a condition
 
-	local hasPids=false             # Are any valable pids given to function ?              #__WITH_PARANOIA_DEBUG
+	local hasPids=false		# Are any valable pids given to function ?		#__WITH_PARANOIA_DEBUG
 
 	local functionMode
 
@@ -892,7 +958,7 @@ function ExecTasks {
 		counter=$mainItemCount
 	fi
 
-	Logger "Running ${FUNCNAME[0]} as [$functionMode] for [$mainItemCount] mainItems and [$auxItemCount] auxItems." "PARANOIA_DEBUG"              #__WITH_PARANOIA_DEBUG
+	Logger "Running ${FUNCNAME[0]} as [$functionMode] for [$mainItemCount] mainItems and [$auxItemCount] auxItems." "PARANOIA_DEBUG"	      #__WITH_PARANOIA_DEBUG
 
 	# soft / hard execution time checks that needs to be a subfunction since it is called both from main loop and from parallelExec sub loop
 	function _ExecTasksTimeCheck {
@@ -1008,7 +1074,7 @@ function ExecTasks {
 					# Check for valid exit codes
 					if [ $(ArrayContains $retval "${validExitCodes[@]}") -eq 0 ]; then
 						if [ $noErrorLogsAtAll != true ]; then
-							Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "ERROR"
+							Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "DEBUG"
 							if [ "$functionMode" == "ParallelExec" ]; then
 								Logger "Command was [${commandsArrayPid[$pid]}]." "ERROR"
 							fi
@@ -1024,22 +1090,22 @@ function ExecTasks {
 						Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "DEBUG"
 					fi
 				fi
-				hasPids=true                                    ##__WITH_PARANOIA_DEBUG
+				hasPids=true					##__WITH_PARANOIA_DEBUG
 			fi
 		done
 
 		# hasPids can be false on last iteration in ParallelExec mode
-		if [ $hasPids == false ] && [ "$functionMode" = "WaitForTaskCompletion" ]; then                                 ##__WITH_PARANOIA_DEBUG
-			Logger "No valable pids given." "ERROR"                                                                 ##__WITH_PARANOIA_DEBUG
-		fi                                                                                                              ##__WITH_PARANOIA_DEBUG
+		if [ $hasPids == false ] && [ "$functionMode" = "WaitForTaskCompletion" ]; then					##__WITH_PARANOIA_DEBUG
+			Logger "No valable pids given." "ERROR"									##__WITH_PARANOIA_DEBUG
+		fi														##__WITH_PARANOIA_DEBUG
 		pidsArray=("${newPidsArray[@]}")
 
 		# Trivial wait time for bash to not eat up all CPU
 		sleep $sleepTime
 
-		if [ "$_PERF_PROFILER" == "yes" ]; then                         ##__WITH_PARANOIA_DEBUG
-			_PerfProfiler                                           ##__WITH_PARANOIA_DEBUG
-		fi                                                              ##__WITH_PARANOIA_DEBUG
+		if [ "$_PERF_PROFILER" == "yes" ]; then				##__WITH_PARANOIA_DEBUG
+			_PerfProfiler						##__WITH_PARANOIA_DEBUG
+		fi								##__WITH_PARANOIA_DEBUG
 
 	}
 
@@ -1187,16 +1253,6 @@ function ExecTasks {
 	fi
 }
 
-function CleanUp {
-	__CheckArguments 0 $# "$@"	#__WITH_PARANOIA_DEBUG
-
-	if [ "$_DEBUG" != "yes" ]; then
-		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP"
-		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
-		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP.tmp"
-	fi
-}
-
 # Usage: var=$(StripSingleQuotes "$var")
 function StripSingleQuotes {
 	local string="${1}"
@@ -1228,49 +1284,57 @@ function EscapeSpaces {
 	echo "${string// /\\ }"
 }
 
-function IsNumericExpand {
-	eval "local value=\"${1}\"" # Needed eval so variable variables can be processed
-
-	if [[ $value =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
-		echo 1
-	else
-		echo 0
-	fi
+# Usage var=$(EscapeDoubleQuotes "$var") or var="$(EscapeDoubleQuotes "$var")"
+function EscapeDoubleQuotes {
+	local value="${1}"
+		
+	echo "${value//\"/\\\"}"
 }
 
 # Usage [ $(IsNumeric $var) -eq 1 ]
 function IsNumeric {
 	local value="${1}"
 
-	if [[ $value =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-		echo 1
+	if type expr > /dev/null 2>&1; then
+		expr "$value" : "^[-+]\?[0-9]*\.\?[0-9]\+$" > /dev/null 2>&1
+		if [ $? -eq 0 ]; then
+			echo 1
+		else
+			echo 0
+		fi
 	else
-		echo 0
+		if [[ $value =~ ^[-+]?[0-9]+([.][0-9]+)?$ ]]; then
+			echo 1
+		else
+			echo 0
+		fi
 	fi
 }
 
-#### CheckRFC822 SUBSET ####
-# Checks email address validity
-function CheckRFC822 {
-	local mail="${1}"
-	local rfc822="^[a-z0-9!#\$%&'*+/=?^_\`{|}~-]+(\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*@([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?\$"
+function IsNumericExpand {
+	eval "local value=\"${1}\"" # Needed eval so variable variables can be processed
 
-	if [[ $mail =~ $rfc822 ]]; then
-		echo 1
-	else
-		echo 0
-	fi
+	echo $(IsNumeric "$value")
 }
-#### CheckRFC822 SUBSET END ####
 
 #### IsInteger SUBSET ####
+# Function is busybox compatible since busybox ash does not understand direct regex, we use expr
 function IsInteger {
 	local value="${1}"
 
-	if [[ $value =~ ^[0-9]+$ ]]; then
-		echo 1
+	if type expr > /dev/null 2>&1; then
+		expr "$value" : "^[0-9]\+$" > /dev/null 2>&1
+		if [ $? -eq 0 ]; then
+			echo 1
+		else
+			echo 0
+		fi
 	else
-		echo 0
+		if [[ $value =~ ^[0-9]+$ ]]; then
+			echo 1
+		else
+			echo 0
+		fi
 	fi
 }
 #### IsInteger SUBSET END ####
@@ -1308,13 +1372,29 @@ function HumanToNumeric {
 }
 #### HumanToNumeric SUBSET END ####
 
+#### CheckRFC822 SUBSET ####
+# Checks email address validity
+function CheckRFC822 {
+	local mail="${1}"
+	local rfc822="^[a-z0-9!#\$%&'*+/=?^_\`{|}~-]+(\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*@([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?\$"
+
+	if [[ $mail =~ $rfc822 ]]; then
+		echo 1
+	else
+		echo 0
+	fi
+}
+#### CheckRFC822 SUBSET END ####
+
 #### UrlEncode SUBSET ####
-## from https://gist.github.com/cdown/1163649
+## Modified version of https://gist.github.com/cdown/1163649
 function UrlEncode {
 	local length="${#1}"
 
+	local i
+
 	local LANG=C
-	for (( i = 0; i < length; i++ )); do
+	for i in $(seq 0 $((length-1))); do
 		local c="${1:i:1}"
 		case $c in
 			[a-zA-Z0-9.~_-])
@@ -1421,10 +1501,34 @@ function GetLocalOS {
 	if [ -f "/etc/os-release" ]; then
 		localOsName=$(GetConfFileValue "/etc/os-release" "NAME" true)
 		localOsVer=$(GetConfFileValue "/etc/os-release" "VERSION" true)
+	elif [ "$LOCAL_OS" == "BusyBox" ]; then
+		localOsVer=`ls --help 2>&1 | head -1 | cut -f2 -d' '`
+		localOsName="BusyBox"
 	fi
 
-	# Add a global variable for statistics in installer
-	LOCAL_OS_FULL="$localOsVar ($localOsName $localOsVer)"
+	# Get Host info for Windows
+	if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "BusyBox" ] || [ "$LOCAL_OS" == "Cygwin" ] || [ "$LOCAL_OS" == "WinNT10" ]; then localOsVar="$(uname -a)"
+		if [ "$PROGRAMW6432" != "" ]; then
+			LOCAL_OS_BITNESS=64
+			LOCAL_OS_FAMILY="Windows"
+		elif [ "$PROGRAMFILES" != "" ]; then
+			LOCAL_OS_BITNESS=32
+			LOCAL_OS_FAMILY="Windows"
+		# Case where running on BusyBox but no program files defined
+		elif [ "$LOCAL_OS" == "BusyBox" ]; then
+			LOCAL_OS_FAMILY="Unix"
+		fi
+	# Get Host info for Unix
+	else
+		LOCAL_OS_FAMILY="Unix"
+		if uname -m | grep '64' > /dev/null 2>&1; then
+			LOCAL_OS_BITNESS=64
+		else
+			LOCAL_OS_BITNESS=32
+		fi
+	fi
+
+	LOCAL_OS_FULL="$localOsVar ($localOsName $localOsVer) $LOCAL_OS_BITNESS-bit $LOCAL_OS_FAMILY"
 
 	if [ "$_OFUNCTIONS_VERSION" != "" ]; then
 		Logger "Local OS: [$LOCAL_OS_FULL]." "DEBUG"
@@ -1506,6 +1610,8 @@ function GetOs {
 	local localOsVar
 	local localOsName
 	local localOsVer
+	local localOsBitness
+	local localOsFamily
 
 	local osInfo="/etc/os-release"
 
@@ -1532,9 +1638,36 @@ function GetOs {
 		localOsName="${localOsName##*=}"
 		localOsVer=$(grep "^VERSION=" "$osInfo")
 		localOsVer="${localOsVer##*=}"
+	elif [ "$localOsVar" == "BusyBox" ]; then
+		localOsVer=`ls --help 2>&1 | head -1 | cut -f2 -d' '`
+		localOsName="BusyBox"
 	fi
 
-	echo "$localOsVar ($localOsName $localOsVer)"
+	# Get Host info for Windows
+	case $localOsVar in
+		*"MINGW32"*|*"MINGW64"*|*"MSYS"*|*"CYGWIN*"|*"Microsoft"*|*"WinNT10*")
+		if [ "$PROGRAMW6432" != "" ]; then
+			localOsBitness=64
+			localOsFamily="Windows"
+		elif [ "$PROGRAMFILES" != "" ]; then
+			localOsBitness=32
+			localOsFamily="Windows"
+		# Case where running on BusyBox but no program files defined
+		elif [ "$localOsVar" == "BusyBox" ]; then
+			localOsFamily="Unix"
+		fi
+		;;
+		*)
+		localOsFamily="Unix"
+		if uname -m | grep '64' > /dev/null 2>&1; then
+			localOsBitness=64
+		else
+			localOsBitness=32
+		fi
+		;;
+	esac
+
+	echo "$localOsVar ($localOsName $localOsVer) $localOsBitness-bit $localOsFamily"
 }
 
 GetOs
@@ -1542,6 +1675,9 @@ GetOs
 ENDSSH
 	if [ $? != 0 ]; then
 		Logger "Cannot connect to remote system [$REMOTE_HOST] port [$REMOTE_PORT]." "CRITICAL"
+		if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ]; then
+			Logger "$(cat "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "ERROR"
+		fi
 		exit 1
 	fi
 
@@ -1783,9 +1919,9 @@ function RsyncPatternsAdd {
 			rest="${rest#*$PATH_SEPARATOR_CHAR}"
 		fi
 			if [ "$RSYNC_PATTERNS" == "" ]; then
-			RSYNC_PATTERNS="--"$patternType"=\"$str\""
+			RSYNC_PATTERNS="--$patternType=\"$str\""
 		else
-			RSYNC_PATTERNS="$RSYNC_PATTERNS --"$patternType"=\"$str\""
+			RSYNC_PATTERNS="$RSYNC_PATTERNS --$patternType=\"$str\""
 		fi
 	done
 	set +f
@@ -1802,7 +1938,7 @@ function RsyncPatternsFromAdd {
 	fi
 
 	if [ -e "$patternFrom" ]; then
-		RSYNC_PATTERNS="$RSYNC_PATTERNS --"$patternType"-from=\"$patternFrom\""
+		RSYNC_PATTERNS="$RSYNC_PATTERNS --$patternType-from=\"$patternFrom\""
 	fi
 }
 
@@ -1960,7 +2096,7 @@ function InitLocalOSDependingSettings {
 	## Using mingw version of find instead of windows one
 	## Getting running processes is quite different
 	## Ping command is not the same
-	if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "Cygwin" ]; then
+	if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "Cygwin" ] || [ "$LOCAL_OS" == "Microsoft" ] || [ "$LOCAL_OS" == "WinNT10" ]; then
 		FIND_CMD=$(dirname $BASH)/find
 		PING_CMD='$SYSTEMROOT\system32\ping -n 2'
 
@@ -2018,8 +2154,8 @@ function InitRemoteOSDependingSettings {
 		REMOTE_STAT_CTIME_MTIME_CMD="stat -c \\\"%n;%Z;%Y\\\""
 	fi
 
-	## Set rsync default arguments
-	RSYNC_ARGS="-rltD -8"
+	## Set rsync default arguments (complete with -r or -d depending on recursivity later)
+	RSYNC_DEFAULT_ARGS="-ltD -8"
 	if [ "$_DRYRUN" == true ]; then
 		RSYNC_DRY_ARG="-n"
 		DRY_WARNING="/!\ DRY RUN "
@@ -2057,43 +2193,47 @@ function InitRemoteOSDependingSettings {
 	fi
 	if [ "$RSYNC_COMPRESS" == "yes" ]; then
 		if [ "$LOCAL_OS" != "MacOSX" ] && [ "$REMOTE_OS" != "MacOSX" ]; then
-			RSYNC_ARGS=$RSYNC_ARGS" -zz --skip-compress=gz/xz/lz/lzma/lzo/rz/jpg/mp3/mp4/7z/bz2/rar/zip/sfark/s7z/ace/apk/arc/cab/dmg/jar/kgb/lzh/lha/lzx/pak/sfx"
+			RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" -zz --skip-compress=gz/xz/lz/lzma/lzo/rz/jpg/mp3/mp4/7z/bz2/rar/zip/sfark/s7z/ace/apk/arc/cab/dmg/jar/kgb/lzh/lha/lzx/pak/sfx"
 		else
 			Logger "Disabling compression skips on synchronization on [$LOCAL_OS] due to lack of support." "NOTICE"
 		fi
 	fi
 	if [ "$COPY_SYMLINKS" == "yes" ]; then
-		RSYNC_ARGS=$RSYNC_ARGS" -L"
+		RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" -L"
 	fi
 	if [ "$KEEP_DIRLINKS" == "yes" ]; then
-		RSYNC_ARGS=$RSYNC_ARGS" -K"
+		RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" -K"
 	fi
 	if [ "$RSYNC_OPTIONAL_ARGS" != "" ]; then
-		RSYNC_ARGS=$RSYNC_ARGS" "$RSYNC_OPTIONAL_ARGS
+		RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" "$RSYNC_OPTIONAL_ARGS
 	fi
 	if [ "$PRESERVE_HARDLINKS" == "yes" ]; then
-		RSYNC_ARGS=$RSYNC_ARGS" -H"
+		RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" -H"
 	fi
 	if [ "$CHECKSUM" == "yes" ]; then
 		RSYNC_TYPE_ARGS=$RSYNC_TYPE_ARGS" --checksum"
 	fi
 	if [ "$BANDWIDTH" != "" ] && [ "$BANDWIDTH" != "0" ]; then
-		RSYNC_ARGS=$RSYNC_ARGS" --bwlimit=$BANDWIDTH"
+		RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" --bwlimit=$BANDWIDTH"
 	fi
 
 	if [ "$PARTIAL" == "yes" ]; then
-		RSYNC_ARGS=$RSYNC_ARGS" --partial --partial-dir=\"$PARTIAL_DIR\""
+		RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" --partial --partial-dir=\"$PARTIAL_DIR\""
 		RSYNC_PARTIAL_EXCLUDE="--exclude=\"$PARTIAL_DIR\""
 	fi
 
 	if [ "$DELTA_COPIES" != "no" ]; then
-		RSYNC_ARGS=$RSYNC_ARGS" --no-whole-file"
+		RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" --no-whole-file"
 	else
-		RSYNC_ARGS=$RSYNC_ARGS" --whole-file"
+		RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" --whole-file"
 	fi
 
 	# Set compression options again after we know what remote OS we are dealing with
 	SetCompression
+
+	# Set recursive options
+	RSYNC_DEFAULT_NONRECURSIVE_ARGS="-d $RSYNC_DEFAULT_ARGS"
+	RSYNC_DEFAULT_ARGS="-r $RSYNC_DEFAULT_ARGS"
 }
 
 ## IFS debug function
@@ -2123,7 +2263,7 @@ function VerComp () {
 		return 1
 	fi
 
-	if [[ $1 == $2 ]]
+	if [[ "$1" == "$2" ]]
 		then
 			echo 0
 		return

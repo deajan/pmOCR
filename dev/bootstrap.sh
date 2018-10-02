@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-## dev pre-processor bootstrap rev 2018032201
+## dev pre-processor bootstrap rev 2018100201
 ## Yeah !!! A really tech sounding name... In fact it's just include emulation in bash
 
 function Usage {
@@ -8,8 +8,8 @@ function Usage {
 	echo "Creates and executes $0.tmp.sh"
 	echo "Usage:"
 	echo ""
-	echo "$0 --program=osync|osync_target_helper|obackup|pmocr [options to pass to program]"
-	echo "Can also be run with BASHVERBOSE=YES environment variable in order  to prefix program with bash -x"
+	echo "$0 --program=osync|obackup|pmocr [options to pass to program]"
+	echo "Can also be run with BASHVERBOSE=yes environment variable in order  to prefix program with bash -x"
 }
 
 
@@ -44,7 +44,7 @@ else
 	__PREPROCESSOR_Constants
 
 	if [ ! -f "$__PREPROCESSOR_PROGRAM_EXEC" ]; then
-		echo "Cannot find file [n_$bootstrapProgram.sh]."
+		echo "Cannot find file $__PREPROCESSOR_PROGRAM executable [n_$bootstrapProgram.sh]."
 		exit 1
 	fi
 fi
@@ -68,7 +68,7 @@ if type termux-fix-shebang > /dev/null 2>&1; then
 	termux-fix-shebang "$outputFileName.tmp.sh"
 fi
 
-if [ "$BASH_VERBOSE" == "yes" ]; then
+if [ "$BASHVERBOSE" == "yes" ]; then
 	bash -x "$outputFileName.tmp.sh" $opts
 else
 	"$outputFileName.tmp.sh" $opts

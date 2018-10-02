@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 
-## MERGE 2018021901
+## MERGE 2018100204
 
 ## Merges ofunctions.sh and n_program.sh into program.sh
 ## Adds installer
+
+PROGRAM=merge
+INSTANCE_ID=dev
 
 function Usage {
 	echo "Merges ofunctions.sh and n_program.sh into debug_program.sh and ../program.sh"
@@ -12,30 +15,24 @@ function Usage {
 }
 
 function __PREPROCESSOR_Merge {
-	local PROGRAM="$1"
+	local nPROGRAM="$1"
 
-	VERSION=$(grep "PROGRAM_VERSION=" n_$PROGRAM.sh)
+	if [ -f "$nPROGRAM" ]; then
+		Logger "$nPROGRAM is not found in local path." "CRITICAL"
+		exit 1
+	fi
+
+	VERSION=$(grep "PROGRAM_VERSION=" n_$nPROGRAM.sh)
 	VERSION=${VERSION#*=}
 	__PREPROCESSOR_Constants
 
-	source "ofunctions.sh"
-	if [ $? != 0 ]; then
-		echo "Please run $0 in dev directory with ofunctions.sh"
-		exit 1
-	fi
-
-	__PREPROCESSOR_Unexpand "n_$PROGRAM.sh" "debug_$PROGRAM.sh"
+	__PREPROCESSOR_Unexpand "n_$nPROGRAM.sh" "debug_$nPROGRAM.sh"
 
 	for subset in "${__PREPROCESSOR_SUBSETS[@]}"; do
-		__PREPROCESSOR_MergeSubset "$subset" "${subset//SUBSET/SUBSET END}" "ofunctions.sh" "debug_$PROGRAM.sh"
+		__PREPROCESSOR_MergeSubset "$subset" "${subset//SUBSET/SUBSET END}" "ofunctions.sh" "debug_$nPROGRAM.sh"
 	done
 
-	__PREPROCESSOR_CleanDebug "$PROGRAM"
-	rm -f tmp_$PROGRAM.sh
-	if [ $? != 0 ]; then
-		QuickLogger "Cannot remove tmp_$PROGRAM.sh"
-		exit 1
-	fi
+	__PREPROCESSOR_CleanDebug "debug_$nPROGRAM.sh" "../$nPROGRAM.sh"
 }
 
 function __PREPROCESSOR_Constants {
@@ -46,11 +43,13 @@ function __PREPROCESSOR_Constants {
 	__PREPROCESSOR_SUBSETS=(
 	'#### OFUNCTIONS FULL SUBSET ####'
 	'#### OFUNCTIONS MINI SUBSET ####'
+	'#### OFUNCTIONS MICRO SUBSET ####'
+	'#### PoorMansRandomGenerator SUBSET ####'
 	'#### _OFUNCTIONS_BOOTSTRAP SUBSET ####'
 	'#### DEBUG SUBSET ####'
 	'#### TrapError SUBSET ####'
 	'#### RemoteLogger SUBSET ####'
-	'#### QuickLogger SUBSET ####'
+	'#### Logger SUBSET ####'
 	'#### GetLocalOS SUBSET ####'
 	'#### IsInteger SUBSET ####'
 	'#### UrlEncode SUBSET ####'
@@ -60,6 +59,7 @@ function __PREPROCESSOR_Constants {
 	'#### GetConfFileValue SUBSET ####'
 	'#### SetConfFileValue SUBSET ####'
 	'#### CheckRFC822 SUBSET ####'
+	'#### CleanUp SUBSET ####'
 	)
 }
 
@@ -69,7 +69,7 @@ function __PREPROCESSOR_Unexpand {
 
 	unexpand "$source" > "$destination"
 	if [ $? != 0 ]; then
-		QuickLogger "Cannot unexpand [$source] to [$destination]."
+		Logger "Cannot unexpand [$source] to [$destination]." "SIMPLE"
 		exit 1
 	fi
 }
@@ -82,64 +82,75 @@ function __PREPROCESSOR_MergeSubset {
 
 	sed -n "/$subsetBegin/,/$subsetEnd/p" "$subsetFile" > "$subsetFile.$subsetBegin"
 	if [ $? != 0 ]; then
-		QuickLogger "Cannot sed subset [$subsetBegin -- $subsetEnd] in [$subsetFile]."
+		Logger "Cannot sed subset [$subsetBegin -- $subsetEnd] in [$subsetFile]." "SIMPLE"
 		exit 1
 	fi
 	sed "/include $subsetBegin/r $subsetFile.$subsetBegin" "$mergedFile" | grep -v -E "$subsetBegin\$|$subsetEnd\$" > "$mergedFile.tmp"
 	if [ $? != 0 ]; then
-		QuickLogger "Cannot add subset [$subsetBegin] to [$mergedFile]."
+		Logger "Cannot add subset [$subsetBegin] to [$mergedFile]." "SIMPLE"
 		exit 1
 	fi
 	rm -f "$subsetFile.$subsetBegin"
 	if [ $? != 0 ]; then
-		QuickLogger "Cannot remove temporary subset [$subsetFile.$subsetBegin]."
+		Logger "Cannot remove temporary subset [$subsetFile.$subsetBegin]." "SIMPLE"
 		exit 1
 	fi
 
 	rm -f "$mergedFile"
 	if [ $? != 0 ]; then
-		QuickLogger "Cannot remove merged original file [$mergedFile]."
+		Logger "Cannot remove merged original file [$mergedFile]." "SIMPLE"
 		exit 1
 	fi
 
 	mv "$mergedFile.tmp" "$mergedFile"
 	if [ $? != 0 ]; then
-		QuickLogger "Cannot move merged tmp file to original [$mergedFile]."
+		Logger "Cannot move merged tmp file to original [$mergedFile]." "SIMPLE"
 		exit 1
 	fi
 }
 
 function __PREPROCESSOR_CleanDebug {
-	local PROGRAM="$1"
+	local source="${1}"
+	local destination="${2:-$source}"
 
-	sed '/'$PARANOIA_DEBUG_BEGIN'/,/'$PARANOIA_DEBUG_END'/d' debug_$PROGRAM.sh | grep -v "$PARANOIA_DEBUG_LINE" > ../$PROGRAM.sh
+	sed '/'$PARANOIA_DEBUG_BEGIN'/,/'$PARANOIA_DEBUG_END'/d' "$source" | grep -v "$PARANOIA_DEBUG_LINE" > "$destination.tmp"
 	if [ $? != 0 ]; then
-		QuickLogger "Cannot remove PARANOIA_DEBUG code from standard build."
-		exit 1
-	fi
-
-	chmod +x "debug_$PROGRAM.sh"
-	if [ $? != 0 ]; then
-		QuickLogger "Cannot chmod debug_$PROGRAM.sh"
+		Logger "Cannot remove PARANOIA_DEBUG code from standard build." "SIMPLE"
 		exit 1
 	else
-		QuickLogger "Prepared ./debug_$PROGRAM.sh"
+		mv -f "$destination.tmp" "$destination"
+		if [ $? -ne 0 ]; then
+			Logger "Cannot move [$destination.tmp] to [$destination]." "SIMPLE"
+			exit 1
+		fi
 	fi
-	chmod +x "../$PROGRAM.sh"
+
+	chmod +x "$source"
 	if [ $? != 0 ]; then
-		QuickLogger "Cannot chmod $PROGRAM.sh"
+		Logger "Cannot chmod [$source]." "SIMPLE"
 		exit 1
 	else
-		QuickLogger "Prepared ../$PROGRAM.sh"
+		Logger "Prepared [$source]." "SIMPLE"
+	fi
+
+	if [ "$source" != "$destination" ]; then
+
+		chmod +x "$destination"
+		if [ $? != 0 ]; then
+			Logger "Cannot chmod [$destination]." "SIMPLE"
+			exit 1
+		else
+			Logger "Prepared [$destination]." "SIMPLE"
+		fi
 	fi
 }
 
 function __PREPROCESSOR_CopyCommons {
-	local PROGRAM="$1"
+	local nPROGRAM="$1"
 
-	sed "s/\[prgname\]/$PROGRAM/g" common_install.sh > ../install.sh
+	sed "s/\[prgname\]/$nPROGRAM/g" common_install.sh > ../install.sh
 	if [ $? != 0 ]; then
-		QuickLogger "Cannot assemble install."
+		Logger "Cannot assemble install." "SIMPLE"
 		exit 1
 	fi
 
@@ -147,45 +158,34 @@ function __PREPROCESSOR_CopyCommons {
 		__PREPROCESSOR_MergeSubset "$subset" "${subset//SUBSET/SUBSET END}" "ofunctions.sh" "../install.sh"
 	done
 
-	#sed "s/\[version\]/$VERSION/g" ../tmp_install.sh > ../install.sh
-	#if [ $? != 0 ]; then
-	#	QuickLogger "Cannot change install version."
-	#	exit 1
-	#fi
+	__PREPROCESSOR_CleanDebug "../install.sh"
+
 	if [ -f "common_batch.sh" ]; then
-		sed "s/\[prgname\]/$PROGRAM/g" common_batch.sh > ../$PROGRAM-batch.sh
+		sed "s/\[prgname\]/$nPROGRAM/g" common_batch.sh > ../$nPROGRAM-batch.sh
 		if [ $? != 0 ]; then
-			QuickLogger "Cannot assemble batch runner."
+			Logger "Cannot assemble batch runner." "SIMPLE"
 			exit 1
 		fi
-		chmod +x ../$PROGRAM-batch.sh
-		if [ $? != 0 ]; then
-			QuickLogger "Cannot chmod $PROGRAM-batch.sh"
-			exit 1
-		else
-			QuickLogger "Prepared ../$PROGRAM-batch.sh"
-		fi
-	fi
-	chmod +x ../install.sh
-	if [ $? != 0 ]; then
-		QuickLogger "Cannot chmod install.sh"
-		exit 1
-	else
-		QuickLogger "Prepared ../install.sh"
-	fi
-	rm -f ../tmp_install.sh
-	if [ $? != 0 ]; then
-		QuickLogger "Cannot chmod $PROGRAM.sh"
-		exit 1
+
+		for subset in "${__PREPROCESSOR_SUBSETS[@]}"; do
+			__PREPROCESSOR_MergeSubset "$subset" "${subset//SUBSET/SUBSET END}" "ofunctions.sh" "../$nPROGRAM-batch.sh"
+		done
+
+		__PREPROCESSOR_CleanDebug "../$nPROGRAM-batch.sh"
 	fi
 }
 
 # If sourced don't do anything
 if [ "$(basename $0)" == "merge.sh" ]; then
-	if [ "$1" == "osync" ]; then
+	source "./ofunctions.sh"
+	if [ $? != 0 ]; then
+		echo "Please run $0 in dev directory with ofunctions.sh"
+		exit 1
+	fi
+	trap GenericTrapQuit TERM EXIT HUP QUIT
 
+	if [ "$1" == "osync" ]; then
 		__PREPROCESSOR_Merge osync
-		__PREPROCESSOR_Merge osync_target_helper
 		__PREPROCESSOR_CopyCommons osync
 	elif [ "$1" == "obackup" ]; then
 		__PREPROCESSOR_Merge obackup
@@ -195,6 +195,7 @@ if [ "$(basename $0)" == "merge.sh" ]; then
 		__PREPROCESSOR_CopyCommons pmocr
 	else
 		echo "No valid program given."
+		Usage
 		exit 1
 	fi
 fi

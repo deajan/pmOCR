@@ -4,7 +4,7 @@
 
 PROGRAM=pmocr
 
-PROGRAM_VERSION=$(grep "PROGRAM_VERSION=" $PROGRAM.sh)
+PROGRAM_VERSION=$(grep "PROGRAM_VERSION=" "$PROGRAM.sh")
 PROGRAM_VERSION=${PROGRAM_VERSION#*=}
 PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
@@ -692,8 +692,8 @@ function CopyFile {
 	fi
 
 	if [ -f "$destPath/$destFileName" ] && [ $overwrite == false ]; then
-		destfileName="$sourceFileName.new"
-		Logger "Copying [$sourceFileName] to [$destPath/$destFilename]." "SIMPLE"
+		destFileName="$sourceFileName.new"
+		Logger "Copying [$sourceFileName] to [$destPath/$destFileName]." "SIMPLE"
 	fi
 
 	cp "$sourcePath/$sourceFileName" "$destPath/$destFileName"

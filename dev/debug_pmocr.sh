@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018032501
+PROGRAM_BUILD=2018122105
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -21,7 +21,7 @@ if [ "$MAX_WAIT" == "" ]; then
 fi
 
 _OFUNCTIONS_VERSION=2.3.0-RC2
-_OFUNCTIONS_BUILD=2018100205
+_OFUNCTIONS_BUILD=2018122101
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -90,7 +90,9 @@ else
 	LOG_FILE="/tmp/$PROGRAM.log"
 fi
 
+#### RUN_DIR SUBSET ####
 ## Default directory where to store temporary run files
+
 if [ -w /tmp ]; then
 	RUN_DIR=/tmp
 elif [ -w /var/tmp ]; then
@@ -98,6 +100,13 @@ elif [ -w /var/tmp ]; then
 else
 	RUN_DIR=.
 fi
+
+## Special note when remote target is on the same host as initiator (happens for unit tests): we'll have to differentiate RUN_DIR so remote CleanUp won't affect initiator.
+if [ "$_REMOTE_EXECUTION" == true ]; then
+	mkdir -p "$RUN_DIR/$PROGRAM.remote"
+	RUN_DIR="$RUN_DIR/$PROGRAM.remote"
+fi
+#### RUN_DIR SUBSET END ####
 
 # Get a random number on Windows BusyBox alike, also works on most Unixes that have dd, if dd is not found, then return $RANDOM
 function PoorMansRandomGenerator {
@@ -139,7 +148,7 @@ function PoorMansRandomGenerator {
 }
 
 # Initial TSTMAP value before function declaration
-TSTAMP=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 4)
+TSTAMP=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 5)
 
 # Default alert attachment filename
 ALERT_LOG_FILE="$RUN_DIR/$PROGRAM.$SCRIPT_PID.$TSTAMP.last.log"
@@ -186,6 +195,8 @@ function RemoteLogger {
 	local value="${1}"		# Sentence to log (in double quotes)
 	local level="${2}"		# Log level
 	local retval="${3:-undef}"	# optional return value of command
+
+	local prefix
 
 	if [ "$_LOGGER_PREFIX" == "time" ]; then
 		prefix="TIME: $SECONDS - "
@@ -263,6 +274,8 @@ function Logger {
 	local level="${2}"		# Log level
 	local retval="${3:-undef}"	# optional return value of command
 
+	local prefix
+
 	if [ "$_LOGGER_PREFIX" == "time" ]; then
 		prefix="TIME: $SECONDS - "
 	elif [ "$_LOGGER_PREFIX" == "date" ]; then
@@ -324,6 +337,26 @@ function Logger {
 	else
 		_Logger "\e[41mLogger function called without proper loglevel [$level].\e[0m" "\e[41mLogger function called without proper loglevel [$level].\e[0m" true
 		_Logger "Value was: $prefix$value" "Value was: $prefix$value" true
+	fi
+}
+
+# Function is busybox compatible since busybox ash does not understand direct regex, we use expr
+function IsInteger {
+	local value="${1}"
+
+	if type expr > /dev/null 2>&1; then
+		expr "$value" : '^[0-9]\{1,\}$' > /dev/null 2>&1
+		if [ $? -eq 0 ]; then
+			echo 1
+		else
+			echo 0
+		fi
+	else
+		if [[ $value =~ ^[0-9]+$ ]]; then
+			echo 1
+		else
+			echo 0
+		fi
 	fi
 }
 
@@ -395,8 +428,6 @@ function KillAllChilds {
 }
 
 function CleanUp {
-	__CheckArguments 0 $# "$@"	#__WITH_PARANOIA_DEBUG
-
 	if [ "$_DEBUG" != "yes" ]; then
 		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP"
 		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
@@ -821,10 +852,11 @@ function ExecTasks {
 	local minTimeBetweenRetries="${17:-300}"	# Time (in seconds) between postponed command retries
 	local validExitCodes="${18:-0}"			# Semi colon separated list of valid main command exit codes which will not trigger errors
 
+	__CheckArguments 1-18 $# "$@"																	       #__WITH_PARANOIA_DEBUG
+
 	local i
 
-	Logger "${FUNCNAME[0]} called by [${FUNCNAME[0]} < ${FUNCNAME[1]} < ${FUNCNAME[2]} < ${FUNCNAME[3]} < ${FUNCNAME[4]} ...]." "PARANOIA_DEBUG"	 #__WITH_PARANOIA_DEBUG
-	__CheckArguments 1-18 $# "$@"																	       #__WITH_PARANOIA_DEBUG
+	Logger "${FUNCNAME[0]} id [$id] called by [${FUNCNAME[1]} < ${FUNCNAME[2]} < ${FUNCNAME[3]} < ${FUNCNAME[4]} < ${FUNCNAME[5]} < ${FUNCNAME[6]} ...]." "PARANOIA_DEBUG"	 #__WITH_PARANOIA_DEBUG
 
 	# Since ExecTasks takes up to 17 arguments, do a quick preflight check in DEBUG mode
 	if [ "$_DEBUG" == "yes" ]; then
@@ -840,9 +872,6 @@ function ExecTasks {
 		done
 	fi
 
-	# Change '-' to '_' in task id
-	id="${id/-/_}"
-
 	# Expand validExitCodes into array
 	IFS=';' read -r -a validExitCodes <<< "$validExitCodes"
 
@@ -852,7 +881,8 @@ function ExecTasks {
 	local commandsConditionArray=() # Array containing conditional commands
 	local currentCommand		# Variable containing currently processed command
 	local currentCommandCondition	# Variable containing currently processed conditional command
-	local commandsArrayPid=()	# Array containing pids of commands currently run
+	local commandsArrayPid=()	# Array containing commands indexed by pids
+	local commandsArrayOutput=()	# Array contining command results indexed by pids
 	local postponedRetryCount=0	# Number of current postponed commands retries
 	local postponedItemCount=0	# Number of commands that have been postponed (keep at least one in order to check once)
 	local postponedCounter=0
@@ -879,16 +909,11 @@ function ExecTasks {
 	local newPidsArray		# New array of currently running pids for next iteration
 	local pidsTimeArray		# Array containing execution begin time of pids
 	local executeCommand		# Boolean to check if currentCommand can be executed given a condition
-
 	local hasPids=false		# Are any valable pids given to function ?		#__WITH_PARANOIA_DEBUG
-
 	local functionMode
-
-	if [ $counting == true ]; then
-		local softAlert=false # Does a soft alert need to be triggered, if yes, send an alert once
-	else
-		local softAlert=false
-	fi
+	local softAlert=false		# Does a soft alert need to be triggered, if yes, send an alert once
+	local failedPidsList		# List containing failed pids with exit code separated by semicolons (eg : 2355:1;4534:2;2354:3)
+	local randomOutputName		# Random filename for command outputs
 
 	# Initialise global variable
 	eval "WAIT_FOR_TASK_COMPLETION_$id=\"\""
@@ -1049,17 +1074,20 @@ function ExecTasks {
 					# Check for valid exit codes
 					if [ $(ArrayContains $retval "${validExitCodes[@]}") -eq 0 ]; then
 						if [ $noErrorLogsAtAll != true ]; then
-							Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "DEBUG"
+							Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "ERROR"
 							if [ "$functionMode" == "ParallelExec" ]; then
 								Logger "Command was [${commandsArrayPid[$pid]}]." "ERROR"
+							fi
+							if [ -f "${commandsArrayOutput[$pid]}" ]; then
+								Logger "Command output was [$(cat ${commandsArrayOutput[$pid]})]." "ERROR"
 							fi
 						fi
 						errorcount=$((errorcount+1))
 						# Welcome to variable variable bash hell
-						if [ "$(eval echo \"\$WAIT_FOR_TASK_COMPLETION_$id\")" == "" ]; then
-							eval "WAIT_FOR_TASK_COMPLETION_$id=\"$pid:$retval\""
+						if [ "$failedPidsList" == "" ]; then
+							failedPidsList="$pid:$retval"
 						else
-							eval "WAIT_FOR_TASK_COMPLETION_$id=\";$pid:$retval\""
+							failedPidsList="$failedPidsList;$pid:$retval"
 						fi
 					else
 						Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "DEBUG"
@@ -1196,10 +1224,12 @@ function ExecTasks {
 
 				if [ $executeCommand == true ]; then
 					Logger "Running command [$currentCommand]." "DEBUG"
-					eval "$currentCommand" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$SCRIPT_PID.$TSTAMP" 2>&1 &
+					randomOutputName=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 5)
+					eval "$currentCommand" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$randomOutputName.$SCRIPT_PID.$TSTAMP" 2>&1 &
 					pid=$!
 					pidsArray+=($pid)
 					commandsArrayPid[$pid]="$currentCommand"
+					commandsArrayOutput[$pid]="$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$randomOutputName.$SCRIPT_PID.$TSTAMP"
 					# Initialize pid execution time array
 					pidsTimeArray[$pid]=0
 				else
@@ -1220,6 +1250,8 @@ function ExecTasks {
 
 	# Return exit code if only one process was monitored, else return number of errors
 	# As we cannot return multiple values, a global variable WAIT_FOR_TASK_COMPLETION contains all pids with their return value
+
+	eval "WAIT_FOR_TASK_COMPLETION_$id=\"$failedPidsList\""
 
 	if [ $mainItemCount -eq 1 ]; then
 		return $retval
@@ -1262,7 +1294,7 @@ function EscapeSpaces {
 # Usage var=$(EscapeDoubleQuotes "$var") or var="$(EscapeDoubleQuotes "$var")"
 function EscapeDoubleQuotes {
 	local value="${1}"
-		
+
 	echo "${value//\"/\\\"}"
 }
 
@@ -1271,7 +1303,7 @@ function IsNumeric {
 	local value="${1}"
 
 	if type expr > /dev/null 2>&1; then
-		expr "$value" : "^[-+]\?[0-9]*\.\?[0-9]\+$" > /dev/null 2>&1
+		expr "$value" : '^[-+]\{0,1\}[0-9]*\.\{0,1\}[0-9]\{1,\}$' > /dev/null 2>&1
 		if [ $? -eq 0 ]; then
 			echo 1
 		else
@@ -1290,26 +1322,6 @@ function IsNumericExpand {
 	eval "local value=\"${1}\"" # Needed eval so variable variables can be processed
 
 	echo $(IsNumeric "$value")
-}
-
-# Function is busybox compatible since busybox ash does not understand direct regex, we use expr
-function IsInteger {
-	local value="${1}"
-
-	if type expr > /dev/null 2>&1; then
-		expr "$value" : "^[0-9]\+$" > /dev/null 2>&1
-		if [ $? -eq 0 ]; then
-			echo 1
-		else
-			echo 0
-		fi
-	else
-		if [[ $value =~ ^[0-9]+$ ]]; then
-			echo 1
-		else
-			echo 0
-		fi
-	fi
 }
 
 # Converts human readable sizes into integer kilobyte sizes
@@ -1408,6 +1420,8 @@ function GetLocalOS {
 	# There is no good way to tell if currently running in BusyBox shell. Using sluggish way.
 	if ls --help 2>&1 | grep -i "BusyBox" > /dev/null; then
 		localOsVar="BusyBox"
+	elif set -o | grep "winxp" > /dev/null; then
+		localOsVar="BusyBox-w32"
 	else
 		# Detecting the special ubuntu userland in Windows 10 bash
 		if grep -i Microsoft /proc/sys/kernel/osrelease > /dev/null 2>&1; then
@@ -1440,7 +1454,7 @@ function GetLocalOS {
 		*"CYGWIN"*)
 		LOCAL_OS="Cygwin"
 		;;
-		*"Microsoft"*)
+		*"Microsoft"*|*"MS/Windows"*)
 		LOCAL_OS="WinNT10"
 		;;
 		*"Darwin"*)
@@ -1471,7 +1485,8 @@ function GetLocalOS {
 	fi
 
 	# Get Host info for Windows
-	if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "BusyBox" ] || [ "$LOCAL_OS" == "Cygwin" ] || [ "$LOCAL_OS" == "WinNT10" ]; then localOsVar="$(uname -a)"
+	if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "BusyBox" ] || [ "$LOCAL_OS" == "Cygwin" ] || [ "$LOCAL_OS" == "WinNT10" ]; then
+		localOsVar="$localOsVar $(uname -a)"
 		if [ "$PROGRAMW6432" != "" ]; then
 			LOCAL_OS_BITNESS=64
 			LOCAL_OS_FAMILY="Windows"
@@ -1485,6 +1500,9 @@ function GetLocalOS {
 	# Get Host info for Unix
 	else
 		LOCAL_OS_FAMILY="Unix"
+	fi
+
+	if [ "$LOCAL_OS_FAMILY" == "Unix" ]; then
 		if uname -m | grep '64' > /dev/null 2>&1; then
 			LOCAL_OS_BITNESS=64
 		else
@@ -1764,6 +1782,7 @@ function OCR {
 			if [ -f "$fileToProcess" ] && [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
 				tmpFilePreprocessor="${fileToProcess%.*}.preprocessed.${fileToProcess##*.}"
 				subcmd="$OCR_PREPROCESSOR_EXEC $OCR_PREPROCESSOR_ARGS $OCR_PREPROCESSOR_INPUT_ARGS\"$inputFileName\" $OCR_PREPROCESSOR_OUTPUT_ARG\"$tmpFilePreprocessor\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
+				#TODO: THIS IS NEVER LOGGED
 				Logger "Executing $subcmd" "DEBUG"
 				eval "$subcmd"
 				result=$?
@@ -1780,6 +1799,7 @@ function OCR {
 				# Run Abbyy OCR
 				if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"$outputFileName$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2>&1"
+					#TODO: THIS IS NEVER LOGGED
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
 					result=$?
@@ -1789,6 +1809,7 @@ function OCR {
 					# Empty tmp log file first
 					echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP\""
+					#TODO: THIS IS NEVER LOGGED
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
 					result=$?
@@ -1853,12 +1874,14 @@ function OCR {
 				if [ -f "$inputFileName" ]; then
 					# Add error suffix so failed files won't be run again and create a loop
 					# Add $TSAMP in order to avoid overwriting older files
-					renamedFileName="${inputFileName%.*}-$TSTAMP$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
-					Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
-					mv "$inputFileName" "$renamedFileName"
-					if [ $? != 0 ]; then
-						Logger "Cannot move [$inputFileName] to [$renamedFileName]." "WARN"
-						alert=true
+					renamedFileName="${inputFileName%.*}$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
+					if [ "$inputFileName" != "$renamedFileName" ]; then
+						Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
+						mv "$inputFileName" "$renamedFileName"
+						if [ $? != 0 ]; then
+							Logger "Cannot move [$inputFileName] to [$renamedFileName]." "WARN"
+							alert=true
+						fi
 					fi
 				fi
 			else
@@ -1958,9 +1981,10 @@ function OCR {
 
 		if [ $alert == true ]; then
 			SendAlert
+			exit $result
+		else
+			exit 0
 		fi
-
-		exit 0
 }
 
 function OCR_Dispatch {
@@ -2019,8 +2043,7 @@ function OCR_Dispatch {
 	ExecTasks "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" "${FUNCNAME[0]}" true 0 0 3600 0 true .05 $KEEP_LOGGING false false false $NUMBER_OF_PROCESSES
 	retval=$?
 	if [ $retval -ne 0 ]; then
-		Logger "Failed ParallelExec run." "ERROR"
-		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.ExecTasks.OCR_Dispatch.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+		Logger "Failed OCR_Dispatch run." "ERROR"
 	fi
 	CleanUp
 	return $retval
@@ -2120,7 +2143,9 @@ function Usage {
 	echo "--suffix=...              Adds a given suffix to the output filename (in order to not process them again, ex: pdf to pdf conversion)."
 	echo "                          By default, the suffix is '_OCR'"
 	echo "--no-suffix               Won't add any suffix to the output filename"
-	echo "--text=...                Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)')."
+	echo "--failed-suffix=...	Adds a given suffix to failed files (in order not to process them again. Defaults to '_OCR_ERR'"
+	echo "--no-failed-suffix	Won't add any suffix to failed conversion filenames"
+	echo "--text=...                Adds a given text / variable to the output filename (ex: --text='$(date +%Y)')."
 	echo "                          By default, the text is the conversion date in pseudo ISO format."
 	echo "--no-text                 Won't add any text to the output filename"
 	echo "-s, --silent              Will not output anything to stdout except errors"
@@ -2129,12 +2154,17 @@ function Usage {
 	exit 128
 }
 
-#### Program Begin
+#### SCRIPT ENTRY POINT ####
+
+trap TrapQuit EXIT
 
 _SILENT=false
 skip_txt_pdf=false
 delete_input=false
+suffix=""
 no_suffix=false
+failed_suffix=""
+no_failed_suffix=false
 no_text=false
 _BATCH_RUN=fase
 _SERVICE_RUN=false
@@ -2147,7 +2177,7 @@ csv=false
 
 for i in "$@"
 do
-	case $i in
+	case "$i" in
 		--config=*)
 		CONFIG_FILE="${i##*=}"
 		;;
@@ -2189,6 +2219,12 @@ do
 		;;
 		--no-suffix)
 		no_suffix=true
+		;;
+		--suffix=*)
+		failed_suffix="${i##*=}"
+		;;
+		--no-failed-suffix)
+		no_failed_suffix=true
 		;;
 		--text=*)
 		text="${i##*=}"
@@ -2233,7 +2269,10 @@ if [ $pdf == false ] && [ $docx == false ] && [ $xlsx == false ] && [ $txt == fa
 	pdf=true
 fi
 
-# Add FAILED_FILENAME_SUFFIX if missing
+# Add default values
+if [ "$FILENAME_SUFFIX" == "" ]; then
+	FILENAME_SUFFIX="_OCR"
+fi
 if [ "$FAILED_FILENAME_SUFFIX" == "" ]; then
 	FAILED_FILENAME_SUFFIX="_OCR_ERR"
 fi
@@ -2252,12 +2291,20 @@ if [ $_BATCH_RUN == true ]; then
 		FILENAME_SUFFIX="$suffix"
 	fi
 
-	if [ $no_text == true ]; then
-		FILENAME_ADDITION=""
+	if [ $no_failed_suffix == true ]; then
+		FAILED_FILENAME_SUFFIX=""
+	fi
+
+	if  [ "$failed_suffix" != "" ]; then
+		FAILED_FILENAME_SUFFIX="$failed_suffix"
 	fi
 
 	if [ "$text" != "" ]; then
 		FILENAME_ADDITION="$text"
+	fi
+
+	if [ $no_text == true ]; then
+		FILENAME_ADDITION=""
 	fi
 
 	if [ $delete_input == true ]; then

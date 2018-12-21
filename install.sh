@@ -18,7 +18,7 @@ INSTANCE_ID="installer-$SCRIPT_BUILD"
 ## Please adapt this to fit your distro needs
 
 _OFUNCTIONS_VERSION=2.3.0-RC2
-_OFUNCTIONS_BUILD=2018100205
+_OFUNCTIONS_BUILD=2018122101
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -83,7 +83,9 @@ else
 	LOG_FILE="/tmp/$PROGRAM.log"
 fi
 
+#### RUN_DIR SUBSET ####
 ## Default directory where to store temporary run files
+
 if [ -w /tmp ]; then
 	RUN_DIR=/tmp
 elif [ -w /var/tmp ]; then
@@ -91,6 +93,13 @@ elif [ -w /var/tmp ]; then
 else
 	RUN_DIR=.
 fi
+
+## Special note when remote target is on the same host as initiator (happens for unit tests): we'll have to differentiate RUN_DIR so remote CleanUp won't affect initiator.
+if [ "$_REMOTE_EXECUTION" == true ]; then
+	mkdir -p "$RUN_DIR/$PROGRAM.remote"
+	RUN_DIR="$RUN_DIR/$PROGRAM.remote"
+fi
+#### RUN_DIR SUBSET END ####
 
 # Get a random number on Windows BusyBox alike, also works on most Unixes that have dd, if dd is not found, then return $RANDOM
 function PoorMansRandomGenerator {
@@ -132,7 +141,7 @@ function PoorMansRandomGenerator {
 }
 
 # Initial TSTMAP value before function declaration
-TSTAMP=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 4)
+TSTAMP=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 5)
 
 # Default alert attachment filename
 ALERT_LOG_FILE="$RUN_DIR/$PROGRAM.$SCRIPT_PID.$TSTAMP.last.log"
@@ -179,6 +188,8 @@ function RemoteLogger {
 	local value="${1}"		# Sentence to log (in double quotes)
 	local level="${2}"		# Log level
 	local retval="${3:-undef}"	# optional return value of command
+
+	local prefix
 
 	if [ "$_LOGGER_PREFIX" == "time" ]; then
 		prefix="TIME: $SECONDS - "
@@ -251,6 +262,8 @@ function Logger {
 	local level="${2}"		# Log level
 	local retval="${3:-undef}"	# optional return value of command
 
+	local prefix
+
 	if [ "$_LOGGER_PREFIX" == "time" ]; then
 		prefix="TIME: $SECONDS - "
 	elif [ "$_LOGGER_PREFIX" == "date" ]; then
@@ -307,6 +320,26 @@ function Logger {
 	else
 		_Logger "\e[41mLogger function called without proper loglevel [$level].\e[0m" "\e[41mLogger function called without proper loglevel [$level].\e[0m" true
 		_Logger "Value was: $prefix$value" "Value was: $prefix$value" true
+	fi
+}
+
+# Function is busybox compatible since busybox ash does not understand direct regex, we use expr
+function IsInteger {
+	local value="${1}"
+
+	if type expr > /dev/null 2>&1; then
+		expr "$value" : '^[0-9]\{1,\}$' > /dev/null 2>&1
+		if [ $? -eq 0 ]; then
+			echo 1
+		else
+			echo 0
+		fi
+	else
+		if [[ $value =~ ^[0-9]+$ ]]; then
+			echo 1
+		else
+			echo 0
+		fi
 	fi
 }
 
@@ -376,7 +409,6 @@ function KillAllChilds {
 }
 
 function CleanUp {
-
 	if [ "$_DEBUG" != "yes" ]; then
 		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP"
 		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
@@ -497,6 +529,8 @@ function GetLocalOS {
 	# There is no good way to tell if currently running in BusyBox shell. Using sluggish way.
 	if ls --help 2>&1 | grep -i "BusyBox" > /dev/null; then
 		localOsVar="BusyBox"
+	elif set -o | grep "winxp" > /dev/null; then
+		localOsVar="BusyBox-w32"
 	else
 		# Detecting the special ubuntu userland in Windows 10 bash
 		if grep -i Microsoft /proc/sys/kernel/osrelease > /dev/null 2>&1; then
@@ -529,7 +563,7 @@ function GetLocalOS {
 		*"CYGWIN"*)
 		LOCAL_OS="Cygwin"
 		;;
-		*"Microsoft"*)
+		*"Microsoft"*|*"MS/Windows"*)
 		LOCAL_OS="WinNT10"
 		;;
 		*"Darwin"*)
@@ -560,7 +594,8 @@ function GetLocalOS {
 	fi
 
 	# Get Host info for Windows
-	if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "BusyBox" ] || [ "$LOCAL_OS" == "Cygwin" ] || [ "$LOCAL_OS" == "WinNT10" ]; then localOsVar="$(uname -a)"
+	if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "BusyBox" ] || [ "$LOCAL_OS" == "Cygwin" ] || [ "$LOCAL_OS" == "WinNT10" ]; then
+		localOsVar="$localOsVar $(uname -a)"
 		if [ "$PROGRAMW6432" != "" ]; then
 			LOCAL_OS_BITNESS=64
 			LOCAL_OS_FAMILY="Windows"
@@ -574,6 +609,9 @@ function GetLocalOS {
 	# Get Host info for Unix
 	else
 		LOCAL_OS_FAMILY="Unix"
+	fi
+
+	if [ "$LOCAL_OS_FAMILY" == "Unix" ]; then
 		if uname -m | grep '64' > /dev/null 2>&1; then
 			LOCAL_OS_BITNESS=64
 		else

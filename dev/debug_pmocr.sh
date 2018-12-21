@@ -6,6 +6,8 @@ CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
 PROGRAM_BUILD=2018122106
 
+CONFIG_FILE_REVISION_REQUIRED=1
+
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
 	_DEBUG=no
@@ -21,7 +23,7 @@ if [ "$MAX_WAIT" == "" ]; then
 fi
 
 _OFUNCTIONS_VERSION=2.3.0-RC2
-_OFUNCTIONS_BUILD=2018122102
+_OFUNCTIONS_BUILD=2018122103
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -714,9 +716,11 @@ function TrapError {
 
 function LoadConfigFile {
 	local configFile="${1}"
+	local revisionRequired="${2}"
 
 	__CheckArguments 1 $# "$@"	#__WITH_PARANOIA_DEBUG
 
+	local revisionPresent
 
 	if [ ! -f "$configFile" ]; then
 		Logger "Cannot load configuration file [$configFile]. Cannot start." "CRITICAL"
@@ -725,6 +729,16 @@ function LoadConfigFile {
 		Logger "Wrong configuration file supplied [$configFile]. Cannot start." "CRITICAL"
 		exit 1
 	else
+		revisionPresent=$(GetConfFileValue "$configFile" "CONFIG_FILE_REVISION" true)
+		if [ "$(IsNumeric $revisionPresent)" -eq 0 ]; then
+			revisionPresent=0
+		fi
+		if [ "$revisionRequired" != "" ]; then
+			if [ $(VerComp "$revisionPresent" "$revisionRequired") -eq 2 ]; then
+				Logger "Configuration file seems out of date. Required version [$revisionRequired]. Actual version [$revisionPresent]." "CRITICAL"
+				exit 1
+			fi
+		fi
 		# Remove everything that is not a variable assignation
 		grep '^[^ ]*=[^;&]*' "$configFile" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 		source "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
@@ -1616,6 +1630,26 @@ function VerComp () {
 	echo 0
 	return
 }
+function GetConfFileValue () {
+	local file="${1}"
+	local name="${2}"
+	local noError="${3:-false}"
+
+	local value
+
+	value=$(grep "^$name=" "$file")
+	if [ $? == 0 ]; then
+		value="${value##*=}"
+		echo "$value"
+	else
+		if [ $noError == true ]; then
+			Logger "Cannot get value for [$name] in config file [$file]." "NOTICE"
+		else
+			Logger "Cannot get value for [$name] in config file [$file]." "ERROR"
+		fi
+	fi
+}
+
 
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
@@ -2269,9 +2303,9 @@ do
 done
 
 if [ "$CONFIG_FILE" != "" ]; then
-	LoadConfigFile "$CONFIG_FILE"
+	LoadConfigFile "$CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 else
-	LoadConfigFile "$DEFAULT_CONFIG_FILE"
+	LoadConfigFile "$DEFAULT_CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 fi
 
 SetOCREngineOptions

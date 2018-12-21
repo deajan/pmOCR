@@ -6,6 +6,8 @@ CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
 PROGRAM_BUILD=2018122106
 
+CONFIG_FILE_REVISION_REQUIRED=1
+
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
 	_DEBUG=no
@@ -22,6 +24,7 @@ fi
 
 include #### OFUNCTIONS MINI SUBSET ####
 include #### VerComp SUBSET ####
+include #### GetConfFileValue SUBSET ####
 
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
@@ -675,9 +678,9 @@ do
 done
 
 if [ "$CONFIG_FILE" != "" ]; then
-	LoadConfigFile "$CONFIG_FILE"
+	LoadConfigFile "$CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 else
-	LoadConfigFile "$DEFAULT_CONFIG_FILE"
+	LoadConfigFile "$DEFAULT_CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 fi
 
 SetOCREngineOptions

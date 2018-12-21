@@ -4,6 +4,7 @@ RECENT CHANGES
 dd Mmm YYYY: v1.6.0
 
 - Simplified config file syntax for OCR_ENGINE selection
+- Added config file revision check
 - Fixed logs not writing correctly in service mode and batch mode (OCR_Dispatch and lower function Logger doesn't work in)
 - Fixed --no-text argument
 - Added --failed-suffix and --no-failed-suffix batch options

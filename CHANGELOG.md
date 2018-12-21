@@ -1,7 +1,7 @@
 RECENT CHANGES
 --------------
 
-dd Mmm YYYY: v1.6.0
+21 Dec 2018: v1.6.0
 
 - Simplified config file syntax for OCR_ENGINE selection
 - Added config file revision check

@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018122102
+PROGRAM_BUILD=2018122103
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -549,7 +549,7 @@ function Usage {
 	echo "--no-suffix               Won't add any suffix to the output filename"
 	echo "--failed-suffix=...	Adds a given suffix to failed files (in order not to process them again. Defaults to '_OCR_ERR'"
 	echo "--no-failed-suffix	Won't add any suffix to failed conversion filenames"
-	echo "--text=...                Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)')."
+	echo "--text=...                Adds a given text / variable to the output filename (ex: --text='$(date +%Y)')."
 	echo "                          By default, the text is the conversion date in pseudo ISO format."
 	echo "--no-text                 Won't add any text to the output filename"
 	echo "-s, --silent              Will not output anything to stdout except errors"
@@ -568,7 +568,7 @@ delete_input=false
 suffix=""
 no_suffix=false
 failed_suffix=""
-no_failed_suffix=""
+no_failed_suffix=false
 no_text=false
 _BATCH_RUN=fase
 _SERVICE_RUN=false
@@ -627,7 +627,7 @@ do
 		--suffix=*)
 		failed_suffix="${i##*=}"
 		;;
-		--no-suffix)
+		--no-failed-suffix)
 		no_failed_suffix=true
 		;;
 		--text=*)
@@ -646,7 +646,7 @@ if [ "$CONFIG_FILE" != "" ]; then
 	LoadConfigFile "$CONFIG_FILE"
 else
 	LoadConfigFile "$DEFAULT_CONFIG_FILE"
-fi
+nano fi
 
 if [ "$LOGFILE" == "" ]; then
         if [ -w /var/log ]; then
@@ -677,7 +677,6 @@ fi
 if [ "$FILENAME_SUFFIX" == "" ]; then
 	FILENAME_SUFFIX="_OCR"
 fi
-fi
 if [ "$FAILED_FILENAME_SUFFIX" == "" ]; then
 	FAILED_FILENAME_SUFFIX="_OCR_ERR"
 fi
@@ -704,12 +703,12 @@ if [ $_BATCH_RUN == true ]; then
 		FAILED_FILENAME_SUFFIX="$failed_suffix"
 	fi
 
-	if [ $no_text == true ]; then
-		FILENAME_ADDITION=""
-	fi
-
 	if [ "$text" != "" ]; then
 		FILENAME_ADDITION="$text"
+	fi
+
+	if [ $no_text == true ]; then
+		FILENAME_ADDITION=""
 	fi
 
 	if [ $delete_input == true ]; then

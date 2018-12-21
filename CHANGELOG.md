@@ -3,6 +3,7 @@ RECENT CHANGES
 
 dd Mmm YYYY: v1.6.0
 
+! -no-text does not work
 !- Fixed logs not writing correctly in service mode and batch mode (OCR_Dispatch and lower function Logger doesn't work in)
 - Added --failed-suffix and --no-failed-suffix batch options
 - Skipping files currently being written to (workaround for slow file transfers), leaving them for next run

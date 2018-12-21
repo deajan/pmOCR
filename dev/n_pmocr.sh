@@ -646,7 +646,7 @@ if [ "$CONFIG_FILE" != "" ]; then
 	LoadConfigFile "$CONFIG_FILE"
 else
 	LoadConfigFile "$DEFAULT_CONFIG_FILE"
-nano fi
+fi
 
 if [ "$LOGFILE" == "" ]; then
         if [ -w /var/log ]; then

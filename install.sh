@@ -18,7 +18,7 @@ INSTANCE_ID="installer-$SCRIPT_BUILD"
 ## Please adapt this to fit your distro needs
 
 _OFUNCTIONS_VERSION=2.3.0-RC2
-_OFUNCTIONS_BUILD=2018122101
+_OFUNCTIONS_BUILD=2018122102
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then

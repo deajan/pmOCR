@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018122101
+PROGRAM_BUILD=2018122102
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -581,7 +581,7 @@ csv=false
 
 for i in "$@"
 do
-	case $i in
+	case "$i" in
 		--config=*)
 		CONFIG_FILE="${i##*=}"
 		;;
@@ -674,17 +674,11 @@ if [ $pdf == false ] && [ $docx == false ] && [ $xlsx == false ] && [ $txt == fa
 fi
 
 # Add default values
-if [ "$suffix" != "" ]; then
-	FILENAME_SUFFIX="$suffix"
-fi
-if [ "$FILENAME_SUFFIX" == "" ] && [ $no_suffix != true ]; then
+if [ "$FILENAME_SUFFIX" == "" ]; then
 	FILENAME_SUFFIX="_OCR"
 fi
-# Add FAILED_FILENAME_SUFFIX if missing
-if [ "$failed_suffix" != "" ]; then
-	FAILED_FILENAME_SUFFIX="$failed_suffix"
 fi
-if [ "$FAILED_FILENAME_SUFFIX" == "" ] && [ $no_failed_suffix != true ]; then
+if [ "$FAILED_FILENAME_SUFFIX" == "" ]; then
 	FAILED_FILENAME_SUFFIX="_OCR_ERR"
 fi
 
@@ -700,6 +694,14 @@ if [ $_BATCH_RUN == true ]; then
 
 	if  [ "$suffix" != "" ]; then
 		FILENAME_SUFFIX="$suffix"
+	fi
+
+	if [ $no_failed_suffix == true ]; then
+		FAILED_FILENAME_SUFFIX=""
+	fi
+
+	if  [ "$failed_suffix" != "" ]; then
+		FAILED_FILENAME_SUFFIX="$failed_suffix"
 	fi
 
 	if [ $no_text == true ]; then

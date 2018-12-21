@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018122104
+PROGRAM_BUILD=2018122105
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -280,12 +280,14 @@ function OCR {
 				if [ -f "$inputFileName" ]; then
 					# Add error suffix so failed files won't be run again and create a loop
 					# Add $TSAMP in order to avoid overwriting older files
-					renamedFileName="${inputFileName%.*}-$TSTAMP$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
-					Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
-					mv "$inputFileName" "$renamedFileName"
-					if [ $? != 0 ]; then
-						Logger "Cannot move [$inputFileName] to [$renamedFileName]." "WARN"
-						alert=true
+					renamedFileName="${inputFileName%.*}$FAILED_FILENAME_SUFFIX.${inputFileName##*.}"
+					if [ "$inputFileName" != "$renamedFileName" ]; then
+						Logger "Renaming file [$inputFileName] to [$renamedFileName] in order to exclude it from next run." "WARN"
+						mv "$inputFileName" "$renamedFileName"
+						if [ $? != 0 ]; then
+							Logger "Cannot move [$inputFileName] to [$renamedFileName]." "WARN"
+							alert=true
+						fi
 					fi
 				fi
 			else
@@ -447,8 +449,7 @@ function OCR_Dispatch {
 	ExecTasks "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" "${FUNCNAME[0]}" true 0 0 3600 0 true .05 $KEEP_LOGGING false false false $NUMBER_OF_PROCESSES
 	retval=$?
 	if [ $retval -ne 0 ]; then
-		Logger "Failed ParallelExec run." "ERROR"
-		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.ExecTasks.OCR_Dispatch.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+		Logger "Failed OCR_Dispatch run." "ERROR"
 	fi
 	CleanUp
 	return $retval

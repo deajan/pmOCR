@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018122103
+PROGRAM_BUILD=2018122104
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -385,9 +385,10 @@ function OCR {
 
 		if [ $alert == true ]; then
 			SendAlert
+			exit $result
+		else
+			exit 0
 		fi
-
-		exit 0
 }
 
 function OCR_Dispatch {

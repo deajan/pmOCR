@@ -16,6 +16,7 @@ dd Mmm YYYY: v1.6.0
 	- New more complete ExecTasks function to replace ParallelExec
 	- Fix log sending with double compressed extensions
 	- Minor fixes
+- Fixed return code for initV style service file
  - Upgraded shunit2 test framework to v2.1.8pre (git commit 07bb329)
 
 21 Avr 2017: v1.5.7

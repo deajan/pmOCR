@@ -3,14 +3,17 @@ RECENT CHANGES
 
 dd Mmm YYYY: v1.6.0
 
-!- Fixed logs not writing correctly in service mode (OCR_Dispatch and lower function Logger doesn't work in)
+!- Fixed logs not writing correctly in service mode and batch mode (OCR_Dispatch and lower function Logger doesn't work in)
+- Added --failed-suffix and --no-failed-suffix batch options
 - Skipping files currently being written to (workaround for slow file transfers), leaving them for next run
 - Add nanoseconds to filename if output file already exists on move
 - More clear preflight error messages
 - Updated ofunctions
+	- RFC822 email compliance checks
 	- New more complete ExecTasks function to replace ParallelExec
 	- Fix log sending with double compressed extensions
 	- Minor fixes
+ - Upgraded shunit2 test framework to v2.1.8pre (git commit 07bb329)
 
 21 Avr 2017: v1.5.7
 

@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2017 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018101001
+PROGRAM_BUILD=2018122101
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -188,6 +188,7 @@ function OCR {
 			if [ -f "$fileToProcess" ] && [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
 				tmpFilePreprocessor="${fileToProcess%.*}.preprocessed.${fileToProcess##*.}"
 				subcmd="$OCR_PREPROCESSOR_EXEC $OCR_PREPROCESSOR_ARGS $OCR_PREPROCESSOR_INPUT_ARGS\"$inputFileName\" $OCR_PREPROCESSOR_OUTPUT_ARG\"$tmpFilePreprocessor\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
+				#TODO: THIS IS NEVER LOGGED
 				Logger "Executing $subcmd" "DEBUG"
 				eval "$subcmd"
 				result=$?
@@ -204,6 +205,7 @@ function OCR {
 				# Run Abbyy OCR
 				if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $ocrEngineArgs $OCR_ENGINE_OUTPUT_ARG \"$outputFileName$fileExtension\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2>&1"
+					#TODO: THIS IS NEVER LOGGED
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
 					result=$?
@@ -213,6 +215,7 @@ function OCR {
 					# Empty tmp log file first
 					echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP\""
+					#TODO: THIS IS NEVER LOGGED
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
 					result=$?
@@ -544,6 +547,8 @@ function Usage {
 	echo "--suffix=...              Adds a given suffix to the output filename (in order to not process them again, ex: pdf to pdf conversion)."
 	echo "                          By default, the suffix is '_OCR'"
 	echo "--no-suffix               Won't add any suffix to the output filename"
+	echo "--failed-suffix=...	Adds a given suffix to failed files (in order not to process them again. Defaults to '_OCR_ERR'"
+	echo "--no-failed-suffix	Won't add any suffix to failed conversion filenames"
 	echo "--text=...                Adds a given text / variable to the output filename (ex: --add-text='$(date +%Y)')."
 	echo "                          By default, the text is the conversion date in pseudo ISO format."
 	echo "--no-text                 Won't add any text to the output filename"
@@ -560,7 +565,10 @@ trap TrapQuit EXIT
 _SILENT=false
 skip_txt_pdf=false
 delete_input=false
+suffix=""
 no_suffix=false
+failed_suffix=""
+no_failed_suffix=""
 no_text=false
 _BATCH_RUN=fase
 _SERVICE_RUN=false
@@ -616,6 +624,12 @@ do
 		--no-suffix)
 		no_suffix=true
 		;;
+		--suffix=*)
+		failed_suffix="${i##*=}"
+		;;
+		--no-suffix)
+		no_failed_suffix=true
+		;;
 		--text=*)
 		text="${i##*=}"
 		;;
@@ -659,8 +673,18 @@ if [ $pdf == false ] && [ $docx == false ] && [ $xlsx == false ] && [ $txt == fa
 	pdf=true
 fi
 
+# Add default values
+if [ "$suffix" != "" ]; then
+	FILENAME_SUFFIX="$suffix"
+fi
+if [ "$FILENAME_SUFFIX" == "" ] && [ $no_suffix != true ]; then
+	FILENAME_SUFFIX="_OCR"
+fi
 # Add FAILED_FILENAME_SUFFIX if missing
-if [ "$FAILED_FILENAME_SUFFIX" == "" ]; then
+if [ "$failed_suffix" != "" ]; then
+	FAILED_FILENAME_SUFFIX="$failed_suffix"
+fi
+if [ "$FAILED_FILENAME_SUFFIX" == "" ] && [ $no_failed_suffix != true ]; then
 	FAILED_FILENAME_SUFFIX="_OCR_ERR"
 fi
 

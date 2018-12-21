@@ -406,7 +406,7 @@ function test_MovedFilesService () {
 
 	# Make sure next transformations will fail in order to move originals to failed dir
 	sleep 2
-	OCR_ENGINE_EXEC=$(GetConfFileValue "$CONF_DIR/$SERVICE_CONF" "OCR_ENGINE_EXEC")
+	OCR_ENGINE_EXEC=$(GetConfFileValue "$CONF_DIR/$SERVICE_CONF" "TESSERACT_OCR_ENGINE_EXEC")
 	$SUDO_CMD mv $OCR_ENGINE_EXEC $OCR_ENGINE_EXEC"-alt"
 
 	#CopyTestFiles

@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2018 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018122105
+PROGRAM_BUILD=2018122106
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -132,6 +132,36 @@ function TrapQuit {
 		Logger "Service $PROGRAM couldn't properly stop instance [$INSTANCE_ID] with pid [$$]." "ERROR"
 	fi
 	exit $?
+}
+
+function SetOCREngineOptions {
+	__CheckArguments 0 $# "$@"		#__WITH_PARANOIA_DEBUG
+
+	if [ "$OCR_ENGINE" == "tesseract3" ]; then
+		OCR_ENGINE_EXEC="$TESSERACT_OCR_ENGINE_EXEC"
+		PDF_OCR_ENGINE_ARGS="$TESSERACT_PDF_OCR_ENGINE_ARGS"
+		TEXT_OCR_ENGINE_ARGS="$TESSERACT_TEXT_OCR_ENGINE_ARGS"
+		CSV_OCR_ENGINE_ARGS="$TESSERACT_CSV_OCR_ENGINE_ARGS"
+		OCR_ENGINE_INPUT_ARG="$TESSERACT_OCR_ENGINE_INPUT_ARG"
+		OCR_ENGINE_OUTPUT_ARG="$TESSERACT_OCR_ENGINE_OUTPUT_ARG"
+
+		PDF_TO_TIFF_EXEC="$TESSERACT_PDF_TO_TIFF_EXEC"
+		PDF_TO_TIFF_OPTS="$TESSERACT_PDF_TO_TIFF_OPTS"
+
+	elif [ "$OCR_ENGINE" == "abbyyocr11" ]; then
+		OCR_ENGINE_EXEC="$ABBYY_OCR_ENGINE_EXEC"
+		PDF_OCR_ENGINE_ARGS="$ABBYY_PDF_OCR_ENGINE_ARGS"
+		WORD_OCR_ENGINE_ARGS="$ABBYY_WORD_OCR_ENGINE_ARGS"
+		EXCEL_OCR_ENGINE_ARGS="$ABBYY_EXCEL_OCR_ENGINE_ARGS"
+		TEXT_OCR_ENGINE_ARGS="$ABBYY_TEXT_OCR_ENGINE_ARGS"
+		CSV_OCR_ENGINE_ARGS="$ABBYY_CSV_OCR_ENGINE_ARGS"
+		OCR_ENGINE_INPUT_ARG="$ABBYY_OCR_ENGINE_INPUT_ARG"
+		OCR_ENGINE_OUTPUT_ARG="$ABBYY_OCR_ENGINE_OUTPUT_ARG"
+
+	else
+		Logger "Bogus OCR_ENGINE selected." "CRITICAL"
+		exit 1
+	fi
 }
 
 function OCR {
@@ -649,6 +679,8 @@ if [ "$CONFIG_FILE" != "" ]; then
 else
 	LoadConfigFile "$DEFAULT_CONFIG_FILE"
 fi
+
+SetOCREngineOptions
 
 if [ "$LOGFILE" == "" ]; then
         if [ -w /var/log ]; then

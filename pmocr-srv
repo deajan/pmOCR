@@ -22,7 +22,7 @@ progexec=pmocr.sh
 progpath=/usr/local/bin
 confdir=/etc/$prog
 pidfile=/var/run/$prog
-SCRIPT_BUILD=2016090601
+SCRIPT_BUILD=2018122101
 
 if [ ! -f $progpath/$progexec ] && [ ! -f $progexec ]
 then
@@ -65,7 +65,7 @@ start() {
 			echo "$prog successfully started for configuration file $cfgfile"
 		else
 			echo "Cannot start $prog for configuration file $cfgfile"
-			$errno = 1
+			errno = 1
 		fi
 	done
 
@@ -114,7 +114,7 @@ status() {
 			echo "$prog instance $(basename $pfile) is running (pid $(cat $pfile))"
 		else
 			echo "$prog instance $pfile (pid $(cat $pfile)) is dead but pidfile exists."
-			$errno=1
+			errno=1
 		fi
 	done
 

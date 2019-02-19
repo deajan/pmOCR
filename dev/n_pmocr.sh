@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2018 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018122106
+PROGRAM_VERSION=1.6.0-rc1
+PROGRAM_BUILD=2019021901
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -553,6 +553,8 @@ function OCR_service {
 		cmd="inotifywait --exclude \"(.*)$FILENAME_SUFFIX$fileExtension\" --exclude \"(.*)$FAILED_FILENAME_SUFFIX$fileExtension\" $moveSuccessExclude $moveFailureExclude  -qq -r -e create,move \"$directoryToProcess\" --timeout $MAX_WAIT"
 		eval $cmd
 		kill -USR1 $SCRIPT_PID
+		# Update SERVICE_MONITOR_FILE to prevent automatic old file cleanup in /tmp directory (RHEL 6/7)
+		echo "$SCRIPT_PID" > "$SERVICE_MONITOR_FILE"
 	done
 }
 

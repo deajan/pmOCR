@@ -1,6 +1,13 @@
 RECENT CHANGES
 --------------
 
+dd MMM 2019: v1.6.1
+
+- Fixed automatic service shutdown in RHEL 6/7 (automatic /tmp directory cleanup removing service file)
+- Updated ofunctions
+	- Moved from yes/no parameters to bash booleans
+	- Compatibility with elder config is preserved
+
 21 Dec 2018: v1.6.0
 
 - Simplified config file syntax for OCR_ENGINE selection

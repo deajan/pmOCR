@@ -110,8 +110,6 @@ function CheckEnvironment {
 		fi
 	fi
 
-	#TODO(low): check why using this condition
-	#if [ "$CHECK_PDF" == true ] && ( [ "$_SERVICE_RUN"  == true ] || [ "$_BATCH_RUN" == true ])
 	if [ "$CHECK_PDF" == true ]; then
 		if ! type pdffonts > /dev/null 2>&1; then
 			Logger "pdffonts not present (see poppler-utils package ?)." "CRITICAL"
@@ -567,6 +565,8 @@ function OCR_service {
 		cmd="inotifywait --exclude \"(.*)$FILENAME_SUFFIX$fileExtension\" --exclude \"(.*)$FAILED_FILENAME_SUFFIX$fileExtension\" $moveSuccessExclude $moveFailureExclude  -qq -r -e create,move \"$directoryToProcess\" --timeout $MAX_WAIT"
 		eval $cmd
 		kill -USR1 $SCRIPT_PID
+		# Update SERVICE_MONITOR_FILE to prevent automatic old file cleanup in /tmp directory (RHEL 6/7)
+		echo "$SCRIPT_PID" > "$SERVICE_MONITOR_FILE"
 	done
 }
 
@@ -697,6 +697,7 @@ else
 	LoadConfigFile "$DEFAULT_CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 fi
 
+UpdateBooleans
 SetOCREngineOptions
 
 if [ "$LOGFILE" == "" ]; then

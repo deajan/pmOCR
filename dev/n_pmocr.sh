@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2018 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018122106
+PROGRAM_VERSION=1.6.1
+PROGRAM_BUILD=2019022001
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -25,6 +25,20 @@ fi
 include #### OFUNCTIONS MINI SUBSET ####
 include #### VerComp SUBSET ####
 include #### GetConfFileValue SUBSET ####
+
+# Change all booleans with "yes" or "no" to true / false for v2 config syntax compatibility
+function UpdateBooleans {
+        local update
+        local booleans
+
+        declare -a booleans=(DELETE_ORIGINAL CHECK_PDF)
+
+        for i in "${booleans[@]}"; do
+                update="if [ \"\$$i\" == \"yes\" ]; then $i=true; fi; if [ \"\$$i\" == \"no\" ]; then $i=false; fi"
+                eval "$update"
+        done
+}
+
 
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
@@ -97,8 +111,8 @@ function CheckEnvironment {
 	fi
 
 	#TODO(low): check why using this condition
-	#if [ "$CHECK_PDF" == "yes" ] && ( [ "$_SERVICE_RUN"  == true ] || [ "$_BATCH_RUN" == true ])
-	if [ "$CHECK_PDF" == "yes" ]; then
+	#if [ "$CHECK_PDF" == true ] && ( [ "$_SERVICE_RUN"  == true ] || [ "$_BATCH_RUN" == true ])
+	if [ "$CHECK_PDF" == true ]; then
 		if ! type pdffonts > /dev/null 2>&1; then
 			Logger "pdffonts not present (see poppler-utils package ?)." "CRITICAL"
 			exit 1
@@ -197,7 +211,7 @@ function OCR {
 			outputFileName="$outputFileName$(date '+%N')"
 		fi
 
-		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$inputFileName" 2> /dev/null | wc -l) -lt 3 ])); then
+		if ([ "$CHECK_PDF" != true ] || ([ "$CHECK_PDF" == true ] && [ $(pdffonts "$inputFileName" 2> /dev/null | wc -l) -lt 3 ])); then
 
 			# Perform intermediary transformation of input pdf file to tiff if OCR_ENGINE is tesseract
 			if [ "$OCR_ENGINE" == "tesseract3" ] && [[ "$inputFileName" == *.[pP][dD][fF] ]]; then
@@ -357,7 +371,7 @@ function OCR {
 				fi
 
 				# Apply permissions and ownership
-				if [ "$PRESERVE_OWNERSHIP" == "yes" ]; then
+				if [ "$PRESERVE_OWNERSHIP" == true ]; then
 					chown --reference "$inputFileName" "$outputFileName$fileExtension"
 					if [ $? != 0 ]; then
 						Logger "Cannot chown [$outputfileName$fileExtension] with reference from [$inputFileName]." "WARN"
@@ -370,7 +384,7 @@ function OCR {
 						Logger "Cannot mod [$outputfileName$fileExtension] with [$FILE_PERMISSIONS]." "WARN"
 						alert=true
 					fi
-				elif [ "$PRESERVE_OWNERSHIP" == "yes" ]; then
+				elif [ "$PRESERVE_OWNERSHIP" == true ]; then
 					chmod --reference "$inputFileName" "$outputFileName$fileExtension"
 					if [ $? != 0 ]; then
 						Logger "Cannot chmod [$outputfileName$fileExtension] with reference from [$inputFileName]." "WARN"
@@ -390,7 +404,7 @@ function OCR {
 							alert=true
 						fi
 					fi
-				elif [ "$DELETE_ORIGINAL" == "yes" ]; then
+				elif [ "$DELETE_ORIGINAL" == true ]; then
 					Logger "Deleting file [$inputFileName]." "DEBUG"
 					rm -f "$inputFileName"
 					if [ $? != 0 ]; then
@@ -721,7 +735,7 @@ fi
 # Commandline arguments override default config
 if [ $_BATCH_RUN == true ]; then
 	if [ $skip_txt_pdf == true ]; then
-		CHECK_PDF="yes"
+		CHECK_PDF=true
 	fi
 
 	if [ $no_suffix == true ]; then
@@ -749,7 +763,7 @@ if [ $_BATCH_RUN == true ]; then
 	fi
 
 	if [ $delete_input == true ]; then
-		DELETE_ORIGINAL=yes
+		DELETE_ORIGINAL=true
 	fi
 fi
 

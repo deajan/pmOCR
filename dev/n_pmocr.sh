@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
-AUTHOR="(C) 2015-2018 by Orsiris de Jong"
+AUTHOR="(C) 2015-2019 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.1
-PROGRAM_BUILD=2019022001
+PROGRAM_BUILD=2019022601
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -487,7 +487,8 @@ function OCR_Dispatch {
 		if ! lsof -f -- "$file" > /dev/null 2>&1; then
 			echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 		else
-			Logger "Skipping file [$file] currently being written to." "ALWAYS"
+			Logger "Deferring file [$file] currently being written to." "ALWAYS"
+			kill -USR1 $SCRIPT_PID
 		fi
 	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
 

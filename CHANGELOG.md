@@ -3,6 +3,7 @@ RECENT CHANGES
 
 dd MMM 2019: v1.6.1
 
+- Improved handling of open files being deferred for later OCR
 - Fixed automatic service shutdown in RHEL 6/7 (automatic /tmp directory cleanup removing service file)
 - Updated ofunctions
 	- Moved from yes/no parameters to bash booleans

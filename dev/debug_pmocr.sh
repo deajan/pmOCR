@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
-AUTHOR="(C) 2015-2018 by Orsiris de Jong"
+AUTHOR="(C) 2015-2019 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.6.0-dev
-PROGRAM_BUILD=2018122106
+PROGRAM_VERSION=1.6.1
+PROGRAM_BUILD=2019022601
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -23,7 +23,7 @@ if [ "$MAX_WAIT" == "" ]; then
 fi
 
 _OFUNCTIONS_VERSION=2.3.0-RC2
-_OFUNCTIONS_BUILD=2018122103
+_OFUNCTIONS_BUILD=2019021401
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -55,13 +55,13 @@ ERROR_ALERT=false
 WARN_ALERT=false
 
 ## allow function call checks			#__WITH_PARANOIA_DEBUG
-if [ "$_PARANOIA_DEBUG" == "yes" ];then		#__WITH_PARANOIA_DEBUG
-	_DEBUG=yes				#__WITH_PARANOIA_DEBUG
+if [ "$_PARANOIA_DEBUG" == true ];then		#__WITH_PARANOIA_DEBUG
+	_DEBUG=true				#__WITH_PARANOIA_DEBUG
 fi						#__WITH_PARANOIA_DEBUG
 
-## allow debugging from command line with _DEBUG=yes
-if [ ! "$_DEBUG" == "yes" ]; then
-	_DEBUG=no
+## allow debugging from command line with _DEBUG=true
+if [ ! "$_DEBUG" == true ]; then
+	_DEBUG=false
 	_LOGGER_VERBOSE=false
 else
 	trap 'TrapError ${LINENO} $?' ERR
@@ -176,8 +176,8 @@ function _Logger {
 		echo -e "$logValue" >> "$LOG_FILE"
 
 		# Build current log file for alerts if we have a sufficient environment
-		if [ "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" != "" ]; then
-			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+		if [ "$RUN_DIR/$PROGRAM" != "/" ]; then
+			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP.log"
 		fi
 	fi
 
@@ -210,19 +210,19 @@ function RemoteLogger {
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "" "$prefix\e[1;33;41m$value\e[0m" true
-		if [ $_DEBUG == "yes" ]; then
+		if [ $_DEBUG == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "ERROR" ]; then
 		_Logger "" "$prefix\e[31m$value\e[0m" true
-		if [ $_DEBUG == "yes" ]; then
+		if [ $_DEBUG == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "WARN" ]; then
 		_Logger "" "$prefix\e[33m$value\e[0m" true
-		if [ $_DEBUG == "yes" ]; then
+		if [ $_DEBUG == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
@@ -240,12 +240,12 @@ function RemoteLogger {
 		_Logger	 "" "$prefix$value"
 		return
 	elif [ "$level" == "DEBUG" ]; then
-		if [ "$_DEBUG" == "yes" ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger "" "$prefix$value"
 			return
 		fi
 	elif [ "$level" == "PARANOIA_DEBUG" ]; then				#__WITH_PARANOIA_DEBUG
-		if [ "$_PARANOIA_DEBUG" == "yes" ]; then			#__WITH_PARANOIA_DEBUG
+		if [ "$_PARANOIA_DEBUG" == true ]; then			#__WITH_PARANOIA_DEBUG
 			_Logger "" "$prefix\e[35m$value\e[0m"			#__WITH_PARANOIA_DEBUG
 			return							#__WITH_PARANOIA_DEBUG
 		fi								#__WITH_PARANOIA_DEBUG
@@ -267,10 +267,9 @@ function RemoteLogger {
 
 # CRITICAL, ERROR, WARN sent to stderr, color depending on level, level also logged
 # NOTICE sent to stdout
-# VERBOSE sent to stdout if _LOGGER_VERBOSE = true
-# ALWAYS is sent to stdout unless _LOGGER_SILENT = true
-# DEBUG & PARANOIA_DEBUG are only sent to stdout if _DEBUG=yes
-# SIMPLE is a wrapper for QuickLogger that does not use advanced functionality
+# VERBOSE sent to stdout if _LOGGER_VERBOSE=true
+# ALWAYS is sent to stdout unless _LOGGER_SILENT=true
+# DEBUG & PARANOIA_DEBUG are only sent to stdout if _DEBUG=true
 function Logger {
 	local value="${1}"		# Sentence to log (in double quotes)
 	local level="${2}"		# Log level
@@ -320,22 +319,15 @@ function Logger {
 		_Logger "$prefix$value" "$prefix$value"
 		return
 	elif [ "$level" == "DEBUG" ]; then
-		if [ "$_DEBUG" == "yes" ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger "$prefix$value" "$prefix$value"
 			return
 		fi
 	elif [ "$level" == "PARANOIA_DEBUG" ]; then				#__WITH_PARANOIA_DEBUG
-		if [ "$_PARANOIA_DEBUG" == "yes" ]; then			#__WITH_PARANOIA_DEBUG
+		if [ "$_PARANOIA_DEBUG" == true ]; then			#__WITH_PARANOIA_DEBUG
 			_Logger "$prefix$value" "$prefix\e[35m$value\e[0m"	#__WITH_PARANOIA_DEBUG
 			return							#__WITH_PARANOIA_DEBUG
 		fi								#__WITH_PARANOIA_DEBUG
-	elif [ "$level" == "SIMPLE" ]; then
-		if [ "$_LOGGER_SILENT" == true ]; then
-			_Logger "$preix$value"
-		else
-			_Logger "$preix$value" "$prefix$value"
-		fi
-		return
 	else
 		_Logger "\e[41mLogger function called without proper loglevel [$level].\e[0m" "\e[41mLogger function called without proper loglevel [$level].\e[0m" true
 		_Logger "Value was: $prefix$value" "Value was: $prefix$value" true
@@ -430,7 +422,7 @@ function KillAllChilds {
 }
 
 function CleanUp {
-	if [ "$_DEBUG" != "yes" ]; then
+	if [ "$_DEBUG" != true ]; then
 		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP"
 		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
 		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP.tmp"
@@ -471,7 +463,7 @@ function SendAlert {
 		return 0
 	fi
 
-	if [ "$_DEBUG" == "yes" ]; then
+	if [ "$_DEBUG" == true ]; then
 		Logger "Debug mode, no warning mail will be sent." "NOTICE"
 		return 0
 	fi
@@ -483,7 +475,7 @@ function SendAlert {
 		attachment=true
 	fi
 
-	body="$MAIL_ALERT_MSG"$'\n\n'"Last 1000 lines of log"$'\n\n'"$(tail -n 1000 $RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP)"
+	body="$MAIL_ALERT_MSG"$'\n\n'"Last 1000 lines of current log"$'\n\n'"$(tail -n 1000 $RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP.log)"
 
 	if [ $ERROR_ALERT == true ]; then
 		subject="Error alert for $INSTANCE_ID"
@@ -550,8 +542,9 @@ function SendEmail {
 
 	local i
 
-	if [ "${destinationMails[@]}" != "" ]; then
-		for i in "${destinationMails[@]}"; do
+	if [ "${destinationMails}" != "" ]; then
+		# Not quoted since we split at space character, and emails cannot contain spaces
+		for i in ${destinationMails}; do
 			if [ $(CheckRFC822 "$i") -ne 1 ]; then
 				Logger "Given email [$i] does not seem to be valid." "WARN"
 			fi
@@ -731,7 +724,7 @@ function LoadConfigFile {
 	else
 		revisionPresent=$(GetConfFileValue "$configFile" "CONFIG_FILE_REVISION" true)
 		if [ "$(IsNumeric $revisionPresent)" -eq 0 ]; then
-			revisionPresent=0
+			Logger "CONFIG_FILE_REVISION does not seem numeric [$revisionPresent]." "DEBUG"
 		fi
 		if [ "$revisionRequired" != "" ]; then
 			if [ $(VerComp "$revisionPresent" "$revisionRequired") -eq 2 ]; then
@@ -873,7 +866,7 @@ function ExecTasks {
 	Logger "${FUNCNAME[0]} id [$id] called by [${FUNCNAME[1]} < ${FUNCNAME[2]} < ${FUNCNAME[3]} < ${FUNCNAME[4]} < ${FUNCNAME[5]} < ${FUNCNAME[6]} ...]." "PARANOIA_DEBUG"	 #__WITH_PARANOIA_DEBUG
 
 	# Since ExecTasks takes up to 17 arguments, do a quick preflight check in DEBUG mode
-	if [ "$_DEBUG" == "yes" ]; then
+	if [ "$_DEBUG" == true ]; then
 		declare -a booleans=(readFromFile counting spinner noTimeErrorLog noErrorLogsAtAll)
 		for i in "${booleans[@]}"; do
 			test="if [ \$$i != false ] && [ \$$i != true ]; then Logger \"Bogus $i value [\$$i] given to ${FUNCNAME[0]}.\" \"CRITICAL\"; exit 1; fi"
@@ -1120,7 +1113,7 @@ function ExecTasks {
 		# Trivial wait time for bash to not eat up all CPU
 		sleep $sleepTime
 
-		if [ "$_PERF_PROFILER" == "yes" ]; then				##__WITH_PARANOIA_DEBUG
+		if [ "$_PERF_PROFILER" == true ]; then				##__WITH_PARANOIA_DEBUG
 			_PerfProfiler						##__WITH_PARANOIA_DEBUG
 		fi								##__WITH_PARANOIA_DEBUG
 
@@ -1478,7 +1471,7 @@ function GetLocalOS {
 		LOCAL_OS="BusyBox"
 		;;
 		*)
-		if [ "$IGNORE_OS_TYPE" == "yes" ]; then
+		if [ "$IGNORE_OS_TYPE" == true ]; then
 			Logger "Running on unknown local OS [$localOsVar]." "WARN"
 			return
 		fi
@@ -1535,7 +1528,7 @@ function GetLocalOS {
 function __CheckArguments {
 	# Checks the number of arguments of a function and raises an error if some are missing
 
-	if [ "$_DEBUG" == "yes" ]; then
+	if [ "$_DEBUG" == true ]; then
 		local numberOfArguments="${1}" # Number of arguments the tested function should have, can be a number of a range, eg 0-2 for zero to two arguments
 		local numberOfGivenArguments="${2}" # Number of arguments that have been passed
 
@@ -1651,6 +1644,20 @@ function GetConfFileValue () {
 }
 
 
+# Change all booleans with "yes" or "no" to true / false for v2 config syntax compatibility
+function UpdateBooleans {
+	local update
+	local booleans
+
+	declare -a booleans=(DELETE_ORIGINAL CHECK_PDF)
+
+	for i in "${booleans[@]}"; do
+		update="if [ \"\$$i\" == \"yes\" ]; then $i=true; fi; if [ \"\$$i\" == \"no\" ]; then $i=false; fi"
+		eval "$update"
+	done
+}
+
+
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
 		if ! type "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
@@ -1721,9 +1728,7 @@ function CheckEnvironment {
 		fi
 	fi
 
-	#TODO(low): check why using this condition
-	#if [ "$CHECK_PDF" == "yes" ] && ( [ "$_SERVICE_RUN"  == true ] || [ "$_BATCH_RUN" == true ])
-	if [ "$CHECK_PDF" == "yes" ]; then
+	if [ "$CHECK_PDF" == true ]; then
 		if ! type pdffonts > /dev/null 2>&1; then
 			Logger "pdffonts not present (see poppler-utils package ?)." "CRITICAL"
 			exit 1
@@ -1822,7 +1827,7 @@ function OCR {
 			outputFileName="$outputFileName$(date '+%N')"
 		fi
 
-		if ([ "$CHECK_PDF" != "yes" ] || ([ "$CHECK_PDF" == "yes" ] && [ $(pdffonts "$inputFileName" 2> /dev/null | wc -l) -lt 3 ])); then
+		if ([ "$CHECK_PDF" != true ] || ([ "$CHECK_PDF" == true ] && [ $(pdffonts "$inputFileName" 2> /dev/null | wc -l) -lt 3 ])); then
 
 			# Perform intermediary transformation of input pdf file to tiff if OCR_ENGINE is tesseract
 			if [ "$OCR_ENGINE" == "tesseract3" ] && [[ "$inputFileName" == *.[pP][dD][fF] ]]; then
@@ -1982,7 +1987,7 @@ function OCR {
 				fi
 
 				# Apply permissions and ownership
-				if [ "$PRESERVE_OWNERSHIP" == "yes" ]; then
+				if [ "$PRESERVE_OWNERSHIP" == true ]; then
 					chown --reference "$inputFileName" "$outputFileName$fileExtension"
 					if [ $? != 0 ]; then
 						Logger "Cannot chown [$outputfileName$fileExtension] with reference from [$inputFileName]." "WARN"
@@ -1995,7 +2000,7 @@ function OCR {
 						Logger "Cannot mod [$outputfileName$fileExtension] with [$FILE_PERMISSIONS]." "WARN"
 						alert=true
 					fi
-				elif [ "$PRESERVE_OWNERSHIP" == "yes" ]; then
+				elif [ "$PRESERVE_OWNERSHIP" == true ]; then
 					chmod --reference "$inputFileName" "$outputFileName$fileExtension"
 					if [ $? != 0 ]; then
 						Logger "Cannot chmod [$outputfileName$fileExtension] with reference from [$inputFileName]." "WARN"
@@ -2015,7 +2020,7 @@ function OCR {
 							alert=true
 						fi
 					fi
-				elif [ "$DELETE_ORIGINAL" == "yes" ]; then
+				elif [ "$DELETE_ORIGINAL" == true ]; then
 					Logger "Deleting file [$inputFileName]." "DEBUG"
 					rm -f "$inputFileName"
 					if [ $? != 0 ]; then
@@ -2100,7 +2105,8 @@ function OCR_Dispatch {
 		if ! lsof -f -- "$file" > /dev/null 2>&1; then
 			echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 		else
-			Logger "Skipping file [$file] currently being written to." "ALWAYS"
+			Logger "Deferring file [$file] currently being written to." "ALWAYS"
+			kill -USR1 $SCRIPT_PID
 		fi
 	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
 
@@ -2178,6 +2184,8 @@ function OCR_service {
 		cmd="inotifywait --exclude \"(.*)$FILENAME_SUFFIX$fileExtension\" --exclude \"(.*)$FAILED_FILENAME_SUFFIX$fileExtension\" $moveSuccessExclude $moveFailureExclude  -qq -r -e create,move \"$directoryToProcess\" --timeout $MAX_WAIT"
 		eval $cmd
 		kill -USR1 $SCRIPT_PID
+		# Update SERVICE_MONITOR_FILE to prevent automatic old file cleanup in /tmp directory (RHEL 6/7)
+		echo "$SCRIPT_PID" > "$SERVICE_MONITOR_FILE"
 	done
 }
 
@@ -2308,6 +2316,7 @@ else
 	LoadConfigFile "$DEFAULT_CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 fi
 
+UpdateBooleans
 SetOCREngineOptions
 
 if [ "$LOGFILE" == "" ]; then
@@ -2346,7 +2355,7 @@ fi
 # Commandline arguments override default config
 if [ $_BATCH_RUN == true ]; then
 	if [ $skip_txt_pdf == true ]; then
-		CHECK_PDF="yes"
+		CHECK_PDF=true
 	fi
 
 	if [ $no_suffix == true ]; then
@@ -2374,7 +2383,7 @@ if [ $_BATCH_RUN == true ]; then
 	fi
 
 	if [ $delete_input == true ]; then
-		DELETE_ORIGINAL=yes
+		DELETE_ORIGINAL=true
 	fi
 fi
 

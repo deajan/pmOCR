@@ -88,7 +88,6 @@ else
 	LOG_FILE="/tmp/$PROGRAM.log"
 fi
 
-#### RUN_DIR SUBSET ####
 ## Default directory where to store temporary run files
 
 if [ -w /tmp ]; then
@@ -104,7 +103,6 @@ if [ "$_REMOTE_EXECUTION" == true ]; then
 	mkdir -p "$RUN_DIR/$PROGRAM.remote"
 	RUN_DIR="$RUN_DIR/$PROGRAM.remote"
 fi
-#### RUN_DIR SUBSET END ####
 
 # Get a random number on Windows BusyBox alike, also works on most Unixes that have dd, if dd is not found, then return $RANDOM
 function PoorMansRandomGenerator {

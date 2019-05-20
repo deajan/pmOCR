@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2019 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.1
-PROGRAM_BUILD=2019022601
+PROGRAM_BUILD=2019052001
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -629,74 +629,81 @@ xlsx=false
 txt=false
 csv=false
 
-for i in "$@"
-do
-	case "$i" in
-		--config=*)
-		CONFIG_FILE="${i##*=}"
-		;;
-		--batch)
-		_BATCH_RUN=true
-		;;
-		--service)
-		_SERVICE_RUN=true
-		;;
-		--silent|-s)
-		_SILENT=true
-		;;
-		--verbose|-v)
-		_LOGGER_VERBOSE=true
-		;;
-		-p|--target=PDF|--target=pdf)
-		pdf=true
-		;;
-		-w|--target=DOCX|--target=docx)
-		docx=true
-		;;
-		-e|--target=XLSX|--target=xlsx)
-		xlsx=true
-		;;
-		-t|--target=TXT|--target=txt)
-		txt=true
-		;;
-		-c|--target=CSV|--target=csv)
-		csv=true
-		;;
-		-k|--skip-txt-pdf)
-		skip_txt_pdf=true
-		;;
-		-d|--delete-input)
-		delete_input=true
-		;;
-		--suffix=*)
-		suffix="${i##*=}"
-		;;
-		--no-suffix)
-		no_suffix=true
-		;;
-		--suffix=*)
-		failed_suffix="${i##*=}"
-		;;
-		--no-failed-suffix)
-		no_failed_suffix=true
-		;;
-		--text=*)
-		text="${i##*=}"
-		;;
-		--no-text)
-		no_text=true
-		;;
-		--help|-h|--version|-v|-?)
-		Usage
-		;;
-	esac
-done
+function GetCommandlineArguments {
+	for i in "$@"
+	do
+		case "$i" in
+			--config=*)
+			CONFIG_FILE="${i##*=}"
+			;;
+			--batch)
+			_BATCH_RUN=true
+			;;
+			--service)
+			_SERVICE_RUN=true
+			;;
+			--silent|-s)
+			_SILENT=true
+			;;
+			--verbose|-v)
+			_LOGGER_VERBOSE=true
+			;;
+			-p|--target=PDF|--target=pdf)
+			pdf=true
+			;;
+			-w|--target=DOCX|--target=docx)
+			docx=true
+			;;
+			-e|--target=XLSX|--target=xlsx)
+			xlsx=true
+			;;
+			-t|--target=TXT|--target=txt)
+			txt=true
+			;;
+			-c|--target=CSV|--target=csv)
+			csv=true
+			;;
+			-k|--skip-txt-pdf)
+			skip_txt_pdf=true
+			;;
+			-d|--delete-input)
+			delete_input=true
+			;;
+			--suffix=*)
+			suffix="${i##*=}"
+			;;
+			--no-suffix)
+			no_suffix=true
+			;;
+			--suffix=*)
+			failed_suffix="${i##*=}"
+			;;
+			--no-failed-suffix)
+			no_failed_suffix=true
+			;;
+			--text=*)
+			text="${i##*=}"
+			;;
+			--no-text)
+			no_text=true
+			;;
+			--help|-h|--version|-v|-?)
+			Usage
+			;;
+		esac
+	done
+}
+
+GetCommandlineArguments "${@}"
 
 if [ "$CONFIG_FILE" != "" ]; then
 	LoadConfigFile "$CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 else
 	LoadConfigFile "$DEFAULT_CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 fi
+
+# Reload GetCommandlineArguments in order to allow override config values with runtime arguments
+GetCommandlineArguments "${@}"
 
 UpdateBooleans
 SetOCREngineOptions

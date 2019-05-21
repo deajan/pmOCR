@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2019 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.1
-PROGRAM_BUILD=2019022601
+PROGRAM_BUILD=2019052001
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -23,7 +23,7 @@ if [ "$MAX_WAIT" == "" ]; then
 fi
 
 _OFUNCTIONS_VERSION=2.3.0-RC2
-_OFUNCTIONS_BUILD=2019021401
+_OFUNCTIONS_BUILD=2019031502
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -134,17 +134,17 @@ function PoorMansRandomGenerator {
 	fi
 }
 function PoorMansRandomGenerator {
-        local digits="${1}" # The number of digits to generate
-        local number
+	local digits="${1}" # The number of digits to generate
+	local number
 
-        # Some read bytes can't be used, se we read twice the number of required bytes
-        dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
-                number=$number$(printf "%d" "'$char")
-                if [ ${#number} -ge $digits ]; then
-                        echo ${number:0:$digits}
-                        break;
-                fi
-        done
+	# Some read bytes can't be used, se we read twice the number of required bytes
+	dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
+		number=$number$(printf "%d" "'$char")
+		if [ ${#number} -ge $digits ]; then
+			echo ${number:0:$digits}
+			break;
+		fi
+	done
 }
 
 # Initial TSTMAP value before function declaration
@@ -175,7 +175,7 @@ function _Logger {
 
 		# Build current log file for alerts if we have a sufficient environment
 		if [ "$RUN_DIR/$PROGRAM" != "/" ]; then
-			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP.log"
+			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP.log"
 		fi
 	fi
 
@@ -382,11 +382,11 @@ function KillChilds {
 		if kill -0 "$pid" > /dev/null 2>&1; then
 			kill -s TERM "$pid"
 			Logger "Sent SIGTERM to process [$pid]." "DEBUG"
-			if [ $? != 0 ]; then
+			if [ $? -ne 0 ]; then
 				sleep 15
 				Logger "Sending SIGTERM to process [$pid] failed." "DEBUG"
 				kill -9 "$pid"
-				if [ $? != 0 ]; then
+				if [ $? -ne 0 ]; then
 					Logger "Sending SIGKILL to process [$pid] failed." "DEBUG"
 					return 1
 				fi	# Simplify the return 0 logic here
@@ -412,7 +412,7 @@ function KillAllChilds {
 	IFS=';' read -a pidsArray <<< "$pids"
 	for pid in "${pidsArray[@]}"; do
 		KillChilds $pid $self
-		if [ $? != 0 ]; then
+		if [ $? -ne 0 ]; then
 			errorcount=$((errorcount+1))
 			fi
 	done
@@ -449,10 +449,10 @@ function GenericTrapQuit {
 # osync/obackup/pmocr script specific mail alert function, use SendEmail function for generic mail sending
 function SendAlert {
 	local runAlert="${1:-false}" # Specifies if current message is sent while running or at the end of a run
+	local attachment="${2:-true}" # Should we send the log file as attachment
 
-	__CheckArguments 0-1 $# "$@"	#__WITH_PARANOIA_DEBUG
+	__CheckArguments 0-2 $# "$@"	#__WITH_PARANOIA_DEBUG
 
-	local attachment
 	local attachmentFile
 	local subject
 	local body
@@ -466,14 +466,17 @@ function SendAlert {
 		return 0
 	fi
 
-	eval "cat \"$LOG_FILE\" $COMPRESSION_PROGRAM > $ALERT_LOG_FILE"
-	if [ $? != 0 ]; then
-		attachment=false
-	else
-		attachment=true
+	if [ $attachment == true ]; then
+		attachmentFile="$LOG_FILE"
+		if type "$COMPRESSION_PROGRAM" > /dev/null 2>&1; then
+			eval "cat \"$LOG_FILE\" \"$COMPRESSION_PROGRAM\" > \"$ALERT_LOG_FILE\""
+			if [ $? -eq 0 ]; then
+				attachmentFile="$ALERT_LOG_FILE"
+			fi
+		fi
 	fi
 
-	body="$MAIL_ALERT_MSG"$'\n\n'"Last 1000 lines of current log"$'\n\n'"$(tail -n 1000 $RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP.log)"
+	body="$MAIL_ALERT_MSG"$'\n\n'"Last 1000 lines of current log"$'\n\n'"$(tail -n 1000 "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP.log")"
 
 	if [ $ERROR_ALERT == true ]; then
 		subject="Error alert for $INSTANCE_ID"
@@ -487,10 +490,6 @@ function SendAlert {
 		subject="Currently runing - $subject"
 	else
 		subject="Finished run - $subject"
-	fi
-
-	if [ "$attachment" == true ]; then
-		attachmentFile="$ALERT_LOG_FILE"
 	fi
 
 	SendEmail "$subject" "$body" "$DESTINATION_MAILS" "$attachmentFile" "$SENDER_MAIL" "$SMTP_SERVER" "$SMTP_PORT" "$SMTP_ENCRYPTION" "$SMTP_USER" "$SMTP_PASSWORD"
@@ -541,8 +540,7 @@ function SendEmail {
 	local i
 
 	if [ "${destinationMails}" != "" ]; then
-		# Not quoted since we split at space character, and emails cannot contain spaces
-		for i in ${destinationMails}; do
+		for i in "${destinationMails[@]}"; do
 			if [ $(CheckRFC822 "$i") -ne 1 ]; then
 				Logger "Given email [$i] does not seem to be valid." "WARN"
 			fi
@@ -583,7 +581,7 @@ function SendEmail {
 				echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) -f "$senderMail" -S "$smtpServer:$smtpPort" -au"$smtpUser" -ap"$smtpPassword" "$destinationMails"
 			fi
 
-			if [ $? != 0 ]; then
+			if [ $? -ne 0 ]; then
 				Logger "Cannot send alert mail via $(type -p sendmail) !!!" "WARN"
 				# Do not bother try other mail systems with busybox
 				return 1
@@ -599,7 +597,7 @@ function SendEmail {
 	if type mutt > /dev/null 2>&1 ; then
 		# We need to replace spaces with comma in order for mutt to be able to process multiple destinations
 		echo "$message" | $(type -p mutt) -x -s "$subject" "${destinationMails// /,}" $attachment_command
-		if [ $? != 0 ]; then
+		if [ $? -ne 0 ]; then
 			Logger "Cannot send mail via $(type -p mutt) !!!" "WARN"
 		else
 			Logger "Sent mail using mutt." "NOTICE"
@@ -621,10 +619,10 @@ function SendEmail {
 		fi
 
 		echo "$message" | $(type -p mail) $attachment_command -s "$subject" "$destinationMails"
-		if [ $? != 0 ]; then
+		if [ $? -ne 0 ]; then
 			Logger "Cannot send mail via $(type -p mail) with attachments !!!" "WARN"
 			echo "$message" | $(type -p mail) -s "$subject" "$destinationMails"
-			if [ $? != 0 ]; then
+			if [ $? -ne 0 ]; then
 				Logger "Cannot send mail via $(type -p mail) without attachments !!!" "WARN"
 			else
 				Logger "Sent mail using mail command without attachment." "NOTICE"
@@ -638,7 +636,7 @@ function SendEmail {
 
 	if type sendmail > /dev/null 2>&1 ; then
 		echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) "$destinationMails"
-		if [ $? != 0 ]; then
+		if [ $? -ne 0 ]; then
 			Logger "Cannot send mail via $(type -p sendmail) !!!" "WARN"
 		else
 			Logger "Sent mail using sendmail command without attachment." "NOTICE"
@@ -672,7 +670,7 @@ function SendEmail {
 			auth_string="-auth -user \"$smtpUser\" -pass \"$smtpPassword\""
 		fi
 		$(type mailsend.exe) -f "$senderMail" -t "$destinationMails" -sub "$subject" -M "$message" -attach "$attachment" -smtp "$smtpServer" -port "$smtpPort" $encryption_string $auth_string
-		if [ $? != 0 ]; then
+		if [ $? -ne 0 ]; then
 			Logger "Cannot send mail via $(type mailsend.exe) !!!" "WARN"
 		else
 			Logger "Sent mail using mailsend.exe command with attachment." "NOTICE"
@@ -683,7 +681,7 @@ function SendEmail {
 	# pfSense specific
 	if [ -f /usr/local/bin/mail.php ]; then
 		echo "$message" | /usr/local/bin/mail.php -s="$subject"
-		if [ $? != 0 ]; then
+		if [ $? -ne 0 ]; then
 			Logger "Cannot send mail via /usr/local/bin/mail.php (pfsense) !!!" "WARN"
 		else
 			Logger "Sent mail using pfSense mail.php." "NOTICE"
@@ -709,7 +707,7 @@ function LoadConfigFile {
 	local configFile="${1}"
 	local revisionRequired="${2}"
 
-	__CheckArguments 1 $# "$@"	#__WITH_PARANOIA_DEBUG
+	__CheckArguments 2 $# "$@"	#__WITH_PARANOIA_DEBUG
 
 	local revisionPresent
 
@@ -720,11 +718,11 @@ function LoadConfigFile {
 		Logger "Wrong configuration file supplied [$configFile]. Cannot start." "CRITICAL"
 		exit 1
 	else
-		revisionPresent=$(GetConfFileValue "$configFile" "CONFIG_FILE_REVISION" true)
-		if [ "$(IsNumeric $revisionPresent)" -eq 0 ]; then
+		revisionPresent="$(GetConfFileValue "$configFile" "CONFIG_FILE_REVISION" true)"
+		if [ "$(IsNumeric "${revisionPresent%%.*}")" -eq 0 ]; then
+			Logger "Missing CONFIG_FILE_REVISION. Please provide a valid config file, or run the config update script." "WARN"
 			Logger "CONFIG_FILE_REVISION does not seem numeric [$revisionPresent]." "DEBUG"
-		fi
-		if [ "$revisionRequired" != "" ]; then
+		elif [ "$revisionRequired" != "" ]; then
 			if [ $(VerComp "$revisionPresent" "$revisionRequired") -eq 2 ]; then
 				Logger "Configuration file seems out of date. Required version [$revisionRequired]. Actual version [$revisionPresent]." "CRITICAL"
 				exit 1
@@ -977,13 +975,18 @@ function ExecTasks {
 		fi
 
 		if [ $keepLogging -ne 0 ]; then
+			# This log solely exists for readability purposes before having next set of logs
+			if [ ${#pidsArray[@]} -eq $numberOfProcesses ] && [ $log_ttime -eq 0 ]; then
+				log_ttime=$exec_time
+				Logger "There are $((mainItemCount-counter+postponedItemCount)) / $mainItemCount tasks in the queue of which $postponedItemCount are postponed. Currently, ${#pidsArray[@]} tasks running with pids [$(joinString , ${pidsArray[@]})]." "NOTICE"
+			fi
 			if [ $(((exec_time + 1) % keepLogging)) -eq 0 ]; then
 				if [ $log_ttime -ne $exec_time ]; then # Fix when sleep time lower than 1 second
 					log_ttime=$exec_time
-					if [ $functionMode == "Wait" ]; then
+					if [ $functionMode == "WaitForTaskCompletion" ]; then
 						Logger "Current tasks still running with pids [$(joinString , ${pidsArray[@]})]." "NOTICE"
 					elif [ $functionMode == "ParallelExec" ]; then
-						Logger "There are $((mainItemCount-counter+postponedItemCount)) / $mainItemCount tasks in the queue. Currently, ${#pidsArray[@]} tasks running with pids [$(joinString , ${pidsArray[@]})]." "NOTICE"
+						Logger "There are $((mainItemCount-counter+postponedItemCount)) / $mainItemCount tasks in the queue of which $postponedItemCount are postponed. Currently, ${#pidsArray[@]} tasks running with pids [$(joinString , ${pidsArray[@]})]." "NOTICE"
 					fi
 				fi
 			fi
@@ -1003,7 +1006,7 @@ function ExecTasks {
 			fi
 			for pid in "${pidsArray[@]}"; do
 				KillChilds $pid true
-				if [ $? == 0 ]; then
+				if [ $? -eq 0 ]; then
 					Logger "Task with pid [$pid] stopped successfully." "NOTICE"
 				else
 					if [ $noErrorLogsAtAll != true ]; then
@@ -1056,7 +1059,7 @@ function ExecTasks {
 								fi
 							fi
 							KillChilds $pid true
-							if [ $? == 0 ]; then
+							if [ $? -eq 0 ]; then
 								 Logger "Command with pid [$pid] stopped successfully." "NOTICE"
 							else
 								if [ $noErrorLogsAtAll != true ]; then
@@ -1084,7 +1087,7 @@ function ExecTasks {
 								Logger "Command was [${commandsArrayPid[$pid]}]." "ERROR"
 							fi
 							if [ -f "${commandsArrayOutput[$pid]}" ]; then
-								Logger "Command output was [\$(cat ${commandsArrayOutput[$pid]})\n]." "ERROR"
+								Logger "Command output was [$(cat ${commandsArrayOutput[$pid]})\n]." "ERROR"
 							fi
 						fi
 						errorcount=$((errorcount+1))
@@ -1230,11 +1233,11 @@ function ExecTasks {
 				if [ $executeCommand == true ]; then
 					Logger "Running command [$currentCommand]." "DEBUG"
 					randomOutputName=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 5)
-					eval "$currentCommand" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$randomOutputName.$SCRIPT_PID.$TSTAMP" 2>&1 &
+					eval "$currentCommand" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$pid.$randomOutputName.$SCRIPT_PID.$TSTAMP" 2>&1 &
 					pid=$!
 					pidsArray+=($pid)
 					commandsArrayPid[$pid]="$currentCommand"
-					commandsArrayOutput[$pid]="$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$randomOutputName.$SCRIPT_PID.$TSTAMP"
+					commandsArrayOutput[$pid]="$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$pid.$randomOutputName.$SCRIPT_PID.$TSTAMP"
 					# Initialize pid execution time array
 					pidsTimeArray[$pid]=0
 				else
@@ -1433,9 +1436,9 @@ function GetLocalOS {
 			localOsVar="Microsoft"
 		else
 			localOsVar="$(uname -spior 2>&1)"
-			if [ $? != 0 ]; then
+			if [ $? -ne 0 ]; then
 				localOsVar="$(uname -v 2>&1)"
-				if [ $? != 0 ]; then
+				if [ $? -ne 0 ]; then
 					localOsVar="$(uname)"
 				fi
 			fi
@@ -1485,7 +1488,7 @@ function GetLocalOS {
 		localOsName=$(GetConfFileValue "/etc/os-release" "NAME" true)
 		localOsVer=$(GetConfFileValue "/etc/os-release" "VERSION" true)
 	elif [ "$LOCAL_OS" == "BusyBox" ]; then
-		localOsVer=`ls --help 2>&1 | head -1 | cut -f2 -d' '`
+		localOsVer=$(ls --help 2>&1 | head -1 | cut -f2 -d' ')
 		localOsName="BusyBox"
 	fi
 
@@ -1629,7 +1632,7 @@ function GetConfFileValue () {
 	local value
 
 	value=$(grep "^$name=" "$file")
-	if [ $? == 0 ]; then
+	if [ $? -eq 0 ]; then
 		value="${value##*=}"
 		echo "$value"
 	else
@@ -2245,74 +2248,81 @@ xlsx=false
 txt=false
 csv=false
 
-for i in "$@"
-do
-	case "$i" in
-		--config=*)
-		CONFIG_FILE="${i##*=}"
-		;;
-		--batch)
-		_BATCH_RUN=true
-		;;
-		--service)
-		_SERVICE_RUN=true
-		;;
-		--silent|-s)
-		_SILENT=true
-		;;
-		--verbose|-v)
-		_LOGGER_VERBOSE=true
-		;;
-		-p|--target=PDF|--target=pdf)
-		pdf=true
-		;;
-		-w|--target=DOCX|--target=docx)
-		docx=true
-		;;
-		-e|--target=XLSX|--target=xlsx)
-		xlsx=true
-		;;
-		-t|--target=TXT|--target=txt)
-		txt=true
-		;;
-		-c|--target=CSV|--target=csv)
-		csv=true
-		;;
-		-k|--skip-txt-pdf)
-		skip_txt_pdf=true
-		;;
-		-d|--delete-input)
-		delete_input=true
-		;;
-		--suffix=*)
-		suffix="${i##*=}"
-		;;
-		--no-suffix)
-		no_suffix=true
-		;;
-		--suffix=*)
-		failed_suffix="${i##*=}"
-		;;
-		--no-failed-suffix)
-		no_failed_suffix=true
-		;;
-		--text=*)
-		text="${i##*=}"
-		;;
-		--no-text)
-		no_text=true
-		;;
-		--help|-h|--version|-v|-?)
-		Usage
-		;;
-	esac
-done
+function GetCommandlineArguments {
+	for i in "$@"
+	do
+		case "$i" in
+			--config=*)
+			CONFIG_FILE="${i##*=}"
+			;;
+			--batch)
+			_BATCH_RUN=true
+			;;
+			--service)
+			_SERVICE_RUN=true
+			;;
+			--silent|-s)
+			_SILENT=true
+			;;
+			--verbose|-v)
+			_LOGGER_VERBOSE=true
+			;;
+			-p|--target=PDF|--target=pdf)
+			pdf=true
+			;;
+			-w|--target=DOCX|--target=docx)
+			docx=true
+			;;
+			-e|--target=XLSX|--target=xlsx)
+			xlsx=true
+			;;
+			-t|--target=TXT|--target=txt)
+			txt=true
+			;;
+			-c|--target=CSV|--target=csv)
+			csv=true
+			;;
+			-k|--skip-txt-pdf)
+			skip_txt_pdf=true
+			;;
+			-d|--delete-input)
+			delete_input=true
+			;;
+			--suffix=*)
+			suffix="${i##*=}"
+			;;
+			--no-suffix)
+			no_suffix=true
+			;;
+			--suffix=*)
+			failed_suffix="${i##*=}"
+			;;
+			--no-failed-suffix)
+			no_failed_suffix=true
+			;;
+			--text=*)
+			text="${i##*=}"
+			;;
+			--no-text)
+			no_text=true
+			;;
+			--help|-h|--version|-v|-?)
+			Usage
+			;;
+		esac
+	done
+}
+
+GetCommandlineArguments "${@}"
 
 if [ "$CONFIG_FILE" != "" ]; then
 	LoadConfigFile "$CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 else
 	LoadConfigFile "$DEFAULT_CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 fi
+
+# Reload GetCommandlineArguments in order to allow override config values with runtime arguments
+GetCommandlineArguments "${@}"
 
 UpdateBooleans
 SetOCREngineOptions

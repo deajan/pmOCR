@@ -10,7 +10,7 @@ PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
 SSH_FILTER="ssh_filter.sh"
 
-SCRIPT_BUILD=2019022601
+SCRIPT_BUILD=2019052001
 INSTANCE_ID="installer-$SCRIPT_BUILD"
 
 ## osync / obackup / pmocr / zsnap install script
@@ -18,7 +18,7 @@ INSTANCE_ID="installer-$SCRIPT_BUILD"
 ## Please adapt this to fit your distro needs
 
 _OFUNCTIONS_VERSION=2.3.0-RC2
-_OFUNCTIONS_BUILD=2019021401
+_OFUNCTIONS_BUILD=2019031502
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -125,17 +125,17 @@ function PoorMansRandomGenerator {
 	fi
 }
 function PoorMansRandomGenerator {
-        local digits="${1}" # The number of digits to generate
-        local number
+	local digits="${1}" # The number of digits to generate
+	local number
 
-        # Some read bytes can't be used, se we read twice the number of required bytes
-        dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
-                number=$number$(printf "%d" "'$char")
-                if [ ${#number} -ge $digits ]; then
-                        echo ${number:0:$digits}
-                        break;
-                fi
-        done
+	# Some read bytes can't be used, se we read twice the number of required bytes
+	dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
+		number=$number$(printf "%d" "'$char")
+		if [ ${#number} -ge $digits ]; then
+			echo ${number:0:$digits}
+			break;
+		fi
+	done
 }
 
 # Initial TSTMAP value before function declaration
@@ -166,7 +166,7 @@ function _Logger {
 
 		# Build current log file for alerts if we have a sufficient environment
 		if [ "$RUN_DIR/$PROGRAM" != "/" ]; then
-			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP.log"
+			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP.log"
 		fi
 	fi
 
@@ -362,11 +362,11 @@ function KillChilds {
 		if kill -0 "$pid" > /dev/null 2>&1; then
 			kill -s TERM "$pid"
 			Logger "Sent SIGTERM to process [$pid]." "DEBUG"
-			if [ $? != 0 ]; then
+			if [ $? -ne 0 ]; then
 				sleep 15
 				Logger "Sending SIGTERM to process [$pid] failed." "DEBUG"
 				kill -9 "$pid"
-				if [ $? != 0 ]; then
+				if [ $? -ne 0 ]; then
 					Logger "Sending SIGKILL to process [$pid] failed." "DEBUG"
 					return 1
 				fi	# Simplify the return 0 logic here
@@ -391,7 +391,7 @@ function KillAllChilds {
 	IFS=';' read -a pidsArray <<< "$pids"
 	for pid in "${pidsArray[@]}"; do
 		KillChilds $pid $self
-		if [ $? != 0 ]; then
+		if [ $? -ne 0 ]; then
 			errorcount=$((errorcount+1))
 			fi
 	done
@@ -472,6 +472,12 @@ SERVICE_DIR_OPENRC=$FAKEROOT/etc/init.d
 
 if [ "$PROGRAM" == "osync" ]; then
 	SERVICE_NAME="osync-srv"
+	TARGET_HELPER_SERVICE_NAME="osync-target-helper-srv"
+
+	TARGET_HELPER_SERVICE_FILE_INIT="$TARGET_HELPER_SERVICE_NAME"
+	TARGET_HELPER_SERVICE_FILE_SYSTEMD_SYSTEM="$TARGET_HELPER_SERVICE_NAME@.service"
+	TARGET_HELPER_SERVICE_FILE_SYSTEMD_USER="$TARGET_HELPER_SERVICE_NAME@.service.user"
+	TARGET_HELPER_SERVICE_FILE_OPENRC="$TARGET_HELPER_SERVICE_NAME-openrc"
 elif [ "$PROGRAM" == "pmocr" ]; then
 	SERVICE_NAME="pmocr-srv"
 fi
@@ -527,9 +533,9 @@ function GetLocalOS {
 			localOsVar="Microsoft"
 		else
 			localOsVar="$(uname -spior 2>&1)"
-			if [ $? != 0 ]; then
+			if [ $? -ne 0 ]; then
 				localOsVar="$(uname -v 2>&1)"
-				if [ $? != 0 ]; then
+				if [ $? -ne 0 ]; then
 					localOsVar="$(uname)"
 				fi
 			fi
@@ -579,7 +585,7 @@ function GetLocalOS {
 		localOsName=$(GetConfFileValue "/etc/os-release" "NAME" true)
 		localOsVer=$(GetConfFileValue "/etc/os-release" "VERSION" true)
 	elif [ "$LOCAL_OS" == "BusyBox" ]; then
-		localOsVer=`ls --help 2>&1 | head -1 | cut -f2 -d' '`
+		localOsVer=$(ls --help 2>&1 | head -1 | cut -f2 -d' ')
 		localOsName="BusyBox"
 	fi
 
@@ -623,7 +629,7 @@ function GetConfFileValue () {
 	local value
 
 	value=$(grep "^$name=" "$file")
-	if [ $? == 0 ]; then
+	if [ $? -eq 0 ]; then
 		value="${value##*=}"
 		echo "$value"
 	else
@@ -829,6 +835,16 @@ function CopyServiceFiles {
 			CreateDir "$SERVICE_DIR_SYSTEMD_USER"
 			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_USER" "$SERVICE_FILE_SYSTEMD_USER" "$SERVICE_FILE_SYSTEMD_USER" "" "" "" true
 		fi
+
+		if [ -f "$SCRIPT_PATH/$TARGET_HELPER_SERVICE_FILE_SYSTEMD_SYSTEM" ]; then
+			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_SYSTEM" "$TARGET_HELPER_SERVICE_FILE_SYSTEMD_SYSTEM" "$SERVICE_FILE_SYSTEMD_SYSTEM" "" "" "" true
+			Logger "Created optional service [$TARGET_HELPER_SERVICE_NAME] with same specifications as below." "NOTICE"
+		fi
+		if [ -f "$SCRIPT_PATH/$TARGET_HELPER_SERVICE_FILE_SYSTEMD_USER" ]; then
+			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_USER" "$TARGET_HELPER_SERVICE_FILE_SYSTEMD_USER" "$SERVICE_FILE_SYSTEMD_USER" "" "" "" true
+		fi
+
+
 		Logger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_SYSTEMD_SYSTEM] and [$SERVICE_DIR_SYSTEMD_USER]." "NOTICE"
 		Logger "Can be activated with [systemctl start SERVICE_NAME@instance.conf] where instance.conf is the name of the config file in $CONF_DIR." "NOTICE"
 		Logger "Can be enabled on boot with [systemctl enable $SERVICE_NAME@instance.conf]." "NOTICE"
@@ -836,14 +852,20 @@ function CopyServiceFiles {
 	elif ([ "$init" == "initV" ] && [ -f "$SCRIPT_PATH/$SERVICE_FILE_INIT" ] && [ -d "$SERVICE_DIR_INIT" ]); then
 		#CreateDir "$SERVICE_DIR_INIT"
 		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_INIT" "$SERVICE_FILE_INIT" "$SERVICE_FILE_INIT" "755" "" "" true
-
+		if [ -f "$SCRIPT_PATH/$TARGET_HELPER_SERVICE_FILE_INIT" ]; then
+			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_INIT" "$TARGET_HELPER_SERVICE_FILE_INIT" "$SERVICE_FILE_INIT" "755" "" "" true
+			Logger "Created optional service [$TARGET_HELPER_SERVICE_NAME] with same specifications as below." "NOTICE"
+		fi
 		Logger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_INIT]." "NOTICE"
 		Logger "Can be activated with [service $SERVICE_FILE_INIT start]." "NOTICE"
 		Logger "Can be enabled on boot with [chkconfig $SERVICE_FILE_INIT on]." "NOTICE"
 	elif ([ "$init" == "openrc" ] && [ -f "$SCRIPT_PATH/$SERVICE_FILE_OPENRC" ] && [ -d "$SERVICE_DIR_OPENRC" ]); then
 		# Rename service to usual service file
 		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_OPENRC" "$SERVICE_FILE_OPENRC" "$SERVICE_FILE_INIT" "755" "" "" true
-
+		if [ -f "$SCRPT_PATH/$TARGET_HELPER_SERVICE_FILE_OPENRC" ]; then
+			CopyFile "$SCRIPT_PATH" "$TARGET_HELPER_SERVICE_DIR_OPENRC" "$SERVICE_FILE_OPENRC" "$SERVICE_FILE_INIT" "755" "" "" true
+			Logger "Created optional service [$TARGET_HELPER_SERVICE_NAME] with same specifications as below." "NOTICE"
+		fi
 		Logger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_OPENRC]." "NOTICE"
 		Logger "Can be activated with [rc-update add $SERVICE_NAME.instance] where instance is a configuration file found in /etc/osync." "NOTICE"
 	else

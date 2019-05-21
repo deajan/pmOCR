@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-## dev pre-processor bootstrap rev 2018100201
+## dev pre-processor bootstrap rev 2019052001
 ## Yeah !!! A really tech sounding name... In fact it's just include emulation in bash
 
 function Usage {
@@ -19,16 +19,16 @@ if [ ! -f "./merge.sh" ]; then
 fi
 
 bootstrapProgram=""
-opts=""
+opts=()
 outputFileName="$0"
 
-for i in "$@"; do
-        case $i in
+for i in "${@}"; do
+        case "$i" in
                 --program=*)
                 bootstrapProgram="${i##*=}"
 		;;
 		*)
-		opts=$opts" $i"
+		opts+=("$i")
 		;;
 	esac
 done
@@ -69,7 +69,7 @@ if type termux-fix-shebang > /dev/null 2>&1; then
 fi
 
 if [ "$BASHVERBOSE" == "yes" ]; then
-	bash -x "$outputFileName.tmp.sh" $opts
+	bash -x "$outputFileName.tmp.sh" "${opts[@]}"
 else
-	"$outputFileName.tmp.sh" $opts
+	"$outputFileName.tmp.sh" "${opts[@]}"
 fi

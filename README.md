@@ -20,7 +20,7 @@ pmOCR has the following options:
 
 ## Install it
 
-    $ git clone -b "v1.6.0" https://github.com/deajan/pmOCR
+    $ git clone -b "1.6.0" https://github.com/deajan/pmOCR
     $ cd pmOCR
     $ ./install.sh
 

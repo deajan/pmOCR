@@ -30,8 +30,8 @@
 #### OFUNCTIONS FULL SUBSET ####
 #### OFUNCTIONS MINI SUBSET ####
 #### OFUNCTIONS MICRO SUBSET ####
-_OFUNCTIONS_VERSION=2.3.0-RC2
-_OFUNCTIONS_BUILD=2019031502
+_OFUNCTIONS_VERSION=2.3.0-dev-postRC2
+_OFUNCTIONS_BUILD=2019070504
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -84,7 +84,29 @@ if [ "$SLEEP_TIME" == "" ]; then # Leave the possibity to set SLEEP_TIME as envi
 fi
 #### DEBUG SUBSET END ####
 
+# The variables SCRIPT_PID and TSTAMP needs to be declared as soon as the program begins. The function PoorMansRandomGenerator is needed for TSTAMP (since some systems date function does not give nanoseconds)
+
 SCRIPT_PID=$$
+
+#### PoorMansRandomGenerator SUBSET ####
+# Get a random number of digits length on Windows BusyBox alike, also works on most Unixes that have dd
+function PoorMansRandomGenerator {
+	local digits="${1}" # The number of digits to generate
+	local number
+
+	# Some read bytes can't be used, se we read twice the number of required bytes
+	dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
+		number=$number$(printf "%d" "'$char")
+		if [ ${#number} -ge $digits ]; then
+			echo ${number:0:$digits}
+			break;
+		fi
+	done
+}
+#### PoorMansRandomGenerator SUBSET END ####
+
+# Initial TSTMAP value before function declaration
+TSTAMP=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 5)
 
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
@@ -116,55 +138,13 @@ else
 fi
 
 ## Special note when remote target is on the same host as initiator (happens for unit tests): we'll have to differentiate RUN_DIR so remote CleanUp won't affect initiator.
+## If the same program gets remotely executed, add _REMOTE_EXECUTION=true to it's environment so it knows it has to write into a separate directory
+## This will thus not affect local $RUN_DIR variables
 if [ "$_REMOTE_EXECUTION" == true ]; then
-	mkdir -p "$RUN_DIR/$PROGRAM.remote"
-	RUN_DIR="$RUN_DIR/$PROGRAM.remote"
+	mkdir -p "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP"
+	RUN_DIR="$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP"
 fi
 #### RUN_DIR SUBSET END ####
-
-#### PoorMansRandomGenerator SUBSET ####
-# Get a random number on Windows BusyBox alike, also works on most Unixes that have dd, if dd is not found, then return $RANDOM
-function PoorMansRandomGenerator {
-	local digits="${1}" # The number of digits to generate
-	local number
-	local isFirst=true
-
-	if type dd >/dev/null 2>&1; then
-
-		# Some read bytes can't be used, se we read twice the number of required bytes
-		dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
-			if [ $isFirst == false ] || [ $(printf "%d" "'$char") != "0" ]; then
-				number=$number$(printf "%d" "'$char")
-				isFirst=false
-			fi
-			if [ ${#number} -ge $digits ]; then
-				echo ${number:0:$digits}
-				break;
-			fi
-		done
-	elif [ "$RANDOM" -ne 0 ]; then
-		 echo $RANDOM
-	else
-		Logger "Cannot generate random number." "ERROR"
-	fi
-}
-function PoorMansRandomGenerator {
-	local digits="${1}" # The number of digits to generate
-	local number
-
-	# Some read bytes can't be used, se we read twice the number of required bytes
-	dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
-		number=$number$(printf "%d" "'$char")
-		if [ ${#number} -ge $digits ]; then
-			echo ${number:0:$digits}
-			break;
-		fi
-	done
-}
-#### PoorMansRandomGenerator SUBSET END ####
-
-# Initial TSTMAP value before function declaration
-TSTAMP=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 5)
 
 # Default alert attachment filename
 ALERT_LOG_FILE="$RUN_DIR/$PROGRAM.$SCRIPT_PID.$TSTAMP.last.log"
@@ -193,7 +173,7 @@ function _Logger {
 
 		# Build current log file for alerts if we have a sufficient environment
 		if [ "$RUN_DIR/$PROGRAM" != "/" ]; then
-			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP.log"
+			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP"
 		fi
 	fi
 
@@ -444,9 +424,18 @@ function KillAllChilds {
 #### CleanUp SUBSET ####
 function CleanUp {
 	if [ "$_DEBUG" != true ]; then
+		# Removing optional remote $RUN_DIR that goes into local $RUN_DIR
+		if [ -d "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP" ]; then
+			rm -rf "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP"
+                fi
+		# Removing all temporary run files
 		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP"
 		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
 		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP.tmp"
+	fi
+
+	if [ "$SSH_CONTROLMASTER" == true ] && [ "$SSH_CMD" != "" ]; then
+		$SSH_CMD -O exit
 	fi
 }
 #### CleanUp SUBSET END ####
@@ -501,7 +490,7 @@ function SendAlert {
 		fi
 	fi
 
-	body="$MAIL_ALERT_MSG"$'\n\n'"Last 1000 lines of current log"$'\n\n'"$(tail -n 1000 "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP.log")"
+	body="$MAIL_ALERT_MSG"$'\n\n'"Last 1000 lines of current log"$'\n\n'"$(tail -n 1000 "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP")"
 
 	if [ $ERROR_ALERT == true ]; then
 		subject="Error alert for $INSTANCE_ID"
@@ -579,7 +568,7 @@ function SendEmail {
 	if [ "$MAIL_BODY_CHARSET" != "" ]; then
 		if type iconv > /dev/null 2>&1; then
 			echo "$message" | iconv -f UTF-8 -t $MAIL_BODY_CHARSET -o "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.iconv.$SCRIPT_PID.$TSTAMP"
-			message="$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.iconv.$SCRIPT_PID.$TSTAMP)"
+			message="$(cat "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.iconv.$SCRIPT_PID.$TSTAMP")"
 		else
 			Logger "iconv utility not installed. Will not convert email charset." "NOTICE"
 		fi
@@ -602,8 +591,11 @@ function SendEmail {
 				echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) -f "$senderMail" -H "exec openssl s_client -quiet -tls1_2 -starttls smtp -connect $smtpServer:$smtpPort" -au"$smtpUser" -ap"$smtpPassword" "$destinationMails"
 			elif [ "$encryption" == "ssl" ]; then
 				echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) -f "$senderMail" -H "exec openssl s_client -quiet -connect $smtpServer:$smtpPort" -au"$smtpUser" -ap"$smtpPassword" "$destinationMails"
+			elif [ "$encryption" == "none" ]; then
+				echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) -f "$senderMail" -S "$smtpServer:$smtpPort" -au"$smtpUser" -ap"$smtpPassword" "$destinationMails"
 			else
 				echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) -f "$senderMail" -S "$smtpServer:$smtpPort" -au"$smtpUser" -ap"$smtpPassword" "$destinationMails"
+				Logger "Bogus email encryption used [$encryption]." "WARN"
 			fi
 
 			if [ $? -ne 0 ]; then
@@ -1114,7 +1106,7 @@ function ExecTasks {
 								Logger "Command was [${commandsArrayPid[$pid]}]." "ERROR"
 							fi
 							if [ -f "${commandsArrayOutput[$pid]}" ]; then
-								Logger "Command output was [$(cat ${commandsArrayOutput[$pid]})\n]." "ERROR"
+								Logger "Command output was [$(cat "${commandsArrayOutput[$pid]}")\n]." "ERROR"
 							fi
 						fi
 						errorcount=$((errorcount+1))
@@ -1216,7 +1208,7 @@ function ExecTasks {
 					postponedRetryCount=0
 					postponedExecTime=0
 				fi
-				if ([ $postponedRetryCount -lt $maxPostponeRetries ] && [ $postponedExecTime -ge $((minTimeBetweenRetries)) ]) || [ $isPostponedCommand == false ]; then
+				if ([ $postponedRetryCount -lt $maxPostponeRetries ] && [ $postponedExecTime -ge $minTimeBetweenRetries ]) || [ $isPostponedCommand == false ]; then
 					if [ "$currentCommandCondition" != "" ]; then
 						Logger "Checking condition [$currentCommandCondition] for command [$currentCommand]." "DEBUG"
 						eval "$currentCommandCondition" &
@@ -1700,7 +1692,7 @@ GetOs
 
 ENDSSH
 	if [ $? -ne 0 ]; then
-		Logger "Cannot connect to remote system [$REMOTE_HOST] port [$REMOTE_PORT]." "CRITICAL"
+		Logger "Cannot connect to remote system [$REMOTE_HOST] port [$REMOTE_PORT] as [$REMOTE_USER]." "CRITICAL"
 		if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ]; then
 			Logger "$(cat "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "ERROR"
 		fi
@@ -1777,7 +1769,7 @@ function RunLocalCommand {
 	fi
 
 	if [ $_LOGGER_VERBOSE == true ] || [ $retval -ne 0 ]; then
-		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+		Logger "Command output:\n$(cat "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "NOTICE"
 	fi
 
 	if [ "$STOP_ON_CMD_ERROR" == true ] && [ $retval -ne 0 ]; then
@@ -1820,7 +1812,7 @@ function RunRemoteCommand {
 
 	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ] && ([ $_LOGGER_VERBOSE == true ] || [ $retval -ne 0 ])
 	then
-		Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+		Logger "Command output:\n$(cat "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "NOTICE"
 	fi
 
 	if [ "$STOP_ON_CMD_ERROR" == true ] && [ $retval -ne 0 ]; then
@@ -1959,8 +1951,8 @@ function RsyncPatternsFromAdd {
 	__CheckArguments 2 $# "$@"    #__WITH_PARANOIA_DEBUG
 
 	## Check if the exclude list has a full path, and if not, add the config file path if there is one
-	if [ "$(basename $patternFrom)" == "$patternFrom" ]; then
-		patternFrom="$(dirname $CONFIG_FILE)/$patternFrom"
+	if [ "$(basename "$patternFrom")" == "$patternFrom" ]; then
+		patternFrom="$(dirname "$CONFIG_FILE")/$patternFrom"
 	fi
 
 	if [ -e "$patternFrom" ]; then
@@ -1999,7 +1991,10 @@ function RsyncPatterns {
 			RsyncPatternsFromAdd "exclude" "$RSYNC_EXCLUDE_FROM"
 		fi
 	else
-		Logger "Bogus RSYNC_PATTERN_FIRST value in config file. Will not use rsync patterns." "WARN"
+		# osync target-helper specific clause
+		if [ "$_SYNC_ON_CHANGES" != "target" ]; then
+			Logger "Bogus RSYNC_PATTERN_FIRST value in config file. Will not use rsync patterns." "WARN"
+		fi
 	fi
 }
 
@@ -2018,6 +2013,11 @@ function PreInit {
 	## Ignore SSH known host verification
 	if [ "$SSH_IGNORE_KNOWN_HOSTS" == true ]; then
 		SSH_OPTS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+	fi
+
+	## SSH ControlMaster Multiplexing
+	if [ "$SSH_CONTROLMASTER" == true ]; then
+		SSH_OPTS="$SSH_OPTS -o ControlMaster=auto -o ControlPersist=yes -o ControlPath=\"$RUN_DIR/$PROGRAM.ctrlm.%r@%h.$SCRIPT_PID.$TSTAMP\""
 	fi
 
 	## Support for older config files without RSYNC_EXECUTABLE option
@@ -2123,8 +2123,22 @@ function InitLocalOSDependingSettings {
 	## Getting running processes is quite different
 	## Ping command is not the same
 	if [ "$LOCAL_OS" == "msys" ] || [ "$LOCAL_OS" == "Cygwin" ] || [ "$LOCAL_OS" == "Microsoft" ] || [ "$LOCAL_OS" == "WinNT10" ]; then
-		FIND_CMD=$(dirname $BASH)/find
-		PING_CMD='$SYSTEMROOT\system32\ping -n 2'
+
+		# Newer bash on Win10 finally uses integrated find command instead of windows one
+		if [ -f "/usr/bin/find" ]; then
+			FIND_CMD="/usr/bin/find"
+		elif [ -f "/bin/find" ]; then
+			FIND_CMD="/bin/find"
+		else
+			FIND_CMD="$(dirname $BASH)/find"
+		fi
+
+		# Newer bash on Windows 10 uses integrated ping whereas cygwin & msys use Windows version
+		if [ "$LOCAL_OS" == "WinNT10" ]; then
+			PING_CMD="ping -c 2 -i 1"
+		else
+			PING_CMD='$SYSTEMROOT\system32\ping -n 2'
+		fi
 
 	# On BSD, when not root, min ping interval is 1s
 	elif [ "$LOCAL_OS" == "BSD" ] && [ "$LOCAL_USER" != "root" ]; then
@@ -2166,7 +2180,7 @@ function InitRemoteOSDependingSettings {
 	__CheckArguments 0 $# "$@"    #__WITH_PARANOIA_DEBUG
 
 	if [ "$REMOTE_OS" == "msys" ] || [ "$REMOTE_OS" == "Cygwin" ]; then
-		REMOTE_FIND_CMD=$(dirname $BASH)/find
+		REMOTE_FIND_CMD="$(dirname $BASH)/find"
 	else
 		REMOTE_FIND_CMD=find
 	fi

@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2019 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.1
-PROGRAM_BUILD=2019052001
+PROGRAM_BUILD=2019070901
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -117,9 +117,9 @@ function CheckEnvironment {
 		fi
 	fi
 
-	if [ "$OCR_ENGINE" == "tesseract3" ]; then
+	if [ "$OCR_ENGINE" == "tesseract" ] || [ "$OCR_ENGINE" == "tesseract3" ]; then
 		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
-			Logger "PDF to TIFF conversion executable [$PDF_TO_TIFF_EXEC] not present." "CRITICAL"
+			Logger "PDF to TIFF conversion executable [$PDF_TO_TIFF_EXEC] not present. Please install ghostscript." "CRITICAL"
 			exit 1
 		fi
 
@@ -142,9 +142,9 @@ function TrapQuit {
 	KillChilds $$ > /dev/null 2>&1
 	result=$?
 	if [ $result -eq 0 ]; then
-		Logger "Service $PROGRAM stopped instance [$INSTANCE_ID] with pid [$$]." "NOTICE"
+		Logger "$PROGRAM stopped instance [$INSTANCE_ID] with pid [$$]." "NOTICE"
 	else
-		Logger "Service $PROGRAM couldn't properly stop instance [$INSTANCE_ID] with pid [$$]." "ERROR"
+		Logger "$PROGRAM couldn't properly stop instance [$INSTANCE_ID] with pid [$$]." "ERROR"
 	fi
 	exit $?
 }
@@ -152,7 +152,7 @@ function TrapQuit {
 function SetOCREngineOptions {
 	__CheckArguments 0 $# "$@"		#__WITH_PARANOIA_DEBUG
 
-	if [ "$OCR_ENGINE" == "tesseract3" ]; then
+	if [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then
 		OCR_ENGINE_EXEC="$TESSERACT_OCR_ENGINE_EXEC"
 		PDF_OCR_ENGINE_ARGS="$TESSERACT_PDF_OCR_ENGINE_ARGS"
 		TEXT_OCR_ENGINE_ARGS="$TESSERACT_TEXT_OCR_ENGINE_ARGS"
@@ -212,7 +212,7 @@ function OCR {
 		if ([ "$CHECK_PDF" != true ] || ([ "$CHECK_PDF" == true ] && [ $(pdffonts "$inputFileName" 2> /dev/null | wc -l) -lt 3 ])); then
 
 			# Perform intermediary transformation of input pdf file to tiff if OCR_ENGINE is tesseract
-			if [ "$OCR_ENGINE" == "tesseract3" ] && [[ "$inputFileName" == *.[pP][dD][fF] ]]; then
+			if ([ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]) && [[ "$inputFileName" == *.[pP][dD][fF] ]]; then
 				tmpFileIntermediary="${inputFileName%.*}.tif"
 				subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFileIntermediary\" \"$inputFileName\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
 				Logger "Executing: $subcmd" "DEBUG"
@@ -256,10 +256,10 @@ function OCR {
 					result=$?
 
 				# Run Tesseract OCR + Intermediary transformation
-				elif [ "$OCR_ENGINE" == "tesseract3" ]; then
+				elif [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then
 					# Empty tmp log file first
 					echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
-					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP\""
+					cmd="$OCR_ENGINE_EXEC $TESSERACT_OPTIONAL_ARGS $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP\""
 					#TODO: THIS IS NEVER LOGGED
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
@@ -305,8 +305,8 @@ function OCR {
 			fi
 
 			if [ $result != 0 ]; then
-				Logger "Could not process file [$inputFileName] (OCR error code $result)." "ERROR"
-				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "ERROR"
+				Logger "Could not process file [$inputFileName] (OCR error code $result). See logs." "ERROR"
+				Logger "OCR Engine Output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "ERROR"
 				alert=true
 
 				if [ "$MOVE_ORIGINAL_ON_FAILURE" != "" ]; then
@@ -353,7 +353,7 @@ function OCR {
 						fi
 					fi
 
-					if [ "$OCR_ENGINE" == "tesseract3" ]; then
+					if [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then
 						sed 's/   */;/g' "$outputFileName$TEXT_EXTENSION" > "$outputFileName$CSV_EXTENSION"
 						if [ $? == 0 ]; then
 							rm -f "$outputFileName$TEXT_EXTENSION"
@@ -485,10 +485,17 @@ function OCR_Dispatch {
 	touch "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	while IFS= read -r -d $'\0' file; do
 		if ! lsof -f -- "$file" > /dev/null 2>&1; then
+			if [ "$_BATCH_RUN" == true ]; then
+				Logger "Preparing to process [$file]." "NOTICE"
+			fi
 			echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 		else
-			Logger "Deferring file [$file] currently being written to." "ALWAYS"
-			kill -USR1 $SCRIPT_PID
+			if [ "$_BATCH_RUN" == true ]; then
+				Logger "Cannot process file [$file] currently in use." "ALWAYS"
+			else
+				Logger "Deferring file [$file] currently being written to." "ALWAYS"
+				kill -USR1 $SCRIPT_PID
+			fi
 		fi
 	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
 
@@ -835,7 +842,7 @@ elif [ $_BATCH_RUN == true ]; then
 	fi
 
 	if [ $pdf == true ]; then
-		if [ "$OCR_ENGINE" == "tesseract3" ]; then
+		if [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then
 			result=$(VerComp "$TESSERACT_VERSION" "3.02")
                 	if [ $result -eq 2 ] || [ $result -eq 0 ]; then
                         	Logger "Tesseract version $TESSERACT_VERSION is not supported to create searchable PDFs. Please use 3.03 or better." "CRITICAL"

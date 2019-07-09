@@ -3,11 +3,16 @@ RECENT CHANGES
 
 dd MMM 2019: v1.6.1
 
+- Tested Tesseract 4.x engine
+	- Renamed "tesseract3" engine to "tesseract" since we work with 3.02+ / 4.x
+	- Added TESSERACT_OPTIONAL_ARGS in config file
 - Improved handling of open files being deferred for later OCR
 - Fixed automatic service shutdown in RHEL 6/7 (automatic /tmp directory cleanup removing service file)
 - Updated ofunctions
 	- Moved from yes/no parameters to bash booleans
 	- Compatibility with elder config is preserved
+	- Better cleanup
+- Fixed installer typos
 
 21 Dec 2018: v1.6.0
 

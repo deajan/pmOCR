@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2019 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.1
-PROGRAM_BUILD=2019052001
+PROGRAM_BUILD=2019070901
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -22,8 +22,8 @@ if [ "$MAX_WAIT" == "" ]; then
 	MAX_WAIT=86400 # One day in seconds
 fi
 
-_OFUNCTIONS_VERSION=2.3.0-RC2
-_OFUNCTIONS_BUILD=2019031502
+_OFUNCTIONS_VERSION=2.3.0-dev-postRC2
+_OFUNCTIONS_BUILD=2019070504
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -68,7 +68,27 @@ if [ "$SLEEP_TIME" == "" ]; then # Leave the possibity to set SLEEP_TIME as envi
 	SLEEP_TIME=.05
 fi
 
+# The variables SCRIPT_PID and TSTAMP needs to be declared as soon as the program begins. The function PoorMansRandomGenerator is needed for TSTAMP (since some systems date function does not give nanoseconds)
+
 SCRIPT_PID=$$
+
+# Get a random number of digits length on Windows BusyBox alike, also works on most Unixes that have dd
+function PoorMansRandomGenerator {
+	local digits="${1}" # The number of digits to generate
+	local number
+
+	# Some read bytes can't be used, se we read twice the number of required bytes
+	dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
+		number=$number$(printf "%d" "'$char")
+		if [ ${#number} -ge $digits ]; then
+			echo ${number:0:$digits}
+			break;
+		fi
+	done
+}
+
+# Initial TSTMAP value before function declaration
+TSTAMP=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 5)
 
 LOCAL_USER=$(whoami)
 LOCAL_HOST=$(hostname)
@@ -99,52 +119,12 @@ else
 fi
 
 ## Special note when remote target is on the same host as initiator (happens for unit tests): we'll have to differentiate RUN_DIR so remote CleanUp won't affect initiator.
+## If the same program gets remotely executed, add _REMOTE_EXECUTION=true to it's environment so it knows it has to write into a separate directory
+## This will thus not affect local $RUN_DIR variables
 if [ "$_REMOTE_EXECUTION" == true ]; then
-	mkdir -p "$RUN_DIR/$PROGRAM.remote"
-	RUN_DIR="$RUN_DIR/$PROGRAM.remote"
+	mkdir -p "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP"
+	RUN_DIR="$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP"
 fi
-
-# Get a random number on Windows BusyBox alike, also works on most Unixes that have dd, if dd is not found, then return $RANDOM
-function PoorMansRandomGenerator {
-	local digits="${1}" # The number of digits to generate
-	local number
-	local isFirst=true
-
-	if type dd >/dev/null 2>&1; then
-
-		# Some read bytes can't be used, se we read twice the number of required bytes
-		dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
-			if [ $isFirst == false ] || [ $(printf "%d" "'$char") != "0" ]; then
-				number=$number$(printf "%d" "'$char")
-				isFirst=false
-			fi
-			if [ ${#number} -ge $digits ]; then
-				echo ${number:0:$digits}
-				break;
-			fi
-		done
-	elif [ "$RANDOM" -ne 0 ]; then
-		 echo $RANDOM
-	else
-		Logger "Cannot generate random number." "ERROR"
-	fi
-}
-function PoorMansRandomGenerator {
-	local digits="${1}" # The number of digits to generate
-	local number
-
-	# Some read bytes can't be used, se we read twice the number of required bytes
-	dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
-		number=$number$(printf "%d" "'$char")
-		if [ ${#number} -ge $digits ]; then
-			echo ${number:0:$digits}
-			break;
-		fi
-	done
-}
-
-# Initial TSTMAP value before function declaration
-TSTAMP=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 5)
 
 # Default alert attachment filename
 ALERT_LOG_FILE="$RUN_DIR/$PROGRAM.$SCRIPT_PID.$TSTAMP.last.log"
@@ -171,7 +151,7 @@ function _Logger {
 
 		# Build current log file for alerts if we have a sufficient environment
 		if [ "$RUN_DIR/$PROGRAM" != "/" ]; then
-			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP.log"
+			echo -e "$logValue" >> "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP"
 		fi
 	fi
 
@@ -405,9 +385,18 @@ function KillAllChilds {
 
 function CleanUp {
 	if [ "$_DEBUG" != true ]; then
+		# Removing optional remote $RUN_DIR that goes into local $RUN_DIR
+		if [ -d "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP" ]; then
+			rm -rf "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP"
+                fi
+		# Removing all temporary run files
 		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP"
 		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
 		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP.tmp"
+	fi
+
+	if [ "$SSH_CONTROLMASTER" == true ] && [ "$SSH_CMD" != "" ]; then
+		$SSH_CMD -O exit
 	fi
 }
 
@@ -459,7 +448,7 @@ function SendAlert {
 		fi
 	fi
 
-	body="$MAIL_ALERT_MSG"$'\n\n'"Last 1000 lines of current log"$'\n\n'"$(tail -n 1000 "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP.log")"
+	body="$MAIL_ALERT_MSG"$'\n\n'"Last 1000 lines of current log"$'\n\n'"$(tail -n 1000 "$RUN_DIR/$PROGRAM._Logger.$SCRIPT_PID.$TSTAMP")"
 
 	if [ $ERROR_ALERT == true ]; then
 		subject="Error alert for $INSTANCE_ID"
@@ -536,7 +525,7 @@ function SendEmail {
 	if [ "$MAIL_BODY_CHARSET" != "" ]; then
 		if type iconv > /dev/null 2>&1; then
 			echo "$message" | iconv -f UTF-8 -t $MAIL_BODY_CHARSET -o "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.iconv.$SCRIPT_PID.$TSTAMP"
-			message="$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.iconv.$SCRIPT_PID.$TSTAMP)"
+			message="$(cat "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.iconv.$SCRIPT_PID.$TSTAMP")"
 		else
 			Logger "iconv utility not installed. Will not convert email charset." "NOTICE"
 		fi
@@ -559,8 +548,11 @@ function SendEmail {
 				echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) -f "$senderMail" -H "exec openssl s_client -quiet -tls1_2 -starttls smtp -connect $smtpServer:$smtpPort" -au"$smtpUser" -ap"$smtpPassword" "$destinationMails"
 			elif [ "$encryption" == "ssl" ]; then
 				echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) -f "$senderMail" -H "exec openssl s_client -quiet -connect $smtpServer:$smtpPort" -au"$smtpUser" -ap"$smtpPassword" "$destinationMails"
+			elif [ "$encryption" == "none" ]; then
+				echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) -f "$senderMail" -S "$smtpServer:$smtpPort" -au"$smtpUser" -ap"$smtpPassword" "$destinationMails"
 			else
 				echo -e "Subject:$subject\r\n$message" | $(type -p sendmail) -f "$senderMail" -S "$smtpServer:$smtpPort" -au"$smtpUser" -ap"$smtpPassword" "$destinationMails"
+				Logger "Bogus email encryption used [$encryption]." "WARN"
 			fi
 
 			if [ $? -ne 0 ]; then
@@ -1048,7 +1040,7 @@ function ExecTasks {
 								Logger "Command was [${commandsArrayPid[$pid]}]." "ERROR"
 							fi
 							if [ -f "${commandsArrayOutput[$pid]}" ]; then
-								Logger "Command output was [$(cat ${commandsArrayOutput[$pid]})\n]." "ERROR"
+								Logger "Command output was [$(cat "${commandsArrayOutput[$pid]}")\n]." "ERROR"
 							fi
 						fi
 						errorcount=$((errorcount+1))
@@ -1143,7 +1135,7 @@ function ExecTasks {
 					postponedRetryCount=0
 					postponedExecTime=0
 				fi
-				if ([ $postponedRetryCount -lt $maxPostponeRetries ] && [ $postponedExecTime -ge $((minTimeBetweenRetries)) ]) || [ $isPostponedCommand == false ]; then
+				if ([ $postponedRetryCount -lt $maxPostponeRetries ] && [ $postponedExecTime -ge $minTimeBetweenRetries ]) || [ $isPostponedCommand == false ]; then
 					if [ "$currentCommandCondition" != "" ]; then
 						Logger "Checking condition [$currentCommandCondition] for command [$currentCommand]." "DEBUG"
 						eval "$currentCommandCondition" &
@@ -1634,9 +1626,9 @@ function CheckEnvironment {
 		fi
 	fi
 
-	if [ "$OCR_ENGINE" == "tesseract3" ]; then
+	if [ "$OCR_ENGINE" == "tesseract" ] || [ "$OCR_ENGINE" == "tesseract3" ]; then
 		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
-			Logger "PDF to TIFF conversion executable [$PDF_TO_TIFF_EXEC] not present." "CRITICAL"
+			Logger "PDF to TIFF conversion executable [$PDF_TO_TIFF_EXEC] not present. Please install ghostscript." "CRITICAL"
 			exit 1
 		fi
 
@@ -1659,16 +1651,16 @@ function TrapQuit {
 	KillChilds $$ > /dev/null 2>&1
 	result=$?
 	if [ $result -eq 0 ]; then
-		Logger "Service $PROGRAM stopped instance [$INSTANCE_ID] with pid [$$]." "NOTICE"
+		Logger "$PROGRAM stopped instance [$INSTANCE_ID] with pid [$$]." "NOTICE"
 	else
-		Logger "Service $PROGRAM couldn't properly stop instance [$INSTANCE_ID] with pid [$$]." "ERROR"
+		Logger "$PROGRAM couldn't properly stop instance [$INSTANCE_ID] with pid [$$]." "ERROR"
 	fi
 	exit $?
 }
 
 function SetOCREngineOptions {
 
-	if [ "$OCR_ENGINE" == "tesseract3" ]; then
+	if [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then
 		OCR_ENGINE_EXEC="$TESSERACT_OCR_ENGINE_EXEC"
 		PDF_OCR_ENGINE_ARGS="$TESSERACT_PDF_OCR_ENGINE_ARGS"
 		TEXT_OCR_ENGINE_ARGS="$TESSERACT_TEXT_OCR_ENGINE_ARGS"
@@ -1727,7 +1719,7 @@ function OCR {
 		if ([ "$CHECK_PDF" != true ] || ([ "$CHECK_PDF" == true ] && [ $(pdffonts "$inputFileName" 2> /dev/null | wc -l) -lt 3 ])); then
 
 			# Perform intermediary transformation of input pdf file to tiff if OCR_ENGINE is tesseract
-			if [ "$OCR_ENGINE" == "tesseract3" ] && [[ "$inputFileName" == *.[pP][dD][fF] ]]; then
+			if ([ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]) && [[ "$inputFileName" == *.[pP][dD][fF] ]]; then
 				tmpFileIntermediary="${inputFileName%.*}.tif"
 				subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFileIntermediary\" \"$inputFileName\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
 				Logger "Executing: $subcmd" "DEBUG"
@@ -1771,10 +1763,10 @@ function OCR {
 					result=$?
 
 				# Run Tesseract OCR + Intermediary transformation
-				elif [ "$OCR_ENGINE" == "tesseract3" ]; then
+				elif [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then
 					# Empty tmp log file first
 					echo "" > "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
-					cmd="$OCR_ENGINE_EXEC $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP\""
+					cmd="$OCR_ENGINE_EXEC $TESSERACT_OPTIONAL_ARGS $OCR_ENGINE_INPUT_ARG \"$fileToProcess\" $OCR_ENGINE_OUTPUT_ARG \"$outputFileName\" $ocrEngineArgs > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\" 2> \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP\""
 					#TODO: THIS IS NEVER LOGGED
 					Logger "Executing: $cmd" "DEBUG"
 					eval "$cmd"
@@ -1820,8 +1812,8 @@ function OCR {
 			fi
 
 			if [ $result != 0 ]; then
-				Logger "Could not process file [$inputFileName] (OCR error code $result)." "ERROR"
-				Logger "$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "ERROR"
+				Logger "Could not process file [$inputFileName] (OCR error code $result). See logs." "ERROR"
+				Logger "OCR Engine Output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "ERROR"
 				alert=true
 
 				if [ "$MOVE_ORIGINAL_ON_FAILURE" != "" ]; then
@@ -1868,7 +1860,7 @@ function OCR {
 						fi
 					fi
 
-					if [ "$OCR_ENGINE" == "tesseract3" ]; then
+					if [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then
 						sed 's/   */;/g' "$outputFileName$TEXT_EXTENSION" > "$outputFileName$CSV_EXTENSION"
 						if [ $? == 0 ]; then
 							rm -f "$outputFileName$TEXT_EXTENSION"
@@ -1999,10 +1991,17 @@ function OCR_Dispatch {
 	touch "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	while IFS= read -r -d $'\0' file; do
 		if ! lsof -f -- "$file" > /dev/null 2>&1; then
+			if [ "$_BATCH_RUN" == true ]; then
+				Logger "Preparing to process [$file]." "NOTICE"
+			fi
 			echo "OCR \"$file\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 		else
-			Logger "Deferring file [$file] currently being written to." "ALWAYS"
-			kill -USR1 $SCRIPT_PID
+			if [ "$_BATCH_RUN" == true ]; then
+				Logger "Cannot process file [$file] currently in use." "ALWAYS"
+			else
+				Logger "Deferring file [$file] currently being written to." "ALWAYS"
+				kill -USR1 $SCRIPT_PID
+			fi
 		fi
 	done < <(find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
 
@@ -2348,7 +2347,7 @@ elif [ $_BATCH_RUN == true ]; then
 	fi
 
 	if [ $pdf == true ]; then
-		if [ "$OCR_ENGINE" == "tesseract3" ]; then
+		if [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then
 			result=$(VerComp "$TESSERACT_VERSION" "3.02")
 			if [ $result -eq 2 ] || [ $result -eq 0 ]; then
 				Logger "Tesseract version $TESSERACT_VERSION is not supported to create searchable PDFs. Please use 3.03 or better." "CRITICAL"

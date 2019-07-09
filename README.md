@@ -38,6 +38,10 @@ Example:
 
     $ pmocr.sh --batch --target=pdf --skip-txt-pdf --delete-input /some/path
     $ pmocr.sh --batch --target=pdf --target=csv --suffix=processed /some/path
+    
+If pmOCR wasn't installed, you may run it directly with a configuration file like:
+
+    $ ./pmocr.sh --config=./default.conf --batch -p /some/path
 
 ## OCR Configuration
 

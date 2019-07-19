@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2019 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.6.1
-PROGRAM_BUILD=2019070901
+PROGRAM_VERSION=1.6.2-dev
+PROGRAM_BUILD=2019071901
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -138,7 +138,6 @@ function TrapQuit {
 		rm -f "$SERVICE_MONITOR_FILE"
 	fi
 
-	CleanUp
 	KillChilds $$ > /dev/null 2>&1
 	result=$?
 	if [ $result -eq 0 ]; then
@@ -146,6 +145,7 @@ function TrapQuit {
 	else
 		Logger "$PROGRAM couldn't properly stop instance [$INSTANCE_ID] with pid [$$]." "ERROR"
 	fi
+	CleanUp
 	exit $?
 }
 

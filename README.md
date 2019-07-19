@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/deajan/pmOCR.svg?branch=master)](https://travis-ci.org/deajan/pmOCR) [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause) [![GitHub Release](https://img.shields.io/github/release/deajan/pmOCR.svg?label=Latest)](https://github.com/deajan/pmOCR/releases/latest)
 
 
-A multicore batch & service wrapper script for Tesseract 3 or ABBYY CLI OCR 11 FOR LINUX based on Finereader Engine 11 optical character recognition (www.ocr4linux.com).
+A multicore batch & service wrapper script for Tesseract 3.02+ / 4.x (https://github.com/tesseract-ocr/) or ABBYY CLI OCR 11 FOR LINUX based on Finereader Engine 11 optical character recognition (www.ocr4linux.com).
 
 Conversions support tiff/jpg/png/pdf/bmp to PDF, TXT and CSV (also DOCX and XSLX for Abbyy OCR). It can actually support any other format that your OCR engine can handle.
 
@@ -38,6 +38,10 @@ Example:
 
     $ pmocr.sh --batch --target=pdf --skip-txt-pdf --delete-input /some/path
     $ pmocr.sh --batch --target=pdf --target=csv --suffix=processed /some/path
+    
+If pmOCR wasn't installed, you may run it directly with a configuration file like:
+
+    $ ./pmocr.sh --config=./default.conf --batch -p /some/path
 
 ## OCR Configuration
 
@@ -83,6 +87,7 @@ With systemD, you have to launch a service for each config file. Example for con
 Has been tested so far with:
 - ABBYY FineReader OCR Engine 11 CLI for Linux releases R2 (v 11.1.6.562411), R3 (v 11.1.9.622165) and R6 (v 11.1.14.707470)
 - Tesseract-ocr 3.0.4
+- Tesseract-ocr 4.0.0
 
 Tesseract mode also uses ghostscript to convert PDF files to an intermediary TIFF format in order to process them.
 

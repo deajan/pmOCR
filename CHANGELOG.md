@@ -1,7 +1,7 @@
 RECENT CHANGES
 --------------
 
-dd MMM 2019: v1.6.1
+11 Jul 2019: v1.6.1
 
 - Tested Tesseract 4.x engine
 	- Renamed "tesseract3" engine to "tesseract" since we work with 3.02+ / 4.x

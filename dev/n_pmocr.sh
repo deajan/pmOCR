@@ -4,7 +4,7 @@ PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a
 AUTHOR="(C) 2015-2019 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
 PROGRAM_VERSION=1.6.2-dev
-PROGRAM_BUILD=2019080901
+PROGRAM_BUILD=2020050401
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -220,7 +220,7 @@ function OCR {
 				result=$?
 				if [ $result -ne 0 ]; then
 					Logger "$PDF_TO_TIFF_EXEC intermediary transformation failed." "ERROR"
-					Logger "Truncated output:\n$(head -c16384 $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
+					Logger "Truncated output:\n$(head -c16384 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "DEBUG"
 					alert=true
 				else
 					fileToProcess="$tmpFileIntermediary"
@@ -239,7 +239,7 @@ function OCR {
 				result=$?
 				if [ $result -ne 0 ]; then
 					Logger "$OCR_PREPROCESSOR_EXEC preprocesser failed." "ERROR"
-					Logger "Truncated output\n$(head -c16384 $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
+					Logger "Truncated output\n$(head -c16384 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "DEBUG"
 					alert=true
 				else
 					fileToProcess="$tmpFilePreprocessor"
@@ -270,8 +270,8 @@ function OCR {
 					if [ $result -eq 0 ] && grep -i "error" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP"; then
 						result=9999
 						Logger "Tesseract produced errors while transforming the document." "WARN"
-						Logger "Truncated output\n$(head -c16384 $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
-						Logger "Truncated output\n$(head -c16384 $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+						Logger "Truncated output\n$(head -c16384 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "NOTICE"
+						Logger "Truncated output\n$(head -c16384 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP")" "NOTICE"
 						alert=true
 					fi
 
@@ -284,7 +284,7 @@ function OCR {
 						fi
 					fi
 				else
-					Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
+					Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename "$0")] and set [OCR_ENGINE] value." "ERROR"
 				fi
 			fi
 
@@ -306,7 +306,7 @@ function OCR {
 
 			if [ $result != 0 ]; then
 				Logger "Could not process file [$inputFileName] (OCR error code $result). See logs." "ERROR"
-				Logger "Truncated OCR Engine Output:\n$(head -c16384 $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "ERROR"
+				Logger "Truncated OCR Engine Output:\n$(head -c16384 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "ERROR"
 				alert=true
 
 				if [ "$MOVE_ORIGINAL_ON_FAILURE" != "" ]; then
@@ -726,8 +726,8 @@ if [ "$LOGFILE" == "" ]; then
 else
         LOG_FILE="$LOGFILE"
 fi
-if [ ! -w "$(dirname $LOG_FILE)" ]; then
-        echo "Cannot write to log [$(dirname $LOG_FILE)]."
+if [ ! -w "$(dirname "$LOG_FILE")" ]; then
+        echo "Cannot write to log [$(dirname "$LOG_FILE")]."
 else
         Logger "Script begin, logging to [$LOG_FILE]." "DEBUG"
 fi

@@ -10,7 +10,7 @@ PROGRAM_BINARY=$PROGRAM".sh"
 PROGRAM_BATCH=$PROGRAM"-batch.sh"
 SSH_FILTER="ssh_filter.sh"
 
-SCRIPT_BUILD=2019052202
+SCRIPT_BUILD=2020042901
 INSTANCE_ID="installer-$SCRIPT_BUILD"
 
 ## osync / obackup / pmocr / zsnap install script
@@ -27,62 +27,6 @@ _STATS=1
 ACTION="install"
 FAKEROOT=""
 
-function GetCommandlineArguments {
-        for i in "$@"; do
-                case $i in
-			--prefix=*)
-                        FAKEROOT="${i##*=}"
-                        ;;
-			--silent)
-			_LOGGER_SILENT=true
-			;;
-			--no-stats)
-			_STATS=0
-			;;
-			--remove)
-			ACTION="uninstall"
-			;;
-			--help|-h|-?)
-			Usage
-			;;
-                        *)
-			Logger "Unknown option '$i'" "ERROR"
-			Usage
-			exit
-                        ;;
-                esac
-	done
-}
-
-GetCommandlineArguments "$@"
-
-CONF_DIR=$FAKEROOT/etc/$PROGRAM
-BIN_DIR="$FAKEROOT/usr/local/bin"
-SERVICE_DIR_INIT=$FAKEROOT/etc/init.d
-# Should be /usr/lib/systemd/system, but /lib/systemd/system exists on debian & rhel / fedora
-SERVICE_DIR_SYSTEMD_SYSTEM=$FAKEROOT/lib/systemd/system
-SERVICE_DIR_SYSTEMD_USER=$FAKEROOT/etc/systemd/user
-SERVICE_DIR_OPENRC=$FAKEROOT/etc/init.d
-
-if [ "$PROGRAM" == "osync" ]; then
-	SERVICE_NAME="osync-srv"
-	TARGET_HELPER_SERVICE_NAME="osync-target-helper-srv"
-
-	TARGET_HELPER_SERVICE_FILE_INIT="$TARGET_HELPER_SERVICE_NAME"
-	TARGET_HELPER_SERVICE_FILE_SYSTEMD_SYSTEM="$TARGET_HELPER_SERVICE_NAME@.service"
-	TARGET_HELPER_SERVICE_FILE_SYSTEMD_USER="$TARGET_HELPER_SERVICE_NAME@.service.user"
-	TARGET_HELPER_SERVICE_FILE_OPENRC="$TARGET_HELPER_SERVICE_NAME-openrc"
-elif [ "$PROGRAM" == "pmocr" ]; then
-	SERVICE_NAME="pmocr-srv"
-fi
-
-SERVICE_FILE_INIT="$SERVICE_NAME"
-SERVICE_FILE_SYSTEMD_SYSTEM="$SERVICE_NAME@.service"
-SERVICE_FILE_SYSTEMD_USER="$SERVICE_NAME@.service.user"
-SERVICE_FILE_OPENRC="$SERVICE_NAME-openrc"
-
-## Generic code
-
 ## Default log file
 if [ -w "$FAKEROOT/var/log" ]; then
 	LOG_FILE="$FAKEROOT/var/log/$PROGRAM-install.log"
@@ -95,9 +39,12 @@ fi
 include #### UrlEncode SUBSET ####
 include #### GetLocalOS SUBSET ####
 include #### GetConfFileValue SUBSET ####
+include #### CleanUp SUBSET ####
+include #### GenericTrapQuit SUBSET ####
 
 function SetLocalOSSettings {
 	USER=root
+	DO_INIT=true
 
 	# LOCAL_OS and LOCAL_OS_FULL are global variables set at GetLocalOS
 
@@ -107,10 +54,12 @@ function SetLocalOSSettings {
 		;;
 		*"MacOSX"*)
 		GROUP=admin
+		DO_INIT=false
 		;;
-		*"msys"*|*"Cygwin"*)
+		*"Cygwin"*|*"Android"*|*"msys"*|*"BusyBox"*)
 		USER=""
 		GROUP=""
+		DO_INIT=false
 		;;
 		*)
 		GROUP=root
@@ -290,11 +239,11 @@ function CopyServiceFiles {
 		fi
 
 		if [ -f "$SCRIPT_PATH/$TARGET_HELPER_SERVICE_FILE_SYSTEMD_SYSTEM" ]; then
-			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_SYSTEM" "$TARGET_HELPER_SERVICE_FILE_SYSTEMD_SYSTEM" "$SERVICE_FILE_SYSTEMD_SYSTEM" "" "" "" true
+			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_SYSTEM" "$TARGET_HELPER_SERVICE_FILE_SYSTEMD_SYSTEM" "$TARGET_HELPER_SERVICE_FILE_SYSTEMD_SYSTEM" "" "" "" true
 			Logger "Created optional service [$TARGET_HELPER_SERVICE_NAME] with same specifications as below." "NOTICE"
 		fi
 		if [ -f "$SCRIPT_PATH/$TARGET_HELPER_SERVICE_FILE_SYSTEMD_USER" ]; then
-			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_USER" "$TARGET_HELPER_SERVICE_FILE_SYSTEMD_USER" "$SERVICE_FILE_SYSTEMD_USER" "" "" "" true
+			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_SYSTEMD_USER" "$TARGET_HELPER_SERVICE_FILE_SYSTEMD_USER" "$TARGET_HELPER_SERVICE_FILE_SYSTEMD_USER" "" "" "" true
 		fi
 
 
@@ -306,7 +255,7 @@ function CopyServiceFiles {
 		#CreateDir "$SERVICE_DIR_INIT"
 		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_INIT" "$SERVICE_FILE_INIT" "$SERVICE_FILE_INIT" "755" "" "" true
 		if [ -f "$SCRIPT_PATH/$TARGET_HELPER_SERVICE_FILE_INIT" ]; then
-			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_INIT" "$TARGET_HELPER_SERVICE_FILE_INIT" "$SERVICE_FILE_INIT" "755" "" "" true
+			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_INIT" "$TARGET_HELPER_SERVICE_FILE_INIT" "$TARGET_HELPER_SERVICE_FILE_INIT" "755" "" "" true
 			Logger "Created optional service [$TARGET_HELPER_SERVICE_NAME] with same specifications as below." "NOTICE"
 		fi
 		Logger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_INIT]." "NOTICE"
@@ -316,7 +265,7 @@ function CopyServiceFiles {
 		# Rename service to usual service file
 		CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_OPENRC" "$SERVICE_FILE_OPENRC" "$SERVICE_FILE_INIT" "755" "" "" true
 		if [ -f "$SCRPT_PATH/$TARGET_HELPER_SERVICE_FILE_OPENRC" ]; then
-			CopyFile "$SCRIPT_PATH" "$TARGET_HELPER_SERVICE_DIR_OPENRC" "$SERVICE_FILE_OPENRC" "$SERVICE_FILE_INIT" "755" "" "" true
+			CopyFile "$SCRIPT_PATH" "$SERVICE_DIR_OPENRC" "$TARGET_HELPER_SERVICE_FILE_OPENRC" "$TARGET_HELPER_SERVICE_FILE_OPENRC" "755" "" "" true
 			Logger "Created optional service [$TARGET_HELPER_SERVICE_NAME] with same specifications as below." "NOTICE"
 		fi
 		Logger "Created [$SERVICE_NAME] service in [$SERVICE_DIR_OPENRC]." "NOTICE"
@@ -376,6 +325,10 @@ function RemoveAll {
 	RemoveFile "$SERVICE_DIR_SYSTEMD_USER/$SERVICE_FILE_SYSTEMD_USER"
 	RemoveFile "$SERVICE_DIR_INIT/$SERVICE_FILE_INIT"
 
+	RemoveFile "$TARGET_HELPER_SERVICE_DIR_SYSTEMD_SYSTEM/$SERVICE_FILE_SYSTEMD_SYSTEM"
+	RemoveFile "$TARGET_HELPER_SERVICE_DIR_SYSTEMD_USER/$SERVICE_FILE_SYSTEMD_USER"
+	RemoveFile "$TARGET_HELPER_SERVICE_DIR_INIT/$SERVICE_FILE_INIT"
+
 	Logger "Skipping configuration files in [$CONF_DIR]. You may remove this directory manually." "NOTICE"
 }
 
@@ -389,26 +342,65 @@ function Usage {
 	exit 127
 }
 
-function TrapQuit {
-	local exitcode=0
-
-	# Get ERROR / WARN alert flags from subprocesses that call Logger
-	if [ -f "$RUN_DIR/$PROGRAM.Logger.warn.$SCRIPT_PID.$TSTAMP" ]; then
-		WARN_ALERT=true
-		exitcode=2
-	fi
-	if [ -f "$RUN_DIR/$PROGRAM.Logger.error.$SCRIPT_PID.$TSTAMP" ]; then
-		ERROR_ALERT=true
-		exitcode=1
-	fi
-
-	CleanUp
-	exit $exitcode
-}
-
 ############################## Script entry point
 
-trap TrapQuit TERM EXIT HUP QUIT
+function GetCommandlineArguments {
+        for i in "$@"; do
+                case $i in
+			--prefix=*)
+                        FAKEROOT="${i##*=}"
+                        ;;
+			--silent)
+			_LOGGER_SILENT=true
+			;;
+			--no-stats)
+			_STATS=0
+			;;
+			--remove)
+			ACTION="uninstall"
+			;;
+			--help|-h|-?)
+			Usage
+			;;
+                        *)
+			Logger "Unknown option '$i'" "ERROR"
+			Usage
+			exit
+                        ;;
+                esac
+	done
+}
+
+GetCommandlineArguments "$@"
+
+CONF_DIR=$FAKEROOT/etc/$PROGRAM
+BIN_DIR="$FAKEROOT/usr/local/bin"
+SERVICE_DIR_INIT=$FAKEROOT/etc/init.d
+# Should be /usr/lib/systemd/system, but /lib/systemd/system exists on debian & rhel / fedora
+SERVICE_DIR_SYSTEMD_SYSTEM=$FAKEROOT/lib/systemd/system
+SERVICE_DIR_SYSTEMD_USER=$FAKEROOT/etc/systemd/user
+SERVICE_DIR_OPENRC=$FAKEROOT/etc/init.d
+
+if [ "$PROGRAM" == "osync" ]; then
+	SERVICE_NAME="osync-srv"
+	TARGET_HELPER_SERVICE_NAME="osync-target-helper-srv"
+
+	TARGET_HELPER_SERVICE_FILE_INIT="$TARGET_HELPER_SERVICE_NAME"
+	TARGET_HELPER_SERVICE_FILE_SYSTEMD_SYSTEM="$TARGET_HELPER_SERVICE_NAME@.service"
+	TARGET_HELPER_SERVICE_FILE_SYSTEMD_USER="$TARGET_HELPER_SERVICE_NAME@.service.user"
+	TARGET_HELPER_SERVICE_FILE_OPENRC="$TARGET_HELPER_SERVICE_NAME-openrc"
+elif [ "$PROGRAM" == "pmocr" ]; then
+	SERVICE_NAME="pmocr-srv"
+fi
+
+SERVICE_FILE_INIT="$SERVICE_NAME"
+SERVICE_FILE_SYSTEMD_SYSTEM="$SERVICE_NAME@.service"
+SERVICE_FILE_SYSTEMD_USER="$SERVICE_NAME@.service.user"
+SERVICE_FILE_OPENRC="$SERVICE_NAME-openrc"
+
+## Generic code
+
+trap GenericTrapQuit TERM EXIT HUP QUIT
 
 if [ ! -w "$(dirname $LOG_FILE)" ]; then
         echo "Cannot write to log [$(dirname $LOG_FILE)]."
@@ -421,7 +413,11 @@ umask 0022
 
 GetLocalOS
 SetLocalOSSettings
-GetInit
+# On Mac OS this always produces a warning which causes the installer to fail with exit code 2
+# Since we know it won't work anyway, and that's fine, just skip this step
+if $DO_INIT; then
+	GetInit
+fi
 
 STATS_LINK="http://instcount.netpower.fr?program=$PROGRAM&version=$PROGRAM_VERSION&os=$OS&action=$ACTION"
 

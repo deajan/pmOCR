@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
-AUTHOR="(C) 2015-2019 by Orsiris de Jong"
+AUTHOR="(C) 2015-2021 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.6.2-dev
-PROGRAM_BUILD=2019071901
+PROGRAM_VERSION=1.7.0-dev
+PROGRAM_BUILD=2021122901
 
 CONFIG_FILE_REVISION_REQUIRED=1
+
+### Tested Tesseract versions: 3.04, 4.1.2
+### Tested Abbyy OCR versions 11 (discontinued by Abbyy, support is deprecated)
+TESTED_TESSERACT_VERSIONS="3.04, 4.1.2"
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -22,8 +26,8 @@ if [ "$MAX_WAIT" == "" ]; then
 	MAX_WAIT=86400 # One day in seconds
 fi
 
-_OFUNCTIONS_VERSION=2.3.0-dev-postRC2
-_OFUNCTIONS_BUILD=2019070504
+_OFUNCTIONS_VERSION=2.3.2
+_OFUNCTIONS_BUILD=2021051801
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -175,7 +179,7 @@ function RemoteLogger {
 	local prefix
 
 	if [ "$_LOGGER_PREFIX" == "time" ]; then
-		prefix="TIME: $SECONDS - "
+		prefix="RTIME: $SECONDS - "
 	elif [ "$_LOGGER_PREFIX" == "date" ]; then
 		prefix="R $(date) - "
 	else
@@ -255,8 +259,8 @@ function Logger {
 	fi
 
 	## Obfuscate _REMOTE_TOKEN in logs (for ssh_filter usage only in osync and obackup)
-	value="${value/env _REMOTE_TOKEN=$_REMOTE_TOKEN/__(o_O)__}"
-	value="${value/env _REMOTE_TOKEN=\$_REMOTE_TOKEN/__(o_O)__}"
+	value="${value/env _REMOTE_TOKEN=$_REMOTE_TOKEN/env _REMOTE_TOKEN=__o_O__}"
+	value="${value/env _REMOTE_TOKEN=\$_REMOTE_TOKEN/env _REMOTE_TOKEN=__o_O__}"
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "$prefix($level):$value" "$prefix\e[1;33;41m$value\e[0m" true
@@ -383,23 +387,6 @@ function KillAllChilds {
 	return $errorcount
 }
 
-function CleanUp {
-	if [ "$_DEBUG" != true ]; then
-		# Removing optional remote $RUN_DIR that goes into local $RUN_DIR
-		if [ -d "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP" ]; then
-			rm -rf "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP"
-                fi
-		# Removing all temporary run files
-		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP"
-		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
-		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP.tmp"
-	fi
-
-	if [ "$SSH_CONTROLMASTER" == true ] && [ "$SSH_CMD" != "" ]; then
-		$SSH_CMD -O exit
-	fi
-}
-
 function GenericTrapQuit {
 	local exitcode=0
 
@@ -415,6 +402,25 @@ function GenericTrapQuit {
 
 	CleanUp
 	exit $exitcode
+}
+
+
+function CleanUp {
+	# Exit controlmaster before it's socket gets deleted
+	if [ "$SSH_CONTROLMASTER" == true ] && [ "$SSH_CMD" != "" ]; then
+		$SSH_CMD -O exit
+	fi
+
+	if [ "$_DEBUG" != true ]; then
+		# Removing optional remote $RUN_DIR that goes into local $RUN_DIR
+		if [ -d "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP" ]; then
+			rm -rf "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP"
+                fi
+		# Removing all temporary run files
+		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP"
+		# Fix for sed -i requiring backup extension for BSD & Mac (see all sed -i statements)
+		rm -f "$RUN_DIR/$PROGRAM."*".$SCRIPT_PID.$TSTAMP.tmp"
+	fi
 }
 
 
@@ -517,7 +523,7 @@ function SendEmail {
 			fi
 		done
 	else
-		Logger "No valid email adresses given." "WARN"
+		Logger "No valid email addresses given." "WARN"
 		return 1
 	fi
 
@@ -713,7 +719,7 @@ function LoadConfigFile {
 
 _OFUNCTIONS_SPINNER="|/-\\"
 function Spinner {
-	if [ $_LOGGER_SILENT == true ] || [ "$_LOGGER_ERR_ONLY" == true ]; then
+	if [ $_LOGGER_SILENT == true ] || [ "$_LOGGER_ERR_ONLY" == true ] || [ "$_SYNC_ON_CHANGES" == "initiator" ] || [ "$_SYNC_ON_CHANGES" == "target" ] ; then
 		return 0
 	else
 		printf " [%c]  \b\b\b\b\b\b" "$_OFUNCTIONS_SPINNER"
@@ -840,7 +846,7 @@ function ExecTasks {
 	local currentCommand		# Variable containing currently processed command
 	local currentCommandCondition	# Variable containing currently processed conditional command
 	local commandsArrayPid=()	# Array containing commands indexed by pids
-	local commandsArrayOutput=()	# Array contining command results indexed by pids
+	local commandsArrayOutput=()	# Array containing command results indexed by pids
 	local postponedRetryCount=0	# Number of current postponed commands retries
 	local postponedItemCount=0	# Number of commands that have been postponed (keep at least one in order to check once)
 	local postponedCounter=0
@@ -871,6 +877,7 @@ function ExecTasks {
 	local softAlert=false		# Does a soft alert need to be triggered, if yes, send an alert once
 	local failedPidsList		# List containing failed pids with exit code separated by semicolons (eg : 2355:1;4534:2;2354:3)
 	local randomOutputName		# Random filename for command outputs
+	local currentRunningPids	# String of pids running, used for debugging purposes only
 
 	# Initialise global variable
 	eval "WAIT_FOR_TASK_COMPLETION_$id=\"\""
@@ -983,6 +990,11 @@ function ExecTasks {
 	function _ExecTasksPidsCheck {
 		newPidsArray=()
 
+		if [ "$currentRunningPids" != "$(joinString " " ${pidsArray[@]})" ]; then
+			Logger "ExecTask running for pids [$(joinString " " ${pidsArray[@]})]." "DEBUG"
+			currentRunningPids="$(joinString " " ${pidsArray[@]})"
+		fi
+
 		for pid in "${pidsArray[@]}"; do
 			if [ $(IsInteger $pid) -eq 1 ]; then
 				if kill -0 $pid > /dev/null 2>&1; then
@@ -1040,7 +1052,7 @@ function ExecTasks {
 								Logger "Command was [${commandsArrayPid[$pid]}]." "ERROR"
 							fi
 							if [ -f "${commandsArrayOutput[$pid]}" ]; then
-								Logger "Command output was [$(cat "${commandsArrayOutput[$pid]}")\n]." "ERROR"
+								Logger "Truncated output:\n$(head -c16384 "${commandsArrayOutput[$pid]}")" "ERROR"
 							fi
 						fi
 						errorcount=$((errorcount+1))
@@ -1395,6 +1407,9 @@ function GetLocalOS {
 		*"Android"*)
 		LOCAL_OS="Android"
 		;;
+		*"qnap"*)
+		LOCAL_OS="Qnap"
+		;;
 		*"Linux"*)
 		LOCAL_OS="Linux"
 		;;
@@ -1430,10 +1445,10 @@ function GetLocalOS {
 
 	# Get linux versions
 	if [ -f "/etc/os-release" ]; then
-		localOsName=$(GetConfFileValue "/etc/os-release" "NAME" true)
-		localOsVer=$(GetConfFileValue "/etc/os-release" "VERSION" true)
+		localOsName="$(GetConfFileValue "/etc/os-release" "NAME" true)"
+		localOsVer="$(GetConfFileValue "/etc/os-release" "VERSION" true)"
 	elif [ "$LOCAL_OS" == "BusyBox" ]; then
-		localOsVer=$(ls --help 2>&1 | head -1 | cut -f2 -d' ')
+		localOsVer="$(ls --help 2>&1 | head -1 | cut -f2 -d' ')"
 		localOsName="BusyBox"
 	fi
 
@@ -1527,7 +1542,7 @@ function GetConfFileValue () {
 		echo "$value"
 	else
 		if [ $noError == true ]; then
-			Logger "Cannot get value for [$name] in config file [$file]." "NOTICE"
+			Logger "Cannot get value for [$name] in config file [$file]." "DEBUG"
 		else
 			Logger "Cannot get value for [$name] in config file [$file]." "ERROR"
 		fi
@@ -1552,7 +1567,7 @@ function UpdateBooleans {
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
 		if ! type "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
-			Logger "OCR engine executable [$OCR_ENGINE_EXEC] not present." "CRITICAL"
+			Logger "OCR engine executable [$OCR_ENGINE_EXEC] not present. Please adjust in your pmocr configuration file." "CRITICAL"
 			exit 1
 		fi
 	else
@@ -1562,7 +1577,7 @@ function CheckEnvironment {
 
 	if [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
 		if ! type "$OCR_PREPROCESSOR_EXEC" > /dev/null 2>&1; then
-			Logger "OCR preprocessor executable [$OCR_PREPROCESSOR_EXEC] not present." "CRITICAL"
+			Logger "OCR preprocessor executable [$OCR_PREPROCESSOR_EXEC] not present. Please adjust in your pmocr configuration file." "CRITICAL"
 			exit 1
 		fi
 	fi
@@ -1628,13 +1643,14 @@ function CheckEnvironment {
 
 	if [ "$OCR_ENGINE" == "tesseract" ] || [ "$OCR_ENGINE" == "tesseract3" ]; then
 		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
-			Logger "PDF to TIFF conversion executable [$PDF_TO_TIFF_EXEC] not present. Please install ghostscript." "CRITICAL"
+			Logger "PDF to TIFF conversion executable [$PDF_TO_TIFF_EXEC] not present. Please install ImageMagick." "CRITICAL"
 			exit 1
 		fi
 
 		TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
 		if [ $(VerComp "$TESSERACT_VERSION" "3.00") -gt 1 ]; then
 			Logger "Tesseract version [$TESSERACT_VERSION] is not supported. Please use version 3.x or better." "CRITICAL"
+			Logger "Known working tesseract versions are $TESTED_TESSERACT_VERSIONS." "CRITICAL"
 			exit 1
 		fi
 	fi
@@ -1727,7 +1743,7 @@ function OCR {
 				result=$?
 				if [ $result -ne 0 ]; then
 					Logger "$PDF_TO_TIFF_EXEC intermediary transformation failed." "ERROR"
-					Logger "Command output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
+					Logger "Truncated output:\n$(head -c16384 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "DEBUG"
 					alert=true
 				else
 					fileToProcess="$tmpFileIntermediary"
@@ -1746,7 +1762,7 @@ function OCR {
 				result=$?
 				if [ $result -ne 0 ]; then
 					Logger "$OCR_PREPROCESSOR_EXEC preprocesser failed." "ERROR"
-					Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "DEBUG"
+					Logger "Truncated output\n$(head -c16384 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "DEBUG"
 					alert=true
 				else
 					fileToProcess="$tmpFilePreprocessor"
@@ -1777,8 +1793,8 @@ function OCR {
 					if [ $result -eq 0 ] && grep -i "error" "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP"; then
 						result=9999
 						Logger "Tesseract produced errors while transforming the document." "WARN"
-						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "NOTICE"
-						Logger "Command output\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP)" "NOTICE"
+						Logger "Truncated output\n$(head -c16384 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "NOTICE"
+						Logger "Truncated output\n$(head -c16384 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.error.$SCRIPT_PID.$TSTAMP")" "NOTICE"
 						alert=true
 					fi
 
@@ -1791,7 +1807,7 @@ function OCR {
 						fi
 					fi
 				else
-					Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename $0)] and set [OCR_ENGINE] value." "ERROR"
+					Logger "Bogus ocr engine [$OCR_ENGINE]. Please edit file [$(basename "$0")] and set [OCR_ENGINE] value." "ERROR"
 				fi
 			fi
 
@@ -1813,7 +1829,7 @@ function OCR {
 
 			if [ $result != 0 ]; then
 				Logger "Could not process file [$inputFileName] (OCR error code $result). See logs." "ERROR"
-				Logger "OCR Engine Output:\n$(cat $RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP)" "ERROR"
+				Logger "Truncated OCR Engine Output:\n$(head -c16384 "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP")" "ERROR"
 				alert=true
 
 				if [ "$MOVE_ORIGINAL_ON_FAILURE" != "" ]; then
@@ -2109,8 +2125,8 @@ function Usage {
 	echo "--suffix=...              Adds a given suffix to the output filename (in order to not process them again, ex: pdf to pdf conversion)."
 	echo "                          By default, the suffix is '_OCR'"
 	echo "--no-suffix               Won't add any suffix to the output filename"
-	echo "--failed-suffix=...	Adds a given suffix to failed files (in order not to process them again. Defaults to '_OCR_ERR'"
-	echo "--no-failed-suffix	Won't add any suffix to failed conversion filenames"
+	echo "--failed-suffix=...       Adds a given suffix to failed files (in order not to process them again. Defaults to '_OCR_ERR'"
+	echo "--no-failed-suffix        Won't add any suffix to failed conversion filenames"
 	echo "--text=...                Adds a given text / variable to the output filename (ex: --text='$(date +%Y)')."
 	echo "                          By default, the text is the conversion date in pseudo ISO format."
 	echo "--no-text                 Won't add any text to the output filename"
@@ -2231,8 +2247,8 @@ if [ "$LOGFILE" == "" ]; then
 else
 	LOG_FILE="$LOGFILE"
 fi
-if [ ! -w "$(dirname $LOG_FILE)" ]; then
-	echo "Cannot write to log [$(dirname $LOG_FILE)]."
+if [ ! -w "$(dirname "$LOG_FILE")" ]; then
+	echo "Cannot write to log [$(dirname "$LOG_FILE")]."
 else
 	Logger "Script begin, logging to [$LOG_FILE]." "DEBUG"
 fi
@@ -2308,7 +2324,7 @@ if [ $_SERVICE_RUN == true ]; then
 	DISPATCH_NEEDED=0
 	DISPATCH_RUNS=false
 
-	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST]." "ALWAYS"
+	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST] using  using $OCR_ENGINE." "ALWAYS"
 
 	if [ "$PDF_MONITOR_DIR" != "" ]; then
 		OCR_service "$PDF_MONITOR_DIR" "$PDF_EXTENSION" &
@@ -2355,31 +2371,31 @@ elif [ $_BATCH_RUN == true ]; then
 			fi
 		fi
 
-		Logger "Beginning PDF OCR recognition of files in [$batchPath]." "NOTICE"
+		Logger "Beginning PDF OCR recognition of files in [$batchPath] using $OCR_ENGINE." "NOTICE"
 		OCR_Dispatch "$batchPath" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
 		Logger "Batch ended." "NOTICE"
 	fi
 
 	if [ $docx == true ]; then
-		Logger "Beginning DOCX OCR recognition of files in [$batchPath]." "NOTICE"
+		Logger "Beginning DOCX OCR recognition of files in [$batchPath] using $OCR_ENGINE." "NOTICE"
 		OCR_Dispatch "$batchPath" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" false
 		Logger "Batch ended." "NOTICE"
 	fi
 
 	if [ $xlsx == true ]; then
-		Logger "Beginning XLSX OCR recognition of files in [$batchPath]." "NOTICE"
+		Logger "Beginning XLSX OCR recognition of files in [$batchPath] using $OCR_ENGINE." "NOTICE"
 		OCR_Dispatch "$batchPath" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false
 		Logger "batch ended." "NOTICE"
 	fi
 
 	if [ $txt == true ]; then
-		Logger "Beginning TEXT OCR recognition of files in [$batchPath]." "NOTICE"
+		Logger "Beginning TEXT OCR recognition of files in [$batchPath] using $OCR_ENGINE." "NOTICE"
 		OCR_Dispatch "$batchPath" "$TEXT_EXTENSION" "$TEXT_OCR_ENGINE_ARGS" false
 		Logger "batch ended." "NOTICE"
 	fi
 
 	if [ $csv == true ]; then
-		Logger "Beginning CSV OCR recognition of files in [$batchPath]." "NOTICE"
+		Logger "Beginning CSV OCR recognition of files in [$batchPath] using $OCR_ENGINE." "NOTICE"
 		OCR_Dispatch "$batchPath" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
 		Logger "Batch ended." "NOTICE"
 	fi

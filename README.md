@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/deajan/pmOCR.svg?branch=master)](https://travis-ci.org/deajan/pmOCR) [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause) [![GitHub Release](https://img.shields.io/github/release/deajan/pmOCR.svg?label=Latest)](https://github.com/deajan/pmOCR/releases/latest)
 
 
-A multicore batch & service wrapper script for Tesseract 3.02+ / 4.x (https://github.com/tesseract-ocr/) or ABBYY CLI OCR 11 FOR LINUX based on Finereader Engine 11 optical character recognition (www.ocr4linux.com).
+A multicore batch & service wrapper script for Tesseract 3.02+ / 4.1.2 / 5.0.0 (https://github.com/tesseract-ocr/) or ABBYY CLI OCR 11 FOR LINUX based on Finereader Engine 11 optical character recognition (www.ocr4linux.com).
 
 Conversions support tiff/jpg/png/pdf/bmp to PDF, TXT and CSV (also DOCX and XSLX for Abbyy OCR). It can actually support any other format that your OCR engine can handle.
 
@@ -20,7 +20,7 @@ pmOCR has the following options:
 
 ## Install it
 
-    $ git clone -b "1.6.1" https://github.com/deajan/pmOCR
+    $ git clone https://github.com/deajan/pmOCR
     $ cd pmOCR
     $ ./install.sh
 

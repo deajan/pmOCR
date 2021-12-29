@@ -1,6 +1,16 @@
 RECENT CHANGES
 --------------
 
+29 Dec 2021: v1.7.0
+
+- Tested Tesseract 5.X engine
+- Improved optional preprocessor commandline
+	- Added antialiasing
+	- Added text sharpening
+- Removed earlier ghostscript dependency
+- Fixed installer message when no wget is present
+- Updated ofunctions
+
 11 Jul 2019: v1.6.1
 
 - Tested Tesseract 4.x engine

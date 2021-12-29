@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
-AUTHOR="(C) 2015-2019 by Orsiris de Jong"
+AUTHOR="(C) 2015-2021 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.6.2-dev
-PROGRAM_BUILD=2020050401
+PROGRAM_VERSION=1.7.0-dev
+PROGRAM_BUILD=2021122901
 
 CONFIG_FILE_REVISION_REQUIRED=1
+
+### Tested Tesseract versions: 3.04, 4.1.2
+### Tested Abbyy OCR versions 11 (discontinued by Abbyy, support is deprecated)
+TESTED_TESSERACT_VERSIONS="3.04, 4.1.2"
 
 ## Debug parameter for service
 if [ "$_DEBUG" == "" ]; then
@@ -43,7 +47,7 @@ function UpdateBooleans {
 function CheckEnvironment {
 	if [ "$OCR_ENGINE_EXEC" != "" ]; then
 		if ! type "$OCR_ENGINE_EXEC" > /dev/null 2>&1; then
-			Logger "OCR engine executable [$OCR_ENGINE_EXEC] not present." "CRITICAL"
+			Logger "OCR engine executable [$OCR_ENGINE_EXEC] not present. Please adjust in your pmocr configuration file." "CRITICAL"
 			exit 1
 		fi
 	else
@@ -53,7 +57,7 @@ function CheckEnvironment {
 
 	if [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
 		if ! type "$OCR_PREPROCESSOR_EXEC" > /dev/null 2>&1; then
-			Logger "OCR preprocessor executable [$OCR_PREPROCESSOR_EXEC] not present." "CRITICAL"
+			Logger "OCR preprocessor executable [$OCR_PREPROCESSOR_EXEC] not present. Please adjust in your pmocr configuration file." "CRITICAL"
 			exit 1
 		fi
 	fi
@@ -119,13 +123,14 @@ function CheckEnvironment {
 
 	if [ "$OCR_ENGINE" == "tesseract" ] || [ "$OCR_ENGINE" == "tesseract3" ]; then
 		if ! type "$PDF_TO_TIFF_EXEC" > /dev/null 2>&1; then
-			Logger "PDF to TIFF conversion executable [$PDF_TO_TIFF_EXEC] not present. Please install ghostscript." "CRITICAL"
+			Logger "PDF to TIFF conversion executable [$PDF_TO_TIFF_EXEC] not present. Please install ImageMagick." "CRITICAL"
 			exit 1
 		fi
 
 		TESSERACT_VERSION=$(tesseract -v 2>&1 | head -n 1 | awk '{print $2}')
 		if [ $(VerComp "$TESSERACT_VERSION" "3.00") -gt 1 ]; then
 			Logger "Tesseract version [$TESSERACT_VERSION] is not supported. Please use version 3.x or better." "CRITICAL"
+			Logger "Known working tesseract versions are $TESTED_TESSERACT_VERSIONS." "CRITICAL"
 			exit 1
 		fi
 	fi
@@ -604,8 +609,8 @@ function Usage {
 	echo "--suffix=...              Adds a given suffix to the output filename (in order to not process them again, ex: pdf to pdf conversion)."
 	echo "                          By default, the suffix is '_OCR'"
 	echo "--no-suffix               Won't add any suffix to the output filename"
-	echo "--failed-suffix=...	Adds a given suffix to failed files (in order not to process them again. Defaults to '_OCR_ERR'"
-	echo "--no-failed-suffix	Won't add any suffix to failed conversion filenames"
+	echo "--failed-suffix=...       Adds a given suffix to failed files (in order not to process them again. Defaults to '_OCR_ERR'"
+	echo "--no-failed-suffix        Won't add any suffix to failed conversion filenames"
 	echo "--text=...                Adds a given text / variable to the output filename (ex: --text='$(date +%Y)')."
 	echo "                          By default, the text is the conversion date in pseudo ISO format."
 	echo "--no-text                 Won't add any text to the output filename"
@@ -803,7 +808,7 @@ if [ $_SERVICE_RUN == true ]; then
 	DISPATCH_NEEDED=0
 	DISPATCH_RUNS=false
 
-	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST]." "ALWAYS"
+	Logger "Service $PROGRAM instance [$INSTANCE_ID] pid [$$] started as [$LOCAL_USER] on [$LOCAL_HOST] using  using $OCR_ENGINE." "ALWAYS"
 
 	if [ "$PDF_MONITOR_DIR" != "" ]; then
 		OCR_service "$PDF_MONITOR_DIR" "$PDF_EXTENSION" &
@@ -850,31 +855,31 @@ elif [ $_BATCH_RUN == true ]; then
                 	fi
 		fi
 
-		Logger "Beginning PDF OCR recognition of files in [$batchPath]." "NOTICE"
+		Logger "Beginning PDF OCR recognition of files in [$batchPath] using $OCR_ENGINE." "NOTICE"
 		OCR_Dispatch "$batchPath" "$PDF_EXTENSION" "$PDF_OCR_ENGINE_ARGS" false
 		Logger "Batch ended." "NOTICE"
 	fi
 
 	if [ $docx == true ]; then
-		Logger "Beginning DOCX OCR recognition of files in [$batchPath]." "NOTICE"
+		Logger "Beginning DOCX OCR recognition of files in [$batchPath] using $OCR_ENGINE." "NOTICE"
 		OCR_Dispatch "$batchPath" "$WORD_EXTENSION" "$WORD_OCR_ENGINE_ARGS" false
 		Logger "Batch ended." "NOTICE"
 	fi
 
 	if [ $xlsx == true ]; then
-		Logger "Beginning XLSX OCR recognition of files in [$batchPath]." "NOTICE"
+		Logger "Beginning XLSX OCR recognition of files in [$batchPath] using $OCR_ENGINE." "NOTICE"
 		OCR_Dispatch "$batchPath" "$EXCEL_EXTENSION" "$EXCEL_OCR_ENGINE_ARGS" false
 		Logger "batch ended." "NOTICE"
 	fi
 
 	if [ $txt == true ]; then
-		Logger "Beginning TEXT OCR recognition of files in [$batchPath]." "NOTICE"
+		Logger "Beginning TEXT OCR recognition of files in [$batchPath] using $OCR_ENGINE." "NOTICE"
 		OCR_Dispatch "$batchPath" "$TEXT_EXTENSION" "$TEXT_OCR_ENGINE_ARGS" false
 		Logger "batch ended." "NOTICE"
 	fi
 
 	if [ $csv == true ]; then
-		Logger "Beginning CSV OCR recognition of files in [$batchPath]." "NOTICE"
+		Logger "Beginning CSV OCR recognition of files in [$batchPath] using $OCR_ENGINE." "NOTICE"
 		OCR_Dispatch "$batchPath" "$CSV_EXTENSION" "$CSV_OCR_ENGINE_ARGS" true
 		Logger "Batch ended." "NOTICE"
 	fi

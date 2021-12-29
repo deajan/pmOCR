@@ -30,8 +30,8 @@
 #### OFUNCTIONS FULL SUBSET ####
 #### OFUNCTIONS MINI SUBSET ####
 #### OFUNCTIONS MICRO SUBSET ####
-_OFUNCTIONS_VERSION=2.3.0-RC4
-_OFUNCTIONS_BUILD=2020050302
+_OFUNCTIONS_VERSION=2.3.2
+_OFUNCTIONS_BUILD=2021051801
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -439,7 +439,7 @@ function GenericTrapQuit {
 	exit $exitcode
 }
 
-#### TrapQuit SUBSET END ####
+#### GenericTrapQuit SUBSET END ####
 
 #### CleanUp SUBSET ####
 function CleanUp {
@@ -1488,6 +1488,9 @@ function GetLocalOS {
 		*"Android"*)
 		LOCAL_OS="Android"
 		;;
+		*"qnap"*)
+		LOCAL_OS="Qnap"
+		;;
 		*"Linux"*)
 		LOCAL_OS="Linux"
 		;;
@@ -1716,6 +1719,9 @@ ENDSSH
 			*"Android"*)
 			REMOTE_OS="Android"
 			;;
+			*"qnap"*)
+			REMOTE_OS="Qnap"
+			;;
 			*"Linux"*)
 			REMOTE_OS="Linux"
 			;;
@@ -1866,6 +1872,42 @@ function RunAfterHook {
 	fi
 }
 
+function TimeCheck {
+	# Checks if more than deltatime seconds have passed since last check, which is stored in timefile
+	__CheckArguments 2 $# "$@"      #__WITH_PARANOIA_DEBUG
+
+	local timefile="${1}"
+	local deltatime="${2}"
+
+	if [ -f "$timefile" ]; then
+		result=$(cat "$timefile")
+		tstamp=$(date +%s)
+		if [ $((tstamp-result)) -gt $deltatime ]; then
+			echo "$(date +%s)" > "$timefile"
+			return 0
+		else
+			return 1
+		fi
+	else
+		echo "$(date +%s)" > "$timefile"
+		return 0
+	fi
+}
+
+function Ping {
+	# Simple ping check
+	__CheckArguments 1 $# "$@"
+
+	local host="${1}"
+
+	local retval
+
+	eval "$PING_CMD $host > /dev/null 2>&1" &
+	ExecTasks $! "${FUNCNAME[0]}" false 0 0 60 180 true $SLEEP_TIME $KEEP_LOGGING
+	return $?
+}
+
+
 function CheckConnectivityRemoteHost {
 	__CheckArguments 0 $# "$@"	#__WITH_PARANOIA_DEBUG
 
@@ -1886,7 +1928,13 @@ function CheckConnectivityRemoteHost {
 }
 
 function CheckConnectivity3rdPartyHosts {
-	__CheckArguments 0 $# "$@"	#__WITH_PARANOIA_DEBUG
+	# Check if at least one host is reachable in order to diag internet
+	# third_party_hosts_ips=('1.1.1.1' '8.8.8.8' 'kernel.org' 'google.com')
+	# CheckConnectivity3rdPartyHosts $third_party_hosts_ips
+
+	__CheckArguments 0-1 $# "$@"	#__WITH_PARANOIA_DEBUG
+
+	local remote_3rd_party_hosts="${1}"	# Optional list of hosts to check
 
 	local remote3rdPartySuccess
 	local retval
@@ -1894,9 +1942,12 @@ function CheckConnectivity3rdPartyHosts {
 
 	if [ "$_PARANOIA_DEBUG" != true ]; then # Do not loose time in paranoia debug		#__WITH_PARANOIA_DEBUG
 
-		if [ "$REMOTE_3RD_PARTY_HOSTS" != "" ]; then
+		if [ "$remote_3rd_party_hosts" == "" ]; then
+			remote_3rd_party_hosts="$REMOTE_3RD_PARTY_HOSTS"
+		fi
+		if [ "$remote_3rd_party_hosts" != "" ]; then
 			remote3rdPartySuccess=false
-			for i in $REMOTE_3RD_PARTY_HOSTS
+			for i in $remote_3rd_party_hosts
 			do
 				eval "$PING_CMD $i > /dev/null 2>&1" &
 				ExecTasks $! "${FUNCNAME[0]}" false 0 0 60 180 true $SLEEP_TIME $KEEP_LOGGING
@@ -1905,6 +1956,7 @@ function CheckConnectivity3rdPartyHosts {
 					Logger "Cannot ping 3rd party host [$i]. Return code [$retval]." "NOTICE"
 				else
 					remote3rdPartySuccess=true
+					break
 				fi
 			done
 
@@ -2010,7 +2062,7 @@ function PreInit {
 	if [ "$SSH_COMPRESSION" != false ]; then
 		SSH_COMP=-C
 	else
-		SSH_COMP=
+		SSH_COMP="-o Compression=no"
 	fi
 
 	## Ignore SSH known host verification
@@ -2240,8 +2292,11 @@ function InitRemoteOSDependingSettings {
 		fi
 	fi
 	if [ "$RSYNC_COMPRESS" == true ]; then
-		if [ "$LOCAL_OS" != "MacOSX" ] && [ "$REMOTE_OS" != "MacOSX" ]; then
-			RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" -zz --skip-compress=3fr/3g2/3gp/3gpp/7z/aac/ace/amr/apk/appx/appxbundle/arc/arj/arw/asf/avi/bz/bz2/cab/cr2/crypt[5678]/dat/dcr/deb/dmg/drc/ear/erf/flac/flv/gif/gpg/gz/iiq/jar/jp2/jpeg/jpg/h26[45]/k25/kdc/kgb/lha/lz/lzma/lzo/lzx/m4[apv]/mef/mkv/mos/mov/mp[34]/mpeg/mp[gv]/msi/nef/oga/ogg/ogv/opus/orf/pak/pef/png/qt/rar/r[0-9][0-9]/rz/rpm/rw2/rzip/s7z/sfark/sfx/sr2/srf/svgz/t[gb]z/tlz/txz/vob/wim/wma/wmv/xz/zip"
+		SKIP_COMPRESS_EXTENSIONS="--skip-compress=3fr/3g2/3gp/3gpp/7z/aac/ace/amr/apk/appx/appxbundle/arc/arj/arw/asf/avi/bz/bz2/cab/cr2/crypt[5678]/dat/dcr/deb/dmg/drc/ear/erf/flac/flv/gif/gpg/gz/iiq/jar/jp2/jpeg/jpg/h26[45]/k25/kdc/kgb/lha/lz/lzma/lzo/lzx/m4[apv]/mef/mkv/mos/mov/mp[34]/mpeg/mp[gv]/msi/nef/oga/ogg/ogv/opus/orf/pak/pef/png/qt/rar/r[0-9][0-9]/rz/rpm/rw2/rzip/s7z/sfark/sfx/sr2/srf/svgz/t[gb]z/tlz/txz/vob/wim/wma/wmv/xz/zip"
+		if [ "$LOCAL_OS" == "Qnap" ] || [ "$REMOTE_OS" == "Qnap" ]; then
+			RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" -z $SKIP_COMPRESS_EXTENSIONS"
+		elif [ "$LOCAL_OS" != "MacOSX" ] && [ "$REMOTE_OS" != "MacOSX" ]; then
+			RSYNC_DEFAULT_ARGS=$RSYNC_DEFAULT_ARGS" -zz $SKIP_COMPRESS_EXTENSIONS"
 		else
 			Logger "Disabling compression skips on synchronization on [$LOCAL_OS] due to lack of support." "NOTICE"
 		fi
@@ -2362,7 +2417,7 @@ function GetConfFileValue () {
 		echo "$value"
 	else
 		if [ $noError == true ]; then
-			Logger "Cannot get value for [$name] in config file [$file]." "NOTICE"
+			Logger "Cannot get value for [$name] in config file [$file]." "DEBUG"
 		else
 			Logger "Cannot get value for [$name] in config file [$file]." "ERROR"
 		fi

@@ -1,7 +1,14 @@
 RECENT CHANGES
 --------------
 
-29 Dec 2021: v1.7.0
+23 Feb 2022: v1.8.0
+
+- Added internal inotifywait emulation that can deal with events on NFS / SMB shares where inotify events won't happen
+- Highly speed up OCR by bypassing checks on non modified files
+- Speed up OCR_Dispatch by checking already OCRed PDFs before launching OCR function
+- Inclusions and exclusions are now case insensitive in order to make sure we play right with Windows rules too
+
+29 Dec 2021: v1.7.0 (never released)
 
 - Tested Tesseract 5.X engine
 - Improved optional preprocessor commandline

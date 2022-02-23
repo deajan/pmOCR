@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-## MERGE 2020031501
+## MERGE 2022022301
 
 ## Merges ofunctions.sh and n_program.sh into program.sh
 ## Adds installer
@@ -63,6 +63,7 @@ function __PREPROCESSOR_Constants {
 	'#### CleanUp SUBSET ####'
 	'#### GenericTrapQuit SUBSET ####'
 	'#### FileMove SUBSET ####'
+        '#### InotifyWaitPoller SUBSET ####'
 	)
 }
 

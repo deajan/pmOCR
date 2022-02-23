@@ -17,8 +17,8 @@ INSTANCE_ID="installer-$SCRIPT_BUILD"
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8, 10 and 11
 ## Please adapt this to fit your distro needs
 
-_OFUNCTIONS_VERSION=2.3.2
-_OFUNCTIONS_BUILD=2021051801
+_OFUNCTIONS_VERSION=2.4.0
+_OFUNCTIONS_BUILD=2022022301
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -72,7 +72,7 @@ function PoorMansRandomGenerator {
 	local digits="${1}" # The number of digits to generate
 	local number
 
-	# Some read bytes can't be used, se we read twice the number of required bytes
+	# Some read bytes cannot be used, se we read twice the number of required bytes
 	dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
 		number=$number$(printf "%d" "'$char")
 		if [ ${#number} -ge $digits ]; then
@@ -114,7 +114,7 @@ else
 fi
 
 ## Special note when remote target is on the same host as initiator (happens for unit tests): we'll have to differentiate RUN_DIR so remote CleanUp won't affect initiator.
-## If the same program gets remotely executed, add _REMOTE_EXECUTION=true to it's environment so it knows it has to write into a separate directory
+## If the same program gets remotely executed, add _REMOTE_EXECUTION=true to environment so it knows it has to write into a separate directory
 ## This will thus not affect local $RUN_DIR variables
 if [ "$_REMOTE_EXECUTION" == true ]; then
 	mkdir -p "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP"
@@ -397,7 +397,7 @@ function GenericTrapQuit {
 
 
 function CleanUp {
-	# Exit controlmaster before it's socket gets deleted
+	# Exit controlmaster before the socket gets deleted
 	if [ "$SSH_CONTROLMASTER" == true ] && [ "$SSH_CMD" != "" ]; then
 		$SSH_CMD -O exit
 	fi
@@ -580,7 +580,7 @@ function GetConfFileValue () {
 }
 
 function CleanUp {
-	# Exit controlmaster before it's socket gets deleted
+	# Exit controlmaster before the socket gets deleted
 	if [ "$SSH_CONTROLMASTER" == true ] && [ "$SSH_CMD" != "" ]; then
 		$SSH_CMD -O exit
 	fi

@@ -2,7 +2,7 @@
 ## Generic and highly portable bash functions written in 2013-2020 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 #TODO: ExecTasks postponed arrays / files grow a lot. Consider having them "rolling" (cleaned at numberOfEvents)
-#TODO: command line arguments don't take -AaqV for example
+#TODO: command line arguments do not take merged args (-AaqV for example)
 
 ####################################################################################################################################################################
 ## To use in a program, define the following variables:
@@ -30,8 +30,8 @@
 #### OFUNCTIONS FULL SUBSET ####
 #### OFUNCTIONS MINI SUBSET ####
 #### OFUNCTIONS MICRO SUBSET ####
-_OFUNCTIONS_VERSION=2.3.2
-_OFUNCTIONS_BUILD=2021051801
+_OFUNCTIONS_VERSION=2.4.0
+_OFUNCTIONS_BUILD=2022022301
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -94,7 +94,7 @@ function PoorMansRandomGenerator {
 	local digits="${1}" # The number of digits to generate
 	local number
 
-	# Some read bytes can't be used, se we read twice the number of required bytes
+	# Some read bytes cannot be used, se we read twice the number of required bytes
 	dd if=/dev/urandom bs=$digits count=2 2> /dev/null | while read -r -n1 char; do
 		number=$number$(printf "%d" "'$char")
 		if [ ${#number} -ge $digits ]; then
@@ -138,7 +138,7 @@ else
 fi
 
 ## Special note when remote target is on the same host as initiator (happens for unit tests): we'll have to differentiate RUN_DIR so remote CleanUp won't affect initiator.
-## If the same program gets remotely executed, add _REMOTE_EXECUTION=true to it's environment so it knows it has to write into a separate directory
+## If the same program gets remotely executed, add _REMOTE_EXECUTION=true to environment so it knows it has to write into a separate directory
 ## This will thus not affect local $RUN_DIR variables
 if [ "$_REMOTE_EXECUTION" == true ]; then
 	mkdir -p "$RUN_DIR/$PROGRAM.remote.$SCRIPT_PID.$TSTAMP"
@@ -443,7 +443,7 @@ function GenericTrapQuit {
 
 #### CleanUp SUBSET ####
 function CleanUp {
-	# Exit controlmaster before it's socket gets deleted
+	# Exit controlmaster before the socket gets deleted
 	if [ "$SSH_CONTROLMASTER" == true ] && [ "$SSH_CMD" != "" ]; then
 		$SSH_CMD -O exit
 	fi
@@ -835,7 +835,7 @@ function ParallelExec {
 ## pid=$!
 ## sleep 20 &
 ## pid2=$!
-## ExecTasks "some_identifier" 0 0 10 20 1 1800 true true false false 1 "$pid;$pid2"
+## ExecTasks "$pid;$pid2" "some_identifier" 0 0 10 20 1 1800 true true false false 1
 
 ## Example of parallel execution of four commands, only if directories exist. Warn if execution takes more than 300 seconds. Stop if takes longer than 900 seconds. Exeute max 3 commands in parallel.
 ## commands="du -csh /var;du -csh /etc;du -csh /home;du -csh /usr"
@@ -981,7 +981,7 @@ function ExecTasks {
 	fi
 
 	if [ $functionMode == "WaitForTaskCompletion" ]; then
-		# Force first while loop condition to be true because we don't deal with counters but pids in WaitForTaskCompletion mode
+		# Force first while loop condition to be true because we do not deal with counters but pids in WaitForTaskCompletion mode
 		counter=$mainItemCount
 	fi
 
@@ -1066,7 +1066,7 @@ function ExecTasks {
 					pidState="$(eval $PROCESS_STATE_CMD)"
 					if [ "$pidState" != "D" ] && [ "$pidState" != "Z" ]; then
 
-						# Check if pid hasn't run more than soft/hard perProcessTime
+						# Check if pid has not run more than soft/hard perProcessTime
 						pidsTimeArray[$pid]=$((SECONDS - seconds_begin))
 						if [ ${pidsTimeArray[$pid]} -gt $softPerProcessTime ]; then
 							if [ "$softAlert" != true ] && [ $softPerProcessTime -ne 0 ] && [ $noTimeErrorLog != true ]; then
@@ -2500,5 +2500,139 @@ function FileMove () {
 	fi
 }
 #### FileMove SUBSET END ####
+
+#### InotifyWaitPoller SUBSET ####
+
+# Checks directories every second for file changes using a static list
+# Orignal code Copyright (c) 2020 Francesco Bianco <bianco@javanile.org>
+# Improved version https://github.com/javanile/inotifywait-polling/pull/1 by adding timeouts, optional recursion, excludes and a couple of fixes
+print_event () {
+    [[ -z "${events}" || "${events}" == *"$2"* ]] && echo "$1 $2 $3"
+    case "$2" in
+        CREATE)
+            [[ -z "${events}" || "${events}" == *"OPEN"* ]] && echo "$1 OPEN $3"
+            [[ -z "${events}" || "${events}" == *"MODIFY"* ]] && echo "$1 MODIFY $3"
+            [[ -z "${events}" || "${events}" == *"CLOSE"* ]] && echo "$1 CLOSE_WRITE,CLOSE $3"
+            ;;
+    esac
+    return 0
+}
+
+function _InotifyWaitPoller () {
+	local path="${1}"
+	local includes="${2}"
+	local excludes="${3}"
+	local recursive="${4:-true}"
+	local monitor="${5:-false}"
+	local event_log_file="${6}"
+	local events="${7}"
+
+	local include
+	local exclude
+	local find_results_file
+	local find_recursion
+	local find_includes=
+	local find_excludes=
+	local stop_loop=false
+	local find_cmd
+	local notable_event=false
+	find_results_file="$RUN_DIR/$PROGRAM._InotifyWaitPoller.${path//\//_}.$SCRIPT_PID.$TSTAMP"
+
+	IFS=';' read -r -a includes <<< "$includes"
+	for include in "${includes[@]}"; do
+		find_includes="$find_includes -iregex \"$include\""
+	done
+
+	IFS=';' read -r -a excludes <<< "$excludes"
+	for exclude in "${excludes[@]}"; do
+		find_excludes="$find_excludes ! -iregex \"$exclude\""
+	done
+
+	if [ $recursive != true ]; then
+		find_recursion=" -maxdepth 1"
+	fi
+
+	find_cmd="find \"$path\" ! -regex \"$RUN_DIR/$PROGRAM.*.$SCRIPT_PID.$TSTAMP\" $find_includes $find_excludes $find_recursion -printf \"%s %y %p\\n\" | sort -k3 - > \"$find_results_file\""
+	Logger "COMMAND: $find_cmd" "VERBOSE"
+        eval "$find_cmd"
+
+	while [ $stop_loop == false ]; do
+		sleep 2
+		sign=
+		last_run_results=$(cat "$find_results_file")
+		eval "$find_cmd"
+		differences=$(diff <(echo "$last_run_results") <(cat "$find_results_file")) && true
+		if [ "$monitor" != true ] && [ "$notable_event" == true ]; then
+			stop_loop=true
+		fi
+
+		[ -z "$differences" ] && continue
+		while IFS= read line || [[ -n "${line}" ]]; do
+			if [[ "${line}" == "." ]]; then
+				for item in $(tr ';' '\n' <<< "${sign}"); do
+					event=$(echo "${item}" | cut -s -d':' -f1)
+					focus=$(echo "${item}" | cut -s -d':' -f2)
+					dir=$(dirname "${focus}")/
+					file=$(basename "${focus}")
+					if [[ "${events}" == *"${event}"* ]]; then
+						#print_event "${dir}" "${event}" "${file}"
+						[ "$event_log_file" != "" ] && printf "${dir}${file}\0" >> "$event_log_file" || print_event "${dir}" "${event}" "${file}"
+						notable_event=true
+					fi
+				done
+				break
+			fi
+			flag=$(echo "${line}" | cut -s -d' ' -f1)
+			file=$(echo "${line}" | cut -s -d' ' -f4)
+			[[ -n "${file}" ]] || continue
+			[[ "${file}" != "$find_results_file" ]] || continue
+			case "${flag}" in
+				"<")
+					event=DELETE
+					;;
+				">")
+					event=CREATE
+					if [[ "${sign}" == *"DELETE:${file};"* ]]; then
+						event=MODIFY
+						sign=$(echo "${sign}" | sed "s#DELETE:${file};##g")
+					elif [[ "${sign}" == *"DELETE:"* ]]; then
+						event=MOVED_TO
+						sign=$(echo "${sign}" | sed "s#DELETE:.*;##g")
+					fi
+					;;
+			esac
+			sign+="${event}:${file};"
+		done <<< "$(echo -e "${differences}\n.")"
+	done
+	[ -f "$find_results_file" ] && rm -f "$find_results_file"
+	exit 0
+}
+# InotifyWaitPoller dirs exclusions recursive monitor_mode timeout opt_regex event_log events
+function InotifyWaitPoller () {
+	local paths="${1}" # Comma separated list of paths
+	local includes="${2}" comma separated list of excludes in find regex format
+	local excludes="${3}" # Comma separated list of excludes in find regex format
+        local recursive="${4:-true}"
+	local monitor="${5:-false}"
+	local event_log_file="${6}" # optional event log file
+	local events="${7:-CREATE,MODIFY,MOVED_TO}" # possible events: CREATE,OPEN,MODIFY,CLOSE,CLOSE_WRITE,DELETE,MOVED_TO
+	local timeout="${8:-0}" # seconds
+
+	local pids
+	local path
+	local alive
+	local count=0
+
+	IFS=';' read -r -a paths <<< "$paths"
+	for path in "${paths[@]}"; do
+		if ! [ -e "$path" ]; then
+			Logger "Cannot watch [$path]. No such file or directory." "CRITICAL"
+		fi
+		_InotifyWaitPoller "$path" "$includes" "$excludes" "$recursive" "$monitor" "$event_log_file" "$events" &
+		pids="$pids;$!"
+	done
+	ExecTasks $pids "InotifyWaitPoller" false 0 0 0 $timeout
+}
+#### InotifyWaitPoller SUBSET END ####
 
 #### OFUNCTIONS FULL SUBSET END ####

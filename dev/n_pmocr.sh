@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2022 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.8.0-dev
-PROGRAM_BUILD=2022022301
+PROGRAM_VERSION=1.8.0
+PROGRAM_BUILD=2022022501
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -142,7 +142,7 @@ function TrapQuit {
 	local result
 
 	if [ -f "$SERVICE_MONITOR_FILE" ]; then
-		rm -f "$SERVICE_MONITOR_FILE"
+		rm -f "$SERVICE_MONITOR_FILE" > /dev/null 2>&1
 	fi
 
 	KillChilds $$ > /dev/null 2>&1
@@ -207,6 +207,10 @@ function OCR {
 	local result
 
 	local alert=false
+		if [ $_SILENT != true ]; then
+			Logger "Processing file [$inputFileName]." "ALWAYS"
+		fi
+
 
 		# Expand $FILENAME_ADDITION
 		eval "outputFileName=\"${inputFileName%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\""
@@ -283,7 +287,7 @@ function OCR {
 
 				# Fix for tesseract pdf output also outputs txt format
 				if [ "$fileExtension" == ".pdf" ] && [ -f "$outputFileName$TEXT_EXTENSION" ]; then
-					rm -f "$outputFileName$TEXT_EXTENSION"
+					rm -f "$outputFileName$TEXT_EXTENSION" > /dev/null 2>&1
 					if [ $? != 0 ]; then
 						Logger "Cannot remove temporary txt file [$outputFileName$TEXT_EXTENSION]." "WARN"
 						alert=true
@@ -296,14 +300,14 @@ function OCR {
 
 		# Remove temporary files
 		if [ -f "$tmpFileIntermediary" ]; then
-			rm -f "$tmpFileIntermediary";
+			rm -f "$tmpFileIntermediary" > /dev/null 2>&1
 			if [ $? != 0 ]; then
 				Logger "Cannot remove temporary file [$tmpFileIntermediary]." " WARN"
 				alert=true
 			fi
 		fi
 		if [ -f "$tmpFilePreprocessor" ]; then
-			rm -f "$tmpFilePreprocessor";
+			rm -f "$tmpFilePreprocessor" > /dev/null 2>&1
 			if [ $? != 0 ]; then
 				Logger "Cannot remove temporary file [$tmpFilePreprocessor]." " WARN"
 				alert=true
@@ -348,7 +352,7 @@ function OCR {
 				if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 					sed -i.tmp 's/   */;/g' "$outputFileName$fileExtension"
 					if [ $? == 0 ]; then
-						rm -f "$outputFileName$fileExtension.tmp"
+						rm -f "$outputFileName$fileExtension.tmp" > /dev/null 2>&1
 						if [ $? != 0 ]; then
 							Logger "Cannot delete temporary file [$outputFileName$fileExtension.tmp]." "WARN"
 							alert=true
@@ -362,7 +366,7 @@ function OCR {
 				if [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then
 					sed 's/   */;/g' "$outputFileName$TEXT_EXTENSION" > "$outputFileName$CSV_EXTENSION"
 					if [ $? == 0 ]; then
-						rm -f "$outputFileName$TEXT_EXTENSION"
+						rm -f "$outputFileName$TEXT_EXTENSION" > /dev/null 2>&1
 						if [ $? != 0 ]; then
 							Logger "Cannot delete temporary file [$outputFileName$TEXT_EXTENSION]." "WARN"
 							alert=true
@@ -410,7 +414,7 @@ function OCR {
 				fi
 			elif [ "$DELETE_ORIGINAL" == true ]; then
 				Logger "Deleting file [$inputFileName]." "DEBUG"
-				rm -f "$inputFileName"
+				rm -f "$inputFileName" > /dev/null 2>&1
 				if [ $? != 0 ]; then
 					Logger "Cannot delete [$inputFileName]." "WARN"
 					alert=true
@@ -426,7 +430,8 @@ function OCR {
 					alert=true
 				fi
 			fi
-				if [ $_SILENT != true ]; then
+
+			if [ $_SILENT != true ]; then
 				Logger "Processed file [$inputFileName]." "ALWAYS"
 			fi
 		fi
@@ -476,7 +481,7 @@ function OCR_Dispatch {
 	fi
 
 	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ]; then
-		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" > /dev/null 2>&1
 	fi
 
 	# Old way of doing
@@ -484,6 +489,7 @@ function OCR_Dispatch {
 
 	touch "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	while IFS= read -r -d $'\0' file; do
+		[ "$file" == "./" ] && continue
 		if [ "$CHECK_PDF" == true ] && [ $(pdffonts "$file" 2> /dev/null | wc -l) -ge 3 ]; then
 			Logger "Skipping file [$file] already containing text." "VERBOSE"
 			continue
@@ -505,15 +511,14 @@ function OCR_Dispatch {
 		fi
 	# if InotifyWaitPoller result file exists, prefer it to find directive
 	# Fallback to full file traversal if no file exists
-	done < <([ -f "$EVENT_LOG_FILE" ] && cat "$EVENT_LOG_FILE" && rm -f "$EVENT_LOG_FILE" || find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
+	done < <([ -f "$EVENT_LOG_FILE" ] && cat "$EVENT_LOG_FILE" && rm -f "$xEVENT_LOG_FILE" || find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
 
 	ExecTasks "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" "${FUNCNAME[0]}" true 0 0 3600 0 true .05 $KEEP_LOGGING false false false $NUMBER_OF_PROCESSES
 	retval=$?
 	if [ $retval -ne 0 ]; then
 		Logger "Failed OCR_Dispatch run." "ERROR"
 	fi
-	#CleanUp
-	[ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ] && rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+	[ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ] && rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" > /dev/null 2>&1
 	return $retval
 }
 

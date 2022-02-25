@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-## Generic and highly portable bash functions written in 2013-2020 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
+## Generic and highly portable bash functions written in 2013-2022 by Orsiris de Jong - http://www.netpower.fr - ozy@netpower.fr
 
 #TODO: ExecTasks postponed arrays / files grow a lot. Consider having them "rolling" (cleaned at numberOfEvents)
 #TODO: command line arguments do not take merged args (-AaqV for example)
@@ -31,7 +31,7 @@
 #### OFUNCTIONS MINI SUBSET ####
 #### OFUNCTIONS MICRO SUBSET ####
 _OFUNCTIONS_VERSION=2.4.0
-_OFUNCTIONS_BUILD=2022022301
+_OFUNCTIONS_BUILD=2022022501
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -206,29 +206,29 @@ function RemoteLogger {
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "" "$prefix\e[1;33;41m$value\e[0m" true
-		if [ $_DEBUG == true ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "ERROR" ]; then
 		_Logger "" "$prefix\e[31m$value\e[0m" true
-		if [ $_DEBUG == true ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "WARN" ]; then
 		_Logger "" "$prefix\e[33m$value\e[0m" true
-		if [ $_DEBUG == true ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "NOTICE" ]; then
-		if [ $_LOGGER_ERR_ONLY != true ]; then
+		if [ "$_LOGGER_ERR_ONLY" != true ]; then
 			_Logger "" "$prefix$value"
 		fi
 		return
 	elif [ "$level" == "VERBOSE" ]; then
-		if [ $_LOGGER_VERBOSE == true ]; then
+		if [ "$_LOGGER_VERBOSE" == true ]; then
 			_Logger "" "$prefix$value"
 		fi
 		return
@@ -308,7 +308,7 @@ function Logger {
 		fi
 		return
 	elif [ "$level" == "VERBOSE" ]; then
-		if [ $_LOGGER_VERBOSE == true ]; then
+		if [ "$_LOGGER_VERBOSE" == true ]; then
 			_Logger "$prefix($level):$value" "$prefix$value"
 		fi
 		return
@@ -1110,7 +1110,7 @@ function ExecTasks {
 					retval=$?
 					# Check for valid exit codes
 					if [ $(ArrayContains $retval "${validExitCodes[@]}") -eq 0 ]; then
-						if [ $noErrorLogsAtAll != true ]; then
+						if [ "$noErrorLogsAtAll" != true ]; then
 							Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "ERROR"
 							if [ "$functionMode" == "ParallelExec" ]; then
 								Logger "Command was [${commandsArrayPid[$pid]}]." "ERROR"
@@ -1125,6 +1125,11 @@ function ExecTasks {
 							failedPidsList="$pid:$retval"
 						else
 							failedPidsList="$failedPidsList;$pid:$retval"
+						fi
+					elif [ "$_DEBUG" == true ]; then
+						if [ -f "${commandsArrayOutput[$pid]}" ]; then
+							Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "DEBUG"
+							Logger "Truncated output:\n$(head -c16384 "${commandsArrayOutput[$pid]}")" "DEBUG"
 						fi
 					else
 						Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "DEBUG"
@@ -1262,11 +1267,11 @@ function ExecTasks {
 				if [ $executeCommand == true ]; then
 					Logger "Running command [$currentCommand]." "DEBUG"
 					randomOutputName=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 5)
-					eval "$currentCommand" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$pid.$randomOutputName.$SCRIPT_PID.$TSTAMP" 2>&1 &
+					eval "$currentCommand" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$randomOutputName.$SCRIPT_PID.$TSTAMP" 2>&1 &
 					pid=$!
 					pidsArray+=($pid)
 					commandsArrayPid[$pid]="$currentCommand"
-					commandsArrayOutput[$pid]="$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$pid.$randomOutputName.$SCRIPT_PID.$TSTAMP"
+					commandsArrayOutput[$pid]="$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$randomOutputName.$SCRIPT_PID.$TSTAMP"
 					# Initialize pid execution time array
 					pidsTimeArray[$pid]=0
 				else
@@ -1289,6 +1294,13 @@ function ExecTasks {
 	# As we cannot return multiple values, a global variable WAIT_FOR_TASK_COMPLETION contains all pids with their return value
 
 	eval "WAIT_FOR_TASK_COMPLETION_$id=\"$failedPidsList\""
+
+	# CleanUp ExecTasks temp files
+	if [ "$_DEBUG" != true ]; then
+		[ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$randomOutputName.$SCRIPT_PID.$TSTAMP" ] && rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$randomOutputName.$SCRIPT_PID.$TSTAMP" > /dev/null 2>&1
+		[ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}-postponedMain.$id.$SCRIPT_PID.$TSTAMP" ] && rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}-postponedMain.$id.$SCRIPT_PID.$TSTAMP" > /dev/null 2>&1
+		[ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}-postponedAux.$id.$SCRIPT_PID.$TSTAMP" ] && rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}-postponedAux.$id.$SCRIPT_PID.$TSTAMP" > /dev/null 2>&1
+	fi
 
 	if [ $mainItemCount -eq 1 ]; then
 		return $retval
@@ -1670,7 +1682,7 @@ function GetOs {
 		localOsVer=$(grep "^VERSION=" "$osInfo")
 		localOsVer="${localOsVer##*=}"
 	elif [ "$localOsVar" == "BusyBox" ]; then
-		localOsVer=$(ls --help 2>&1 | head -1 | cut -f2 -d' ')
+		localOsVer="$(ls --help 2>&1 | head -1 | cut -f2 -d' ')"
 		localOsName="BusyBox"
 	fi
 
@@ -2536,6 +2548,7 @@ function _InotifyWaitPoller () {
 	local stop_loop=false
 	local find_cmd
 	local notable_event=false
+
 	find_results_file="$RUN_DIR/$PROGRAM._InotifyWaitPoller.${path//\//_}.$SCRIPT_PID.$TSTAMP"
 
 	IFS=';' read -r -a includes <<< "$includes"
@@ -2569,21 +2582,20 @@ function _InotifyWaitPoller () {
 		[ -z "$differences" ] && continue
 		while IFS= read line || [[ -n "${line}" ]]; do
 			if [[ "${line}" == "." ]]; then
-				for item in $(tr ';' '\n' <<< "${sign}"); do
-					event=$(echo "${item}" | cut -s -d':' -f1)
-					focus=$(echo "${item}" | cut -s -d':' -f2)
-					dir=$(dirname "${focus}")/
-					file=$(basename "${focus}")
+				while IFS=';' read -r item; do
+					event="$(echo "${item}" | cut -s -d':' -f1)"
+					focus="$(echo "${item}" | cut -s -d':' -f2)"
+					dir="$(dirname "${focus}")/"
+					file="$(basename "${focus}" | cut -d';' -f1)"
 					if [[ "${events}" == *"${event}"* ]]; then
-						#print_event "${dir}" "${event}" "${file}"
 						[ "$event_log_file" != "" ] && printf "${dir}${file}\0" >> "$event_log_file" || print_event "${dir}" "${event}" "${file}"
 						notable_event=true
 					fi
-				done
+				done <<< "${sign}"
 				break
 			fi
-			flag=$(echo "${line}" | cut -s -d' ' -f1)
-			file=$(echo "${line}" | cut -s -d' ' -f4)
+			flag="$(echo "${line}" | cut -s -d' ' -f1)"
+			file="$(echo "${line}" | cut -s -d' ' -f4-)"
 			[[ -n "${file}" ]] || continue
 			[[ "${file}" != "$find_results_file" ]] || continue
 			case "${flag}" in
@@ -2594,10 +2606,10 @@ function _InotifyWaitPoller () {
 					event=CREATE
 					if [[ "${sign}" == *"DELETE:${file};"* ]]; then
 						event=MODIFY
-						sign=$(echo "${sign}" | sed "s#DELETE:${file};##g")
+						sign="$(echo "${sign}" | sed "s#DELETE:${file};##g")"
 					elif [[ "${sign}" == *"DELETE:"* ]]; then
 						event=MOVED_TO
-						sign=$(echo "${sign}" | sed "s#DELETE:.*;##g")
+						sign="$(echo "${sign}" | sed "s#DELETE:.*;##g")"
 					fi
 					;;
 			esac

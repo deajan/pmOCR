@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2022 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.8.0-dev
-PROGRAM_BUILD=2022022301
+PROGRAM_VERSION=1.8.0
+PROGRAM_BUILD=2022022501
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -26,7 +26,7 @@ if [ "$MAX_WAIT" == "" ]; then
 fi
 
 _OFUNCTIONS_VERSION=2.4.0
-_OFUNCTIONS_BUILD=2022022301
+_OFUNCTIONS_BUILD=2022022501
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -191,29 +191,29 @@ function RemoteLogger {
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "" "$prefix\e[1;33;41m$value\e[0m" true
-		if [ $_DEBUG == true ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "ERROR" ]; then
 		_Logger "" "$prefix\e[31m$value\e[0m" true
-		if [ $_DEBUG == true ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "WARN" ]; then
 		_Logger "" "$prefix\e[33m$value\e[0m" true
-		if [ $_DEBUG == true ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "NOTICE" ]; then
-		if [ $_LOGGER_ERR_ONLY != true ]; then
+		if [ "$_LOGGER_ERR_ONLY" != true ]; then
 			_Logger "" "$prefix$value"
 		fi
 		return
 	elif [ "$level" == "VERBOSE" ]; then
-		if [ $_LOGGER_VERBOSE == true ]; then
+		if [ "$_LOGGER_VERBOSE" == true ]; then
 			_Logger "" "$prefix$value"
 		fi
 		return
@@ -292,7 +292,7 @@ function Logger {
 		fi
 		return
 	elif [ "$level" == "VERBOSE" ]; then
-		if [ $_LOGGER_VERBOSE == true ]; then
+		if [ "$_LOGGER_VERBOSE" == true ]; then
 			_Logger "$prefix($level):$value" "$prefix$value"
 		fi
 		return
@@ -1084,7 +1084,7 @@ function ExecTasks {
 					retval=$?
 					# Check for valid exit codes
 					if [ $(ArrayContains $retval "${validExitCodes[@]}") -eq 0 ]; then
-						if [ $noErrorLogsAtAll != true ]; then
+						if [ "$noErrorLogsAtAll" != true ]; then
 							Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "ERROR"
 							if [ "$functionMode" == "ParallelExec" ]; then
 								Logger "Command was [${commandsArrayPid[$pid]}]." "ERROR"
@@ -1099,6 +1099,11 @@ function ExecTasks {
 							failedPidsList="$pid:$retval"
 						else
 							failedPidsList="$failedPidsList;$pid:$retval"
+						fi
+					elif [ "$_DEBUG" == true ]; then
+						if [ -f "${commandsArrayOutput[$pid]}" ]; then
+							Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "DEBUG"
+							Logger "Truncated output:\n$(head -c16384 "${commandsArrayOutput[$pid]}")" "DEBUG"
 						fi
 					else
 						Logger "${FUNCNAME[0]} called by [$id] finished monitoring pid [$pid] with exitcode [$retval]." "DEBUG"
@@ -1236,11 +1241,11 @@ function ExecTasks {
 				if [ $executeCommand == true ]; then
 					Logger "Running command [$currentCommand]." "DEBUG"
 					randomOutputName=$(date '+%Y%m%dT%H%M%S').$(PoorMansRandomGenerator 5)
-					eval "$currentCommand" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$pid.$randomOutputName.$SCRIPT_PID.$TSTAMP" 2>&1 &
+					eval "$currentCommand" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$randomOutputName.$SCRIPT_PID.$TSTAMP" 2>&1 &
 					pid=$!
 					pidsArray+=($pid)
 					commandsArrayPid[$pid]="$currentCommand"
-					commandsArrayOutput[$pid]="$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$pid.$randomOutputName.$SCRIPT_PID.$TSTAMP"
+					commandsArrayOutput[$pid]="$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$randomOutputName.$SCRIPT_PID.$TSTAMP"
 					# Initialize pid execution time array
 					pidsTimeArray[$pid]=0
 				else
@@ -1263,6 +1268,13 @@ function ExecTasks {
 	# As we cannot return multiple values, a global variable WAIT_FOR_TASK_COMPLETION contains all pids with their return value
 
 	eval "WAIT_FOR_TASK_COMPLETION_$id=\"$failedPidsList\""
+
+	# CleanUp ExecTasks temp files
+	if [ "$_DEBUG" != true ]; then
+		[ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$randomOutputName.$SCRIPT_PID.$TSTAMP" ] && rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$id.$randomOutputName.$SCRIPT_PID.$TSTAMP" > /dev/null 2>&1
+		[ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}-postponedMain.$id.$SCRIPT_PID.$TSTAMP" ] && rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}-postponedMain.$id.$SCRIPT_PID.$TSTAMP" > /dev/null 2>&1
+		[ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}-postponedAux.$id.$SCRIPT_PID.$TSTAMP" ] && rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}-postponedAux.$id.$SCRIPT_PID.$TSTAMP" > /dev/null 2>&1
+	fi
 
 	if [ $mainItemCount -eq 1 ]; then
 		return $retval
@@ -1684,6 +1696,7 @@ function _InotifyWaitPoller () {
 	local stop_loop=false
 	local find_cmd
 	local notable_event=false
+
 	find_results_file="$RUN_DIR/$PROGRAM._InotifyWaitPoller.${path//\//_}.$SCRIPT_PID.$TSTAMP"
 
 	IFS=';' read -r -a includes <<< "$includes"
@@ -1717,21 +1730,20 @@ function _InotifyWaitPoller () {
 		[ -z "$differences" ] && continue
 		while IFS= read line || [[ -n "${line}" ]]; do
 			if [[ "${line}" == "." ]]; then
-				for item in $(tr ';' '\n' <<< "${sign}"); do
-					event=$(echo "${item}" | cut -s -d':' -f1)
-					focus=$(echo "${item}" | cut -s -d':' -f2)
-					dir=$(dirname "${focus}")/
-					file=$(basename "${focus}")
+				while IFS=';' read -r item; do
+					event="$(echo "${item}" | cut -s -d':' -f1)"
+					focus="$(echo "${item}" | cut -s -d':' -f2)"
+					dir="$(dirname "${focus}")/"
+					file="$(basename "${focus}" | cut -d';' -f1)"
 					if [[ "${events}" == *"${event}"* ]]; then
-						#print_event "${dir}" "${event}" "${file}"
 						[ "$event_log_file" != "" ] && printf "${dir}${file}\0" >> "$event_log_file" || print_event "${dir}" "${event}" "${file}"
 						notable_event=true
 					fi
-				done
+				done <<< "${sign}"
 				break
 			fi
-			flag=$(echo "${line}" | cut -s -d' ' -f1)
-			file=$(echo "${line}" | cut -s -d' ' -f4)
+			flag="$(echo "${line}" | cut -s -d' ' -f1)"
+			file="$(echo "${line}" | cut -s -d' ' -f4-)"
 			[[ -n "${file}" ]] || continue
 			[[ "${file}" != "$find_results_file" ]] || continue
 			case "${flag}" in
@@ -1742,10 +1754,10 @@ function _InotifyWaitPoller () {
 					event=CREATE
 					if [[ "${sign}" == *"DELETE:${file};"* ]]; then
 						event=MODIFY
-						sign=$(echo "${sign}" | sed "s#DELETE:${file};##g")
+						sign="$(echo "${sign}" | sed "s#DELETE:${file};##g")"
 					elif [[ "${sign}" == *"DELETE:"* ]]; then
 						event=MOVED_TO
-						sign=$(echo "${sign}" | sed "s#DELETE:.*;##g")
+						sign="$(echo "${sign}" | sed "s#DELETE:.*;##g")"
 					fi
 					;;
 			esac
@@ -1894,7 +1906,7 @@ function TrapQuit {
 	local result
 
 	if [ -f "$SERVICE_MONITOR_FILE" ]; then
-		rm -f "$SERVICE_MONITOR_FILE"
+		rm -f "$SERVICE_MONITOR_FILE" > /dev/null 2>&1
 	fi
 
 	KillChilds $$ > /dev/null 2>&1
@@ -1959,6 +1971,10 @@ function OCR {
 	local result
 
 	local alert=false
+		if [ $_SILENT != true ]; then
+			Logger "Processing file [$inputFileName]." "ALWAYS"
+		fi
+
 
 		# Expand $FILENAME_ADDITION
 		eval "outputFileName=\"${inputFileName%.*}$FILENAME_ADDITION$FILENAME_SUFFIX\""
@@ -2035,7 +2051,7 @@ function OCR {
 
 				# Fix for tesseract pdf output also outputs txt format
 				if [ "$fileExtension" == ".pdf" ] && [ -f "$outputFileName$TEXT_EXTENSION" ]; then
-					rm -f "$outputFileName$TEXT_EXTENSION"
+					rm -f "$outputFileName$TEXT_EXTENSION" > /dev/null 2>&1
 					if [ $? != 0 ]; then
 						Logger "Cannot remove temporary txt file [$outputFileName$TEXT_EXTENSION]." "WARN"
 						alert=true
@@ -2048,14 +2064,14 @@ function OCR {
 
 		# Remove temporary files
 		if [ -f "$tmpFileIntermediary" ]; then
-			rm -f "$tmpFileIntermediary";
+			rm -f "$tmpFileIntermediary" > /dev/null 2>&1
 			if [ $? != 0 ]; then
 				Logger "Cannot remove temporary file [$tmpFileIntermediary]." " WARN"
 				alert=true
 			fi
 		fi
 		if [ -f "$tmpFilePreprocessor" ]; then
-			rm -f "$tmpFilePreprocessor";
+			rm -f "$tmpFilePreprocessor" > /dev/null 2>&1
 			if [ $? != 0 ]; then
 				Logger "Cannot remove temporary file [$tmpFilePreprocessor]." " WARN"
 				alert=true
@@ -2100,7 +2116,7 @@ function OCR {
 				if [ "$OCR_ENGINE" == "abbyyocr11" ]; then
 					sed -i.tmp 's/   */;/g' "$outputFileName$fileExtension"
 					if [ $? == 0 ]; then
-						rm -f "$outputFileName$fileExtension.tmp"
+						rm -f "$outputFileName$fileExtension.tmp" > /dev/null 2>&1
 						if [ $? != 0 ]; then
 							Logger "Cannot delete temporary file [$outputFileName$fileExtension.tmp]." "WARN"
 							alert=true
@@ -2114,7 +2130,7 @@ function OCR {
 				if [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then
 					sed 's/   */;/g' "$outputFileName$TEXT_EXTENSION" > "$outputFileName$CSV_EXTENSION"
 					if [ $? == 0 ]; then
-						rm -f "$outputFileName$TEXT_EXTENSION"
+						rm -f "$outputFileName$TEXT_EXTENSION" > /dev/null 2>&1
 						if [ $? != 0 ]; then
 							Logger "Cannot delete temporary file [$outputFileName$TEXT_EXTENSION]." "WARN"
 							alert=true
@@ -2162,7 +2178,7 @@ function OCR {
 				fi
 			elif [ "$DELETE_ORIGINAL" == true ]; then
 				Logger "Deleting file [$inputFileName]." "DEBUG"
-				rm -f "$inputFileName"
+				rm -f "$inputFileName" > /dev/null 2>&1
 				if [ $? != 0 ]; then
 					Logger "Cannot delete [$inputFileName]." "WARN"
 					alert=true
@@ -2178,7 +2194,8 @@ function OCR {
 					alert=true
 				fi
 			fi
-				if [ $_SILENT != true ]; then
+
+			if [ $_SILENT != true ]; then
 				Logger "Processed file [$inputFileName]." "ALWAYS"
 			fi
 		fi
@@ -2228,7 +2245,7 @@ function OCR_Dispatch {
 	fi
 
 	if [ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ]; then
-		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+		rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" > /dev/null 2>&1
 	fi
 
 	# Old way of doing
@@ -2236,6 +2253,7 @@ function OCR_Dispatch {
 
 	touch "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 	while IFS= read -r -d $'\0' file; do
+		[ "$file" == "./" ] && continue
 		if [ "$CHECK_PDF" == true ] && [ $(pdffonts "$file" 2> /dev/null | wc -l) -ge 3 ]; then
 			Logger "Skipping file [$file] already containing text." "VERBOSE"
 			continue
@@ -2257,15 +2275,14 @@ function OCR_Dispatch {
 		fi
 	# if InotifyWaitPoller result file exists, prefer it to find directive
 	# Fallback to full file traversal if no file exists
-	done < <([ -f "$EVENT_LOG_FILE" ] && cat "$EVENT_LOG_FILE" && rm -f "$EVENT_LOG_FILE" || find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
+	done < <([ -f "$EVENT_LOG_FILE" ] && cat "$EVENT_LOG_FILE" && rm -f "$xEVENT_LOG_FILE" || find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
 
 	ExecTasks "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" "${FUNCNAME[0]}" true 0 0 3600 0 true .05 $KEEP_LOGGING false false false $NUMBER_OF_PROCESSES
 	retval=$?
 	if [ $retval -ne 0 ]; then
 		Logger "Failed OCR_Dispatch run." "ERROR"
 	fi
-	#CleanUp
-	[ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ] && rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+	[ -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" ] && rm -f "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" > /dev/null 2>&1
 	return $retval
 }
 

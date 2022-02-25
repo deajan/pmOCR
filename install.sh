@@ -18,7 +18,7 @@ INSTANCE_ID="installer-$SCRIPT_BUILD"
 ## Please adapt this to fit your distro needs
 
 _OFUNCTIONS_VERSION=2.4.0
-_OFUNCTIONS_BUILD=2022022301
+_OFUNCTIONS_BUILD=2022022501
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -179,29 +179,29 @@ function RemoteLogger {
 
 	if [ "$level" == "CRITICAL" ]; then
 		_Logger "" "$prefix\e[1;33;41m$value\e[0m" true
-		if [ $_DEBUG == true ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "ERROR" ]; then
 		_Logger "" "$prefix\e[31m$value\e[0m" true
-		if [ $_DEBUG == true ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "WARN" ]; then
 		_Logger "" "$prefix\e[33m$value\e[0m" true
-		if [ $_DEBUG == true ]; then
+		if [ "$_DEBUG" == true ]; then
 			_Logger -e "" "[$retval] in [$(joinString , ${FUNCNAME[@]})] SP=$SCRIPT_PID P=$$" true
 		fi
 		return
 	elif [ "$level" == "NOTICE" ]; then
-		if [ $_LOGGER_ERR_ONLY != true ]; then
+		if [ "$_LOGGER_ERR_ONLY" != true ]; then
 			_Logger "" "$prefix$value"
 		fi
 		return
 	elif [ "$level" == "VERBOSE" ]; then
-		if [ $_LOGGER_VERBOSE == true ]; then
+		if [ "$_LOGGER_VERBOSE" == true ]; then
 			_Logger "" "$prefix$value"
 		fi
 		return
@@ -275,7 +275,7 @@ function Logger {
 		fi
 		return
 	elif [ "$level" == "VERBOSE" ]; then
-		if [ $_LOGGER_VERBOSE == true ]; then
+		if [ "$_LOGGER_VERBOSE" == true ]; then
 			_Logger "$prefix($level):$value" "$prefix$value"
 		fi
 		return

@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/deajan/pmOCR.svg?branch=master)](https://travis-ci.org/deajan/pmOCR) [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause) [![GitHub Release](https://img.shields.io/github/release/deajan/pmOCR.svg?label=Latest)](https://github.com/deajan/pmOCR/releases/latest)
 
 
-A multicore batch & service wrapper script for Tesseract 3.02+ / 4.1.2 / 5.0.0 (https://github.com/tesseract-ocr/) or ABBYY CLI OCR 11 FOR LINUX based on Finereader Engine 11 optical character recognition (www.ocr4linux.com).
+A multicore batch & service wrapper script for Tesseract v3/v4/v5 (https://github.com/tesseract-ocr/) or ABBYY CLI OCR 11 FOR LINUX based on Finereader Engine 11 optical character recognition (www.ocr4linux.com).
 
 Conversions support tiff/jpg/png/pdf/bmp to PDF, TXT and CSV (also DOCX and XSLX for Abbyy OCR). It can actually support any other format that your OCR engine can handle.
 
@@ -12,11 +12,12 @@ This wrapper can work both in batch and service mode.
 In batch mode, it's used as commandline tool for processing multiple files at once, being able to output one or more formats.
 
 In service mode, it will monitor directories and launch OCR conversions as soon as new files get into the directories.
+Since v1.8.0, it can also monitor NFS / SMB mountpoints with new integrated inotifywait emulation poller.
 
 pmOCR has the following options:
 - Include current date into the output filename
 - Ignore already OCRed PDF files based on font detection and / or file suffix
-- Delete or rename input file after successful conversion
+- Delete or move input file after successful conversion
 
 ## Install it
 
@@ -24,9 +25,11 @@ pmOCR has the following options:
     $ cd pmOCR
     $ ./install.sh
 
-You will also need inotifywait (from inotify-tools package) and pdffonts (from poppler-utils package).
+You will need pdffonts util (from poppler-utils package).
+Optionally, you can install inotifywait (from inotify-tools package).
+
 If you are using tesseract OCR, please install tesseract-osd and tesseract-[your language] (sometimes called tesseract-ocr-osd).
-You will also need ghostscript in order to be able to transform bitmap PDF documents to indexed PDFs.
+You will also need ImageMagick in order to be able to transform bitmap PDF documents to indexed PDFs.
 
 ## Batch mode
 
@@ -87,7 +90,8 @@ With systemD, you have to launch a service for each config file. Example for con
 Has been tested so far with:
 - ABBYY FineReader OCR Engine 11 CLI for Linux releases R2 (v 11.1.6.562411), R3 (v 11.1.9.622165) and R6 (v 11.1.14.707470)
 - Tesseract-ocr 3.0.4
-- Tesseract-ocr 4.0.0
+- Tesseract-ocr 4.0.0 and 4.0.12
+- Tesseract-ocr 5.0.0 and 5.0.1
 
 Tesseract mode also uses ghostscript to convert PDF files to an intermediary TIFF format in order to process them.
 
@@ -99,8 +103,7 @@ Parameters include any arguments to pass to the OCR program depending on the tar
 
 ABBYY has in integrated preprocessor in order to enhance recognition qualitiy whereas Tesseract relies on external tools.
 pmOCR can use a preprocessor like ImageMagick to deskew / clear noise / render white background and remove black borders. 
-ImageMagick preprocessor is configured, but disabled by default.
-In order to use it with Tesseract, you have to uncomment it in your configuration file.
+ImageMagick preprocessor is configured, and enabled by default to be used with Tesseract.
 
 ## Tesseract caveats
 

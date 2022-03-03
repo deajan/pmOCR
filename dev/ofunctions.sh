@@ -30,8 +30,8 @@
 #### OFUNCTIONS FULL SUBSET ####
 #### OFUNCTIONS MINI SUBSET ####
 #### OFUNCTIONS MICRO SUBSET ####
-_OFUNCTIONS_VERSION=2.4.0
-_OFUNCTIONS_BUILD=2022022501
+_OFUNCTIONS_VERSION=2.4.1
+_OFUNCTIONS_BUILD=2022030301
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -738,7 +738,7 @@ function LoadConfigFile {
 		Logger "Cannot load configuration file [$configFile]. Cannot start." "CRITICAL"
 		exit 1
 	elif [[ "$configFile" != *".conf" ]]; then
-		Logger "Wrong configuration file supplied [$configFile]. Cannot start." "CRITICAL"
+		Logger "Wrong configuration file supplied [$configFile], file extension is not .conf, Cannot start." "CRITICAL"
 		exit 1
 	else
 		revisionPresent="$(GetConfFileValue "$configFile" "CONFIG_FILE_REVISION" true)"
@@ -858,7 +858,7 @@ function ExecTasks {
 	local mainInput="${1}"				# Contains list of pids / commands separated by semicolons or filepath to list of pids / commands
 
 	# Optional arguments
-	local id="${2:-base}"				# Optional ID in order to identify global variables from this run (only bash variable names, no '-'). Global variables are WAIT_FOR_TASK_COMPLETION_$id and HARD_MAX_EXEC_TIME_REACHED_$id
+	local id="${2:-(undisclosed)}"			# Optional ID in order to identify global variables from this run (only bash variable names, no '-'). Global variables are WAIT_FOR_TASK_COMPLETION_$id and HARD_MAX_EXEC_TIME_REACHED_$id
 	local readFromFile="${3:-false}"		# Is mainInput / auxInput a semicolon separated list (true) or a filepath (false)
 	local softPerProcessTime="${4:-0}"		# Max time (in seconds) a pid or command can run before a warning is logged, unless set to 0
 	local hardPerProcessTime="${5:-0}"		# Max time (in seconds) a pid or command can run before the given command / pid is stopped, unless set to 0
@@ -1008,7 +1008,7 @@ function ExecTasks {
 				if [ $log_ttime -ne $exec_time ]; then # Fix when sleep time lower than 1 second
 					log_ttime=$exec_time
 					if [ $functionMode == "WaitForTaskCompletion" ]; then
-						Logger "Current tasks still running with pids [$(joinString , ${pidsArray[@]})]." "NOTICE"
+						Logger "Current tasks ID=$id still running with pids [$(joinString , ${pidsArray[@]})]." "NOTICE"
 					elif [ $functionMode == "ParallelExec" ]; then
 						Logger "There are $((mainItemCount-counter+postponedItemCount)) / $mainItemCount tasks in the queue of which $postponedItemCount are postponed. Currently, ${#pidsArray[@]} tasks running with pids [$(joinString , ${pidsArray[@]})]." "NOTICE"
 					fi
@@ -2538,6 +2538,7 @@ function _InotifyWaitPoller () {
 	local monitor="${5:-false}"
 	local event_log_file="${6}"
 	local events="${7}"
+	local interval="${8}"
 
 	local include
 	local exclude
@@ -2565,12 +2566,14 @@ function _InotifyWaitPoller () {
 		find_recursion=" -maxdepth 1"
 	fi
 
+	#[ "$event_log_file" != "" ] && [ -f "$event_log_file" ] && rm -f "$event_log_file" >/dev/null 2>&1
+
 	find_cmd="find \"$path\" ! -regex \"$RUN_DIR/$PROGRAM.*.$SCRIPT_PID.$TSTAMP\" $find_includes $find_excludes $find_recursion -printf \"%s %y %p\\n\" | sort -k3 - > \"$find_results_file\""
 	Logger "COMMAND: $find_cmd" "VERBOSE"
         eval "$find_cmd"
 
 	while [ $stop_loop == false ]; do
-		sleep 2
+		sleep "$interval"
 		sign=
 		last_run_results=$(cat "$find_results_file")
 		eval "$find_cmd"
@@ -2629,8 +2632,9 @@ function InotifyWaitPoller () {
 	local event_log_file="${6}" # optional event log file
 	local events="${7:-CREATE,MODIFY,MOVED_TO}" # possible events: CREATE,OPEN,MODIFY,CLOSE,CLOSE_WRITE,DELETE,MOVED_TO
 	local timeout="${8:-0}" # seconds
+	local interval="${9:-5}" # polling interval
 
-	local pids
+	local pids=
 	local path
 	local alive
 	local count=0
@@ -2639,11 +2643,16 @@ function InotifyWaitPoller () {
 	for path in "${paths[@]}"; do
 		if ! [ -e "$path" ]; then
 			Logger "Cannot watch [$path]. No such file or directory." "CRITICAL"
+		else
+			_InotifyWaitPoller "$path" "$includes" "$excludes" "$recursive" "$monitor" "$event_log_file" "$events" "$interval" &
+			pids="$pids;$!"
 		fi
-		_InotifyWaitPoller "$path" "$includes" "$excludes" "$recursive" "$monitor" "$event_log_file" "$events" &
-		pids="$pids;$!"
 	done
-	ExecTasks $pids "InotifyWaitPoller" false 0 0 0 $timeout
+	if [ "$pids" != "" ]; then
+		ExecTasks $pids "InotifyWaitPoller" false 0 0 0 $timeout
+	else
+		Logger "No directories available to watch." "CRITICAL"
+	fi
 }
 #### InotifyWaitPoller SUBSET END ####
 

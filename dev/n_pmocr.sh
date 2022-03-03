@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2022 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.8.0
-PROGRAM_BUILD=2022022501
+PROGRAM_VERSION=1.8.1
+PROGRAM_BUILD=2022030301
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -83,35 +83,30 @@ function CheckEnvironment {
 		if [ "$PDF_MONITOR_DIR" != "" ]; then
 			if [ ! -w "$PDF_MONITOR_DIR" ]; then
 				Logger "Directory [$PDF_MONITOR_DIR] not writable." "ERROR"
-				exit 1
 			fi
 		fi
 
 		if [ "$WORD_MONITOR_DIR" != "" ]; then
 			if [ ! -w "$WORD_MONITOR_DIR" ]; then
 				Logger "Directory [$WORD_MONITOR_DIR] not writable." "ERROR"
-				exit 1
 			fi
 		fi
 
 		if [ "$EXCEL_MONITOR_DIR" != "" ]; then
 			if [ ! -w "$EXCEL_MONITOR_DIR" ]; then
 				Logger "Directory [$EXCEL_MONITOR_DIR] not writable." "ERROR"
-				exit 1
 			fi
 		fi
 
 		if [ "$TEXT_MONITOR_DIR" != "" ]; then
 			if [ ! -w "$TEXT_MONITOR_DIR" ]; then
 				Logger "Directory [$TEXT_MONITOR_DIR] not writable." "ERROR"
-				exit 1
 			fi
 		fi
 
 		if [ "$CSV_MONITOR_DIR" != "" ]; then
 			if [ ! -w "$CSV_MONITOR_DIR" ]; then
 				Logger "Directory [$CSV_MONITOR_DIR] not writable." "ERROR"
-				exit 1
 			fi
 		fi
 	fi
@@ -241,7 +236,7 @@ function OCR {
 
 		# Run OCR Preprocessor
 		if [ -f "$fileToProcess" ] && [ "$OCR_PREPROCESSOR_EXEC" != "" ]; then
-			tmpFilePreprocessor="${fileToProcess%.*}.preprocessed.${fileToProcess##*.}"
+			tmpFilePreprocessor="${fileToProcess%.*}.__pmOCR_preprocessed_.${fileToProcess##*.}"
 			subcmd="$OCR_PREPROCESSOR_EXEC $OCR_PREPROCESSOR_ARGS $OCR_PREPROCESSOR_INPUT_ARGS\"$inputFileName\" $OCR_PREPROCESSOR_OUTPUT_ARG\"$tmpFilePreprocessor\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
 			#TODO: THIS IS NEVER LOGGED
 			Logger "Executing $subcmd" "DEBUG"
@@ -485,9 +480,15 @@ function OCR_Dispatch {
 	fi
 
 	# Old way of doing
-	#find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+	#find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCESS" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0 | xargs -0 -I {} echo "OCR \"{}\" \"$fileExtension\" \"$ocrEngineArgs\" \"$csvHack\"" >> "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
 
 	touch "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP"
+	if [ -f "$EVENT_LOG_FILE" ]; then
+		Logger "OCR dispatch launched via poller result method." "DEBUG"
+	else
+		Logger "OCR dispatch launched via find method." "DEBUG"
+	fi
+
 	while IFS= read -r -d $'\0' file; do
 		[ "$file" == "./" ] && continue
 		if [ "$CHECK_PDF" == true ] && [ $(pdffonts "$file" 2> /dev/null | wc -l) -ge 3 ]; then
@@ -511,7 +512,7 @@ function OCR_Dispatch {
 		fi
 	# if InotifyWaitPoller result file exists, prefer it to find directive
 	# Fallback to full file traversal if no file exists
-	done < <([ -f "$EVENT_LOG_FILE" ] && cat "$EVENT_LOG_FILE" && rm -f "$xEVENT_LOG_FILE" || find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCES" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
+	done < <([ -f "$EVENT_LOG_FILE" ] && cat "$EVENT_LOG_FILE" && rm -f "$EVENT_LOG_FILE" || find "$directoryToProcess" -type f -iregex ".*\.$FILES_TO_PROCESS" ! -regex ".*\.__pmOCR_preprocessed_\..*" ! -name "$findExcludes" -and ! -wholename "$moveSuccessExclude" -and ! -wholename "$moveFailureExclude" -and ! -name "$failedFindExcludes" -print0)
 
 	ExecTasks "$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP" "${FUNCNAME[0]}" true 0 0 3600 0 true .05 $KEEP_LOGGING false false false $NUMBER_OF_PROCESSES
 	retval=$?
@@ -562,7 +563,7 @@ function OCR_service {
 	__CheckArguments 2 $# "$@"		#__WITH_PARANOIA_DEBUG
 
 	local cmd
-
+	local dirAvailable=true
 	local justStarted=true
 	local moveSuccessExclude
 	local moveFailureExclude
@@ -580,6 +581,17 @@ function OCR_service {
 	Logger "Starting $PROGRAM instance [$INSTANCE_ID] for directory [$directoryToProcess], converting to [$fileExtension]." "ALWAYS"
 	while [ -f "$SERVICE_MONITOR_FILE" ];do
 		# Have a first run on start
+		while [ ! -w "$directoryToProcess" ]; do
+			Logger "Directory [$directoryToProcess] is not writable. Trying again in an hour." "ERROR"
+			sleep 3600
+			dirAvailable=false
+		done
+
+		if [ "$dirAvailable" == false ]; then
+			Logger "Directory [$directoryToProcess] is available again. Resuming monitoring." "ERROR"
+			dirAvailable=true
+		fi
+
 		if [ $justStarted == true ]; then
 			kill -USR1 $SCRIPT_PID
 			justStarted=false
@@ -592,7 +604,7 @@ function OCR_service {
 		else
 			Logger "Running InotifyWaitPoller process" "VERBOSE"
 			# InotifyWaitPoller paths includes excludes recursive monitor_mode event_log_file events timeout
-			InotifyWaitPoller "$directoryToProcess" ".*\.$FILES_TO_PROCESS" ".*$FILENAME_SUFFIX$fileExtension;.*$FAILED_FILENAME_SUFFIX$fileExtension;$moveSuccessExcludePoller;$moveFailureExcludePoller" true false "$EVENT_LOG_FILE" "CREATE,MODIFY,MOVED_TO" $MAX_WAIT
+			InotifyWaitPoller "$directoryToProcess" ".*\.$FILES_TO_PROCESS" ".*$FILENAME_SUFFIX$fileExtension;.*$FAILED_FILENAME_SUFFIX;.*\.__pmOCR_preprocessed_\..*;$fileExtension;$moveSuccessExcludePoller;$moveFailureExcludePoller" true false "$EVENT_LOG_FILE" "CREATE,MODIFY,MOVED_TO" $MAX_WAIT $INOTIFY_POLLER_INTERVAL
 		fi
 		Logger "Changes detected in [$directoryToProcess]" "NOTICE"
 		kill -USR1 $SCRIPT_PID
@@ -659,6 +671,8 @@ docx=false
 xlsx=false
 txt=false
 csv=false
+
+INOTIFY_POLLER_INTERVAL=30
 
 function GetCommandlineArguments {
 	for i in "$@"
@@ -733,8 +747,10 @@ else
 	LoadConfigFile "$DEFAULT_CONFIG_FILE" $CONFIG_FILE_REVISION_REQUIRED
 fi
 
-# Keep compat with earlier typo
-FILES_TO_PROCESS="$FILES_TO_PROCES"
+# Keep compat with earlier typo in config file
+if [ "$FILES_TO_PROCESS" == "" ] && [ "$FILES_TO_PROCES" != "" ]; then
+	FILES_TO_PROCESS="$FILES_TO_PROCES"
+fi
 
 # Reload GetCommandlineArguments in order to allow override config values with runtime arguments
 GetCommandlineArguments "${@}"

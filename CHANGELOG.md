@@ -1,6 +1,13 @@
 RECENT CHANGES
 --------------
 
+26 Feb 2022: v1.8.1
+
+- Added a configurable poller interval
+- Added service recovery when directory to monitor is not writable
+- Fixed upgrades with newer configuration files
+- Fixed sporadic errors with preprocessed images being detected by poller
+
 23 Feb 2022: v1.8.0
 
 - Added internal inotifywait emulation that can deal with events on NFS / SMB shares where inotify events won't happen

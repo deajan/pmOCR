@@ -30,8 +30,8 @@
 #### OFUNCTIONS FULL SUBSET ####
 #### OFUNCTIONS MINI SUBSET ####
 #### OFUNCTIONS MICRO SUBSET ####
-_OFUNCTIONS_VERSION=2.4.2
-_OFUNCTIONS_BUILD=2022041801
+_OFUNCTIONS_VERSION=2.4.3
+_OFUNCTIONS_BUILD=2022050801
 #### _OFUNCTIONS_BOOTSTRAP SUBSET ####
 _OFUNCTIONS_BOOTSTRAP=true
 #### _OFUNCTIONS_BOOTSTRAP SUBSET END ####
@@ -2144,8 +2144,7 @@ function SetCompression {
 	## Busybox fix (Termux xz command does not support compression at all)
 	if [ "$LOCAL_OS" == "BusyBox" ] || [ "$REMOTE_OS" == "Busybox" ] || [ "$LOCAL_OS" == "Android" ] || [ "$REMOTE_OS" == "Android" ]; then
 		compressionString=""
-		if type g
-p > /dev/null 2>&1
+		if type gzip > /dev/null 2>&1
 		then
 			COMPRESSION_PROGRAM="| gzip -c$compressionString"
 			COMPRESSION_EXTENSION=.gz

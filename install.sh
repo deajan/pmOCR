@@ -17,8 +17,8 @@ INSTANCE_ID="installer-$SCRIPT_BUILD"
 ## Tested on RHEL / CentOS 6 & 7, Fedora 23, Debian 7 & 8, Mint 17 and FreeBSD 8, 10 and 11
 ## Please adapt this to fit your distro needs
 
-_OFUNCTIONS_VERSION=2.4.1
-_OFUNCTIONS_BUILD=2022030301
+_OFUNCTIONS_VERSION=2.4.3
+_OFUNCTIONS_BUILD=2022050801
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then

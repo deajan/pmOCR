@@ -3,8 +3,8 @@
 PROGRAM="pmocr" # Automatic OCR service that monitors a directory and launches a OCR instance as soon as a document arrives
 AUTHOR="(C) 2015-2022 by Orsiris de Jong"
 CONTACT="http://www.netpower.fr - ozy@netpower.fr"
-PROGRAM_VERSION=1.8.1
-PROGRAM_BUILD=2022030301
+PROGRAM_VERSION=1.8.2
+PROGRAM_BUILD=2022050801
 
 CONFIG_FILE_REVISION_REQUIRED=1
 
@@ -25,8 +25,8 @@ if [ "$MAX_WAIT" == "" ]; then
 	MAX_WAIT=86400 # One day in seconds
 fi
 
-_OFUNCTIONS_VERSION=2.4.1
-_OFUNCTIONS_BUILD=2022030301
+_OFUNCTIONS_VERSION=2.4.3
+_OFUNCTIONS_BUILD=2022050801
 _OFUNCTIONS_BOOTSTRAP=true
 
 if ! type "$BASH" > /dev/null; then
@@ -1992,7 +1992,7 @@ function OCR {
 		# Perform intermediary transformation of input pdf file to tiff if OCR_ENGINE is tesseract
 		if ([ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]) && [[ "$inputFileName" == *.[pP][dD][fF] ]]; then
 			tmpFileIntermediary="${inputFileName%.*}.tif"
-			subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS\"$tmpFileIntermediary\" \"$inputFileName\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
+			subcmd="$PDF_TO_TIFF_EXEC $PDF_TO_TIFF_OPTS \"$inputFileName\" \"$tmpFileIntermediary\" > \"$RUN_DIR/$PROGRAM.${FUNCNAME[0]}.$SCRIPT_PID.$TSTAMP\""
 			Logger "Executing: $subcmd" "DEBUG"
 			eval "$subcmd"
 			result=$?
@@ -2657,6 +2657,8 @@ elif [ $_BATCH_RUN == true ]; then
 		Logger "Missing path." "ERROR"
 		Usage
 	fi
+
+	Logger "Running $PROGRAM $PROGRAM_VERSION as batch" "NOTICE"
 
 	if [ $pdf == true ]; then
 		if [ "$OCR_ENGINE" == "tesseract3" ] || [ "$OCR_ENGINE" == "tesseract" ]; then

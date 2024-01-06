@@ -2,6 +2,16 @@
 
 [![Build Status](https://travis-ci.org/deajan/pmOCR.svg?branch=master)](https://travis-ci.org/deajan/pmOCR) [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause) [![GitHub Release](https://img.shields.io/github/release/deajan/pmOCR.svg?label=Latest)](https://github.com/deajan/pmOCR/releases/latest)
 
+## This project has been archived !
+It has been fun improving my bash skills while I begun coding this in like 2015.  
+I initially planned to produce a better, python based version of this, but then I found **OCRmyPDF** project, which already does a great job ;)  
+See https://github.com/ocrmypdf/OCRmyPDF for more info.
+
+If you're interested in Document Management Systems, also checkout [paperless-ngx](https://github.com/paperless-ngx/paperless-ngx), which is a fully open source, using OCRmyPDF.  
+
+Farewell, my old bash project.
+
+## pmOCR
 
 A multicore batch & service wrapper script for Tesseract v3/v4/v5 (https://github.com/tesseract-ocr/) or ABBYY CLI OCR 11 FOR LINUX based on Finereader Engine 11 optical character recognition (www.ocr4linux.com).
 
